@@ -60,8 +60,9 @@ resources/jobs.yml      Job banking_lakehouse_daily (tasks + retries)
 data_generator/         Fake core-banking data (13 tables) with injected errors
 src/00_setup/           Catalog, schemas, volume, ops tables; sample data generation
 src/01_bronze/          Auto Loader ingestion
-src/02_silver/ …        (next)
-src/common/             Reusable logic: bronze.py, dq.py, scd2.py, banking.py
+src/02_silver/          Typing, DQ gate, quarantine, MERGE / SCD2
+src/03_gold/            Star schema (dim/fact) and dashboard marts
+src/common/             Reusable logic: bronze, silver, gold, dq, scd2, banking, delta_io
 tests/                  pytest unit tests (local Spark)
 docs/decisions.md       Architecture decision records
 docs/gold_dashboards.md Gold BI spec (card, overdue, deposit dashboards)
@@ -90,8 +91,9 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [x] Reusable DQ, SCD2 and debt-classification logic with unit tests
 - [x] Fake data generator: core banking, cards, insurance, reconciliation summaries
 - [x] Bronze ingestion (Auto Loader) — code ready, run on Databricks pending
-- [ ] Silver: typing, DQ gate, MERGE, SCD2
-- [ ] Gold BI star schema, marts, reconciliation, dashboards
+- [x] Silver: typing, DQ gate, MERGE, SCD2 — code + unit tests, run on Databricks pending
+- [x] Gold BI star schema + marts (loan overdue / NPL with D-1·M-1·Y-1, deposit, customer 360), Silver↔Gold reconciliation — run on Databricks pending
+- [ ] Gold card marts + Databricks SQL dashboards (needs generator gaps in `docs/gold_dashboards.md`)
 - [ ] Gold ML feature table + insurance cross-sell model (MLflow)
 - [ ] CD: dev → test → manual approval → prod, OIDC auth
 - [ ] Unity Catalog governance: RBAC, column masks, PII tags
