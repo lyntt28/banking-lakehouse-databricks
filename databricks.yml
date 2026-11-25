@@ -11,8 +11,10 @@ variables:
     description: Unity Catalog catalog for this environment
     default: bank_dev
   notification_email:
-    description: Email nhận cảnh báo khi Job lỗi
-    default: ""
+    description: >
+      Email nhận cảnh báo khi Job lỗi (chỉ dùng ở test/prod).
+      Truyền khi deploy: databricks bundle deploy -t prod --var notification_email=you@example.com
+    default: alerts@example.com
 
 targets:
   dev:
@@ -28,12 +30,26 @@ targets:
     workspace:
       root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
 
+    resources:
+      jobs:
+        banking_lakehouse_daily:
+          email_notifications:
+            on_failure:
+              - ${var.notification_email}
+
   prod:
     mode: production
     variables:
       catalog: bank_prod
     workspace:
       root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+
+    resources:
+      jobs:
+        banking_lakehouse_daily:
+          email_notifications:
+            on_failure:
+              - ${var.notification_email}
 
   # Đợt 2: thêm target azure (host = workspace Azure Databricks, cluster riêng)
   # azure:

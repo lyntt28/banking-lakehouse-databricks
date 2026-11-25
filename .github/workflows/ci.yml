@@ -44,6 +44,10 @@ jobs:
         if: env.DATABRICKS_HOST != ''
         run: databricks bundle validate -t dev
 
-      - name: Skip (secrets not configured yet)
+      # Chưa có secret -> KHÔNG kiểm tra bundle. Ghi warning để hiện rõ trên PR
+      # (tránh hiểu nhầm dấu ✓ là bundle đã được validate).
+      - name: Bundle NOT validated (secrets missing)
         if: env.DATABRICKS_HOST == ''
-        run: echo "Add DATABRICKS_HOST and DATABRICKS_TOKEN in repo Secrets to enable this step."
+        run: |
+          echo "::warning title=Bundle not validated::Add DATABRICKS_HOST and DATABRICKS_TOKEN repo secrets to validate the bundle."
+          echo "## ⚠️ Bundle validation skipped: Databricks secrets not configured" >> "$GITHUB_STEP_SUMMARY"
