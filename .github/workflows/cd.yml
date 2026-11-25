@@ -54,7 +54,7 @@ jobs:
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: databricks/setup-cli@main
+      - uses: databricks/setup-cli@v1.28.0
       - name: Skip (secrets missing)
         if: env.DATABRICKS_HOST == ''
         run: echo "::warning title=CD skipped::Environment 'test' has no DATABRICKS_HOST secret."
@@ -92,7 +92,7 @@ jobs:
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: databricks/setup-cli@main
+      - uses: databricks/setup-cli@v1.28.0
       - name: Skip (secrets missing)
         if: env.DATABRICKS_HOST == ''
         run: echo "::warning title=CD skipped::Environment 'prod' has no DATABRICKS_HOST secret."

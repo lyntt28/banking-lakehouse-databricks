@@ -71,6 +71,29 @@ def test_scd2_history_and_rerun(spark, tbl):
     assert per.filter(F.col("count") != 1).count() == 0
 
 
+def test_scd2_rejects_out_of_order_date(spark, tbl):
+    scd2_upsert(_cust(spark, [("C1", "HA NOI", "MASS")]), tbl, "customer_id", TRACKED,
+                "2026-11-02")
+    with pytest.raises(ValueError, match="thứ tự ngày"):
+        scd2_upsert(_cust(spark, [("C1", "HUE", "MASS")]), tbl, "customer_id", TRACKED,
+                    "2026-11-01")
+
+
+def test_scd2_same_day_change_keeps_valid_range(spark, tbl):
+    scd2_upsert(_cust(spark, [("C1", "HA NOI", "MASS")]), tbl, "customer_id", TRACKED,
+                "2026-11-01")
+    scd2_upsert(_cust(spark, [("C1", "HUE", "MASS")]), tbl, "customer_id", TRACKED,
+                "2026-11-01")                                       # file sửa lại cùng ngày
+    bad = spark.table(tbl).filter("valid_to IS NOT NULL AND valid_to < valid_from")
+    assert bad.count() == 0
+
+
+def test_overwrite_date_rejects_bad_date(spark, tbl):
+    df = spark.createDataFrame([(date(2026, 11, 1), 1.0)], "as_of_date date, v double")
+    with pytest.raises(ValueError):
+        overwrite_date(df, tbl, "as_of_date", "2026-11-01' OR 1=1 --")
+
+
 def test_overwrite_date_replaces_only_that_day(spark, tbl):
     schema = "as_of_date date, branchnbr string, balance double"
     base = spark.createDataFrame([(date(2026, 11, 1), "1", 10.0), (date(2026, 11, 2), "1", 20.0)],
