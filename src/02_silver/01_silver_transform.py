@@ -115,4 +115,7 @@ display(rep)
 bad = [r.table for r in rep.collect() if not r.reconciled]
 if bad:
     raise RuntimeError(f"Đối soát lệch: {bad}")
-dbutils.jobs.taskValues.set(key="as_of_date", value=as_of_date)
+try:  # chỉ Job task mới set được task value; dbutils.notebook.run (backfill) thì bỏ qua
+    dbutils.jobs.taskValues.set(key="as_of_date", value=as_of_date)
+except Exception as e:  # noqa: BLE001
+    print(f"Bỏ qua taskValues.set (không phải task run): {type(e).__name__}")
