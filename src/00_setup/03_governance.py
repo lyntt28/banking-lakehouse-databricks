@@ -10,7 +10,7 @@
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "bank_dev")
-dbutils.widgets.dropdown("dry_run", "false", ["true", "false"])
+dbutils.widgets.dropdown("dry_run", "true", ["true", "false"])  # Free Edition: không có group
 catalog = dbutils.widgets.get("catalog")
 dry_run = dbutils.widgets.get("dry_run") == "true"
 
