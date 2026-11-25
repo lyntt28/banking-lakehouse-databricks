@@ -21,4 +21,13 @@ Each decision: context → decision → alternatives considered → consequences
 - **Decision:** Catalog names are bundle variables (`bank_dev`, `bank_test`, `bank_prod`). No hard-coded catalogs or paths in code.
 - **Consequences:** Moving to Azure Databricks is adding one bundle target, not rewriting code.
 
-<!-- TODO: idempotent MERGE, liquid clustering, column masking -->
+## ADR-005: Safe casting in Silver, duplicates split in two kinds
+- **Context:** Bronze keeps every column as string. Databricks serverless runs with ANSI mode, where `CAST`/`to_date` on a bad value fails the whole job.
+- **Decision:** Silver casts with `try_cast` / `try_to_timestamp`, so a bad value becomes NULL, and a FAIL rule (`*_valid_format`) sends the row to quarantine. It keeps the raw value (`_raw_<col>`) so "empty" and "wrong format" are reported separately. Rows that are identical in every column (file sent twice) are dropped and counted. Rows with the same key but different content both go to quarantine, since we cannot tell which one is right.
+- **Consequences:** Reconciliation is `bronze = silver + quarantine + exact duplicates`, checked in every run.
+
+## ADR-006: Idempotent writes
+- **Decision:** Silver and Gold facts use `MERGE` on the business key (transactions insert-only). Customers use SCD2 (ADR-003). Gold marts are recomputed for the whole day and written with `replaceWhere as_of_date = <day>`. Small dimensions are overwritten.
+- **Consequences:** Re-running any day gives the same tables. Late data for a past day needs that day re-run.
+
+<!-- TODO: liquid clustering, column masking -->
