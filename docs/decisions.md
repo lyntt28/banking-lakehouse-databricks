@@ -46,4 +46,8 @@ Each decision: context → decision → alternatives considered → consequences
 - **Alternatives:** deploying prod on tag only (kept possible via `workflow_dispatch`), Databricks Git folders pull (no review step, no test run).
 - **Consequences:** A broken DQ rule or reconciliation mismatch on test data blocks prod. Only prod runs on a schedule, so test costs nothing between releases.
 
-<!-- TODO: liquid clustering -->
+## ADR-010: Liquid clustering instead of partitioning
+- **Context:** Tables are small per day (thousands to ~100k rows), so date partitions would create many tiny files; dashboards filter by date + branch, pipelines join on account / customer id.
+- **Decision:** `CLUSTER BY` on the filter / join columns (`src/common/maintenance.py`), `OPTIMIZE` weekly, `VACUUM` keeping 7 days. Branch-filtered tables cluster on `branchnbr` so the row filter (ADR-008) can skip files.
+- **Measuring:** notebook `00_setup/04_maintenance.py` (`mode=benchmark`) times 4 dashboard-style queries before and after clustering (median of N runs, result cache off) and records file counts, into `ops.perf_benchmark`.
+
