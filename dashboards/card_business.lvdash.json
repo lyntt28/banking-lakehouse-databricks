@@ -1,0 +1,2510 @@
+{
+  "datasets": [
+    {
+      "name": "card_kpi",
+      "displayName": "Overview KPI",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_card_kpi_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (\n",
+        "  SELECT k.* FROM gold.mart_card_kpi_daily k\n",
+        "  WHERE :customer_type = 'all'\n",
+        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
+        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
+        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
+        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
+        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
+        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
+        "               sum(pos_amt) pos, sum(online_amt) online,\n",
+        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
+        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
+        "        FROM f GROUP BY as_of_date),\n",
+        "mon AS (SELECT date_format(as_of_date, 'yyyy-MM') AS ym, max(as_of_date) AS last_d,\n",
+        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
+        "        FROM day GROUP BY 1),\n",
+        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
+        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
+        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyy-MM'))\n",
+        "\n",
+        ", cur AS (\n",
+        "  SELECT\n",
+        "    (SELECT sum(new_m) FROM day, p WHERE date_trunc('MM', as_of_date) = date_trunc('MM', p.d)\n",
+        "       AND as_of_date <= p.d) AS new_acquisition,\n",
+        "    x.eop AS customer_base, x.usg AS using_customer,\n",
+        "    (SELECT sum(spend) FROM day, p WHERE date_trunc('MM', as_of_date) = date_trunc('MM', p.d)\n",
+        "       AND as_of_date <= p.d) / p.usd / 1000 AS sales_volume_k_usd,\n",
+        "    x.bal / p.usd / 1000 AS balance_k_usd,\n",
+        "    x.dpd1 / nullif(x.bal, 0) * 100 AS dpd_1p, x.dpd10 / nullif(x.bal, 0) * 100 AS dpd_10p,\n",
+        "    x.dpd30 / nullif(x.bal, 0) * 100 AS dpd_30p, x.npl / nullif(x.bal, 0) * 100 AS npl\n",
+        "  FROM day x CROSS JOIN p WHERE x.as_of_date = p.d)\n",
+        "SELECT * FROM cur\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_kpi_compare",
+      "displayName": "Overview KPI vs last month / year / target",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_card_kpi_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (\n",
+        "  SELECT k.* FROM gold.mart_card_kpi_daily k\n",
+        "  WHERE :customer_type = 'all'\n",
+        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
+        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
+        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
+        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
+        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
+        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
+        "               sum(pos_amt) pos, sum(online_amt) online,\n",
+        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
+        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
+        "        FROM f GROUP BY as_of_date),\n",
+        "mon AS (SELECT date_format(as_of_date, 'yyyy-MM') AS ym, max(as_of_date) AS last_d,\n",
+        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
+        "        FROM day GROUP BY 1),\n",
+        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
+        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
+        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyy-MM'))\n",
+        "\n",
+        ", pick AS (\n",
+        "  SELECT 'cur' AS k, p.d AS dd FROM p\n",
+        "  UNION ALL SELECT 'lm', (SELECT max(as_of_date) FROM day, p\n",
+        "                          WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p\n",
+        "  UNION ALL SELECT 'ly', (SELECT max(as_of_date) FROM day, p\n",
+        "                          WHERE as_of_date <= add_months(p.d, -12)) FROM p),\n",
+        "v AS (\n",
+        "  SELECT pk.k,\n",
+        "    (SELECT sum(new_m) FROM day WHERE date_trunc('MM', as_of_date) = date_trunc('MM', pk.dd)\n",
+        "       AND as_of_date <= pk.dd) AS new_acq,\n",
+        "    x.eop, x.usg,\n",
+        "    (SELECT sum(spend) FROM day WHERE date_trunc('MM', as_of_date) = date_trunc('MM', pk.dd)\n",
+        "       AND as_of_date <= pk.dd) AS spend,\n",
+        "    x.bal\n",
+        "  FROM pick pk LEFT JOIN day x ON x.as_of_date = pk.dd),\n",
+        "t AS (\n",
+        "  SELECT metric_code, period_type, sum(target_value) AS target\n",
+        "  FROM silver.targets, p\n",
+        "  WHERE (period_type = 'MONTH' AND period = date_format(p.d, 'yyyy-MM'))\n",
+        "     OR (period_type = 'YEAR' AND period = CAST(year(p.d) AS STRING))\n",
+        "  GROUP BY 1, 2),\n",
+        "ytd AS (SELECT sum(new_m) AS new_ytd, sum(spend) AS spend_ytd FROM day, p\n",
+        "        WHERE year(as_of_date) = year(p.d) AND as_of_date <= p.d),\n",
+        "k AS (\n",
+        "  SELECT 1 AS ord, 'New Acquisition' AS kpi, c.new_acq AS cur, lm.new_acq AS lm,\n",
+        "         ly.new_acq AS ly, 'CARD_NEW_ACQ' AS code, ytd.new_ytd AS ytd_val\n",
+        "  FROM v c, v lm, v ly, ytd WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'\n",
+        "  UNION ALL SELECT 2, 'Customer Base', c.eop, lm.eop, ly.eop, NULL, NULL\n",
+        "  FROM v c, v lm, v ly WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'\n",
+        "  UNION ALL SELECT 3, 'Using Customer', c.usg, lm.usg, ly.usg, NULL, NULL\n",
+        "  FROM v c, v lm, v ly WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'\n",
+        "  UNION ALL SELECT 4, 'Sales Volume (K USD)', c.spend, lm.spend, ly.spend,\n",
+        "         'CARD_SALES_VOLUME', ytd.spend_ytd\n",
+        "  FROM v c, v lm, v ly, ytd WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'\n",
+        "  UNION ALL SELECT 5, 'Balance (K USD)', c.bal, lm.bal, ly.bal, NULL, NULL\n",
+        "  FROM v c, v lm, v ly WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly')\n",
+        "SELECT k.ord, k.kpi,\n",
+        "  (k.cur - k.lm) / nullif(k.lm, 0) * 100 AS vs_last_month_pct,\n",
+        "  (k.cur - k.ly) / nullif(k.ly, 0) * 100 AS vs_last_year_pct,\n",
+        "  k.cur / nullif(tm.target, 0) * 100 AS month_target_pct,\n",
+        "  k.ytd_val / nullif(ty.target, 0) * 100 AS year_target_pct\n",
+        "FROM k\n",
+        "LEFT JOIN t tm ON tm.metric_code = k.code AND tm.period_type = 'MONTH'\n",
+        "LEFT JOIN t ty ON ty.metric_code = k.code AND ty.period_type = 'YEAR'\n",
+        "ORDER BY k.ord\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_new_acq",
+      "displayName": "New Acquisition by channel",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_card_kpi_daily WHERE as_of_date <= :report_date) AS d)\n",
+        "SELECT date_format(k.as_of_date, 'yyyy-MM') AS month,\n",
+        "       CASE k.acquisition_channel WHEN 'SMART_CREDIT' THEN 'Smart Credit'\n",
+        "            ELSE 'Branches' END AS channel,\n",
+        "       sum(k.new_members) AS cards\n",
+        "FROM gold.mart_card_kpi_daily k CROSS JOIN p\n",
+        "WHERE k.as_of_date <= p.d\n",
+        "  AND date_format(k.as_of_date, 'yyyy-MM') > date_format(add_months(p.d, -7), 'yyyy-MM')\n",
+        "  AND (:customer_type = 'all'\n",
+        "       OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "GROUP BY 1, 2\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_in_out",
+      "displayName": "In & Out",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_card_kpi_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (\n",
+        "  SELECT k.* FROM gold.mart_card_kpi_daily k\n",
+        "  WHERE :customer_type = 'all'\n",
+        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
+        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
+        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
+        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
+        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
+        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
+        "               sum(pos_amt) pos, sum(online_amt) online,\n",
+        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
+        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
+        "        FROM f GROUP BY as_of_date),\n",
+        "mon AS (SELECT date_format(as_of_date, 'yyyy-MM') AS ym, max(as_of_date) AS last_d,\n",
+        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
+        "        FROM day GROUP BY 1),\n",
+        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
+        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
+        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyy-MM'))\n",
+        "\n",
+        "SELECT ym AS month, 'New Issuance' AS series, new_m AS cards FROM m7\n",
+        "UNION ALL SELECT ym, 'Termination', closed_m FROM m7\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_base_using",
+      "displayName": "Customer Base & Using Mem",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_card_kpi_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (\n",
+        "  SELECT k.* FROM gold.mart_card_kpi_daily k\n",
+        "  WHERE :customer_type = 'all'\n",
+        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
+        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
+        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
+        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
+        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
+        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
+        "               sum(pos_amt) pos, sum(online_amt) online,\n",
+        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
+        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
+        "        FROM f GROUP BY as_of_date),\n",
+        "mon AS (SELECT date_format(as_of_date, 'yyyy-MM') AS ym, max(as_of_date) AS last_d,\n",
+        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
+        "        FROM day GROUP BY 1),\n",
+        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
+        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
+        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyy-MM'))\n",
+        "\n",
+        "SELECT ym AS month, 'Customer Base' AS series, eop AS members FROM m7\n",
+        "UNION ALL SELECT ym, 'Using Mem', usg FROM m7\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_balance",
+      "displayName": "Balance (K USD)",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_card_kpi_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (\n",
+        "  SELECT k.* FROM gold.mart_card_kpi_daily k\n",
+        "  WHERE :customer_type = 'all'\n",
+        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
+        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
+        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
+        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
+        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
+        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
+        "               sum(pos_amt) pos, sum(online_amt) online,\n",
+        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
+        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
+        "        FROM f GROUP BY as_of_date),\n",
+        "mon AS (SELECT date_format(as_of_date, 'yyyy-MM') AS ym, max(as_of_date) AS last_d,\n",
+        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
+        "        FROM day GROUP BY 1),\n",
+        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
+        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
+        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyy-MM'))\n",
+        "\n",
+        "SELECT m7.ym AS month, 'Balance' AS series, m7.bal / p.usd / 1000 AS k_usd FROM m7, p\n",
+        "UNION ALL SELECT m7.ym, 'Revolving', m7.rev / p.usd / 1000 FROM m7, p\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_volume",
+      "displayName": "Sales Volume (K USD)",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_card_kpi_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (\n",
+        "  SELECT k.* FROM gold.mart_card_kpi_daily k\n",
+        "  WHERE :customer_type = 'all'\n",
+        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
+        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
+        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
+        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
+        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
+        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
+        "               sum(pos_amt) pos, sum(online_amt) online,\n",
+        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
+        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
+        "        FROM f GROUP BY as_of_date),\n",
+        "mon AS (SELECT date_format(as_of_date, 'yyyy-MM') AS ym, max(as_of_date) AS last_d,\n",
+        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
+        "        FROM day GROUP BY 1),\n",
+        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
+        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
+        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyy-MM'))\n",
+        "\n",
+        "SELECT m7.ym AS month, m7.spend / p.usd / 1000 AS k_usd FROM m7, p\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_ticket",
+      "displayName": "Spend per cus (USD)",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_card_kpi_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (\n",
+        "  SELECT k.* FROM gold.mart_card_kpi_daily k\n",
+        "  WHERE :customer_type = 'all'\n",
+        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
+        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
+        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
+        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
+        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
+        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
+        "               sum(pos_amt) pos, sum(online_amt) online,\n",
+        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
+        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
+        "        FROM f GROUP BY as_of_date),\n",
+        "mon AS (SELECT date_format(as_of_date, 'yyyy-MM') AS ym, max(as_of_date) AS last_d,\n",
+        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
+        "        FROM day GROUP BY 1),\n",
+        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
+        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
+        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyy-MM'))\n",
+        "\n",
+        "SELECT m7.ym AS month, m7.spend / p.usd / nullif(m7.usg, 0) AS ticket_size FROM m7, p\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_mix_sector",
+      "displayName": "Spend by sector",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_card_kpi_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (\n",
+        "  SELECT k.* FROM gold.mart_card_kpi_daily k\n",
+        "  WHERE :customer_type = 'all'\n",
+        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
+        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
+        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
+        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
+        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
+        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
+        "               sum(pos_amt) pos, sum(online_amt) online,\n",
+        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
+        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
+        "        FROM f GROUP BY as_of_date),\n",
+        "mon AS (SELECT date_format(as_of_date, 'yyyy-MM') AS ym, max(as_of_date) AS last_d,\n",
+        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
+        "        FROM day GROUP BY 1),\n",
+        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
+        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
+        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyy-MM'))\n",
+        "\n",
+        ", x AS (SELECT day.* FROM day, p WHERE day.as_of_date = p.d),\n",
+        "all_mix AS (\n",
+        "  SELECT 'sector' AS donut, 'Purchasing' AS slice, purchase AS amount FROM x\n",
+        "  UNION ALL SELECT 'sector', 'Installment', installment FROM x\n",
+        "  UNION ALL SELECT 'sector', 'Cash Advance', cash FROM x\n",
+        "  UNION ALL SELECT 'sector', 'Flexi', flexi FROM x\n",
+        "  UNION ALL SELECT 'location', 'Domestic', domestic FROM x\n",
+        "  UNION ALL SELECT 'location', 'X-Border', xborder FROM x\n",
+        "  UNION ALL SELECT 'channel', 'POS (Offline)', pos FROM x\n",
+        "  UNION ALL SELECT 'channel', 'Online', online FROM x)\n",
+        "SELECT slice, amount FROM all_mix WHERE donut = 'sector'\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_mix_location",
+      "displayName": "Spend by location",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_card_kpi_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (\n",
+        "  SELECT k.* FROM gold.mart_card_kpi_daily k\n",
+        "  WHERE :customer_type = 'all'\n",
+        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
+        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
+        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
+        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
+        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
+        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
+        "               sum(pos_amt) pos, sum(online_amt) online,\n",
+        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
+        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
+        "        FROM f GROUP BY as_of_date),\n",
+        "mon AS (SELECT date_format(as_of_date, 'yyyy-MM') AS ym, max(as_of_date) AS last_d,\n",
+        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
+        "        FROM day GROUP BY 1),\n",
+        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
+        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
+        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyy-MM'))\n",
+        "\n",
+        ", x AS (SELECT day.* FROM day, p WHERE day.as_of_date = p.d),\n",
+        "all_mix AS (\n",
+        "  SELECT 'sector' AS donut, 'Purchasing' AS slice, purchase AS amount FROM x\n",
+        "  UNION ALL SELECT 'sector', 'Installment', installment FROM x\n",
+        "  UNION ALL SELECT 'sector', 'Cash Advance', cash FROM x\n",
+        "  UNION ALL SELECT 'sector', 'Flexi', flexi FROM x\n",
+        "  UNION ALL SELECT 'location', 'Domestic', domestic FROM x\n",
+        "  UNION ALL SELECT 'location', 'X-Border', xborder FROM x\n",
+        "  UNION ALL SELECT 'channel', 'POS (Offline)', pos FROM x\n",
+        "  UNION ALL SELECT 'channel', 'Online', online FROM x)\n",
+        "SELECT slice, amount FROM all_mix WHERE donut = 'location'\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_mix_channel",
+      "displayName": "Spend by channel",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_card_kpi_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (\n",
+        "  SELECT k.* FROM gold.mart_card_kpi_daily k\n",
+        "  WHERE :customer_type = 'all'\n",
+        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
+        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
+        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
+        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
+        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
+        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
+        "               sum(pos_amt) pos, sum(online_amt) online,\n",
+        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
+        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
+        "        FROM f GROUP BY as_of_date),\n",
+        "mon AS (SELECT date_format(as_of_date, 'yyyy-MM') AS ym, max(as_of_date) AS last_d,\n",
+        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
+        "        FROM day GROUP BY 1),\n",
+        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
+        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
+        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyy-MM'))\n",
+        "\n",
+        ", x AS (SELECT day.* FROM day, p WHERE day.as_of_date = p.d),\n",
+        "all_mix AS (\n",
+        "  SELECT 'sector' AS donut, 'Purchasing' AS slice, purchase AS amount FROM x\n",
+        "  UNION ALL SELECT 'sector', 'Installment', installment FROM x\n",
+        "  UNION ALL SELECT 'sector', 'Cash Advance', cash FROM x\n",
+        "  UNION ALL SELECT 'sector', 'Flexi', flexi FROM x\n",
+        "  UNION ALL SELECT 'location', 'Domestic', domestic FROM x\n",
+        "  UNION ALL SELECT 'location', 'X-Border', xborder FROM x\n",
+        "  UNION ALL SELECT 'channel', 'POS (Offline)', pos FROM x\n",
+        "  UNION ALL SELECT 'channel', 'Online', online FROM x)\n",
+        "SELECT slice, amount FROM all_mix WHERE donut = 'channel'\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_customer_types",
+      "displayName": "Customer type options",
+      "queryLines": [
+        "SELECT explode(array('consumer', 'corporate', 'all')) AS customer_type\n"
+      ],
+      "parameters": []
+    }
+  ],
+  "pages": [
+    {
+      "name": "card_business",
+      "displayName": "Card Business Dashboard",
+      "layout": [
+        {
+          "widget": {
+            "name": "text_01",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# CARD BUSINESS DASHBOARD | Performance & Growth"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "text_02",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Overview"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_03",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "new_acquisition",
+                      "expression": "`new_acquisition`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "new_acquisition",
+                  "displayName": "New Acquisition",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 0
+                    }
+                  },
+                  "style": {
+                    "color": "#166534"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "New Acquisition"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_04",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "customer_base",
+                      "expression": "`customer_base`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "customer_base",
+                  "displayName": "Customer Base",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 0
+                    }
+                  },
+                  "style": {
+                    "color": "#604A7B"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Customer Base"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 3,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_05",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "using_customer",
+                      "expression": "`using_customer`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "using_customer",
+                  "displayName": "Using Customer",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 0
+                    }
+                  },
+                  "style": {
+                    "color": "#943126"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Using Customer"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 3,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_06",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "sales_volume_k_usd",
+                      "expression": "`sales_volume_k_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sales_volume_k_usd",
+                  "displayName": "Sales Volume (K USD)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  },
+                  "style": {
+                    "color": "#2E86C1"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Sales Volume (K USD)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 3,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_07",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "balance_k_usd",
+                      "expression": "`balance_k_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "balance_k_usd",
+                  "displayName": "Balance (K USD)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  },
+                  "style": {
+                    "color": "#138D75"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Balance (K USD)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 3,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "table_08",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi_compare",
+                  "fields": [
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "vs_last_month_pct",
+                      "expression": "`vs_last_month_pct`"
+                    },
+                    {
+                      "name": "vs_last_year_pct",
+                      "expression": "`vs_last_year_pct`"
+                    },
+                    {
+                      "name": "month_target_pct",
+                      "expression": "`month_target_pct`"
+                    },
+                    {
+                      "name": "year_target_pct",
+                      "expression": "`year_target_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "kpi",
+                    "displayName": "KPI",
+                    "title": "KPI",
+                    "order": 100000,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "vs_last_month_pct",
+                    "displayName": "vs Last Month (%)",
+                    "title": "vs Last Month (%)",
+                    "order": 100001,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "0.00"
+                  },
+                  {
+                    "fieldName": "vs_last_year_pct",
+                    "displayName": "vs Last Year (%)",
+                    "title": "vs Last Year (%)",
+                    "order": 100002,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "0.00"
+                  },
+                  {
+                    "fieldName": "month_target_pct",
+                    "displayName": "% of Month Target",
+                    "title": "% of Month Target",
+                    "order": 100003,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "0.00"
+                  },
+                  {
+                    "fieldName": "year_target_pct",
+                    "displayName": "% of Year Target",
+                    "title": "% of Year Target",
+                    "order": 100004,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "0.00"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "vs Last Month / Last Year / Target"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "text_09",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## New Issuance vs. Termination"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_10",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_new_acq",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "sum(cards)",
+                      "expression": "SUM(`cards`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "month"
+                },
+                "y": {
+                  "fieldName": "sum(cards)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "cards"
+                },
+                "color": {
+                  "fieldName": "channel",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Smart Credit",
+                        "color": "#20538D"
+                      },
+                      {
+                        "value": "Branches",
+                        "color": "#8DB4E2"
+                      }
+                    ]
+                  },
+                  "displayName": "Series"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "New Acquisition"
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_11",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_in_out",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "series",
+                      "expression": "`series`"
+                    },
+                    {
+                      "name": "sum(cards)",
+                      "expression": "SUM(`cards`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "month"
+                },
+                "y": {
+                  "fieldName": "sum(cards)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "cards"
+                },
+                "color": {
+                  "fieldName": "series",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "New Issuance",
+                        "color": "#20538D"
+                      },
+                      {
+                        "value": "Termination",
+                        "color": "#A5A5A5"
+                      }
+                    ]
+                  },
+                  "displayName": "Series"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "In & Out"
+              },
+              "mark": {
+                "layout": "group"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 11,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "text_12",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Sales Performance"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 17,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_13",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_base_using",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "series",
+                      "expression": "`series`"
+                    },
+                    {
+                      "name": "sum(members)",
+                      "expression": "SUM(`members`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "month"
+                },
+                "y": {
+                  "fieldName": "sum(members)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "members"
+                },
+                "color": {
+                  "fieldName": "series",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Customer Base",
+                        "color": "#7B8AD7"
+                      },
+                      {
+                        "value": "Using Mem",
+                        "color": "#D586BD"
+                      }
+                    ]
+                  },
+                  "displayName": "Series"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Customer Base & Using Mem"
+              },
+              "mark": {
+                "layout": "group"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 18,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_14",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_balance",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "series",
+                      "expression": "`series`"
+                    },
+                    {
+                      "name": "sum(k_usd)",
+                      "expression": "SUM(`k_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "month"
+                },
+                "y": {
+                  "fieldName": "sum(k_usd)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "k_usd"
+                },
+                "color": {
+                  "fieldName": "series",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Balance",
+                        "color": "#20558A"
+                      },
+                      {
+                        "value": "Revolving",
+                        "color": "#E2B13C"
+                      }
+                    ]
+                  },
+                  "displayName": "Series"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Balance (K USD)"
+              },
+              "mark": {
+                "layout": "group"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 18,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_15",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_volume",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "sum(k_usd)",
+                      "expression": "SUM(`k_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "month"
+                },
+                "y": {
+                  "fieldName": "sum(k_usd)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "k_usd"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Sales Volume (K USD)"
+              },
+              "mark": {
+                "colors": [
+                  "#3B82F6"
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 24,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "line_16",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_ticket",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "sum(ticket_size)",
+                      "expression": "SUM(`ticket_size`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "month"
+                },
+                "y": {
+                  "fieldName": "sum(ticket_size)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "ticket_size"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Spend per cus (USD)"
+              },
+              "mark": {
+                "colors": [
+                  "#5B9D4A"
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 24,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "text_17",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Spending Distribution"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 31,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "pie_18",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_mix_sector",
+                  "fields": [
+                    {
+                      "name": "slice",
+                      "expression": "`slice`"
+                    },
+                    {
+                      "name": "sum(amount)",
+                      "expression": "SUM(`amount`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "sum(amount)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "amount"
+                },
+                "color": {
+                  "fieldName": "slice",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Purchasing",
+                        "color": "#5B8FC4"
+                      },
+                      {
+                        "value": "Installment",
+                        "color": "#EDD07A"
+                      },
+                      {
+                        "value": "Cash Advance",
+                        "color": "#FFB366"
+                      },
+                      {
+                        "value": "Flexi",
+                        "color": "#E5CA6A"
+                      }
+                    ]
+                  },
+                  "displayName": "slice"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "By Sectors"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 32,
+            "width": 2,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "pie_19",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_mix_location",
+                  "fields": [
+                    {
+                      "name": "slice",
+                      "expression": "`slice`"
+                    },
+                    {
+                      "name": "sum(amount)",
+                      "expression": "SUM(`amount`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "sum(amount)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "amount"
+                },
+                "color": {
+                  "fieldName": "slice",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Domestic",
+                        "color": "#9BA8E8"
+                      },
+                      {
+                        "value": "X-Border",
+                        "color": "#E4A8D0"
+                      }
+                    ]
+                  },
+                  "displayName": "slice"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "By Locations"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 32,
+            "width": 2,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "pie_20",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_mix_channel",
+                  "fields": [
+                    {
+                      "name": "slice",
+                      "expression": "`slice`"
+                    },
+                    {
+                      "name": "sum(amount)",
+                      "expression": "SUM(`amount`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "sum(amount)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "amount"
+                },
+                "color": {
+                  "fieldName": "slice",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "POS (Offline)",
+                        "color": "#5B8FC4"
+                      },
+                      {
+                        "value": "Online",
+                        "color": "#8BC47A"
+                      }
+                    ]
+                  },
+                  "displayName": "slice"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "By Channels"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 32,
+            "width": 2,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "text_21",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Delinquency"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 38,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_22",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "dpd_1p",
+                      "expression": "`dpd_1p`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "dpd_1p",
+                  "displayName": "DPD 1+ (%)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "DPD 1+ (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 39,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_23",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "dpd_10p",
+                      "expression": "`dpd_10p`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "dpd_10p",
+                  "displayName": "DPD 10+ (%)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "DPD 10+ (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 39,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_24",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "dpd_30p",
+                      "expression": "`dpd_30p`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "dpd_30p",
+                  "displayName": "DPD 30+ (%)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "DPD 30+ (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 39,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_25",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "npl",
+                      "expression": "`npl`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "npl",
+                  "displayName": "NPL (%)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "NPL (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 39,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_26",
+            "queries": [
+              {
+                "name": "param_card_kpi_report_date",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_kpi_compare_report_date",
+                "query": {
+                  "datasetName": "card_kpi_compare",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_new_acq_report_date",
+                "query": {
+                  "datasetName": "card_new_acq",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_in_out_report_date",
+                "query": {
+                  "datasetName": "card_in_out",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_base_using_report_date",
+                "query": {
+                  "datasetName": "card_base_using",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_balance_report_date",
+                "query": {
+                  "datasetName": "card_balance",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_volume_report_date",
+                "query": {
+                  "datasetName": "card_volume",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_ticket_report_date",
+                "query": {
+                  "datasetName": "card_ticket",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_mix_sector_report_date",
+                "query": {
+                  "datasetName": "card_mix_sector",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_mix_location_report_date",
+                "query": {
+                  "datasetName": "card_mix_location",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_mix_channel_report_date",
+                "query": {
+                  "datasetName": "card_mix_channel",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_kpi_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_kpi_compare_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_new_acq_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_in_out_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_base_using_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_balance_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_volume_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_ticket_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_mix_sector_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_mix_location_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_mix_channel_report_date"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Report date"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_27",
+            "queries": [
+              {
+                "name": "options",
+                "query": {
+                  "datasetName": "card_customer_types",
+                  "fields": [
+                    {
+                      "name": "customer_type",
+                      "expression": "`customer_type`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_kpi_customer_type",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_kpi_compare_customer_type",
+                "query": {
+                  "datasetName": "card_kpi_compare",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_new_acq_customer_type",
+                "query": {
+                  "datasetName": "card_new_acq",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_in_out_customer_type",
+                "query": {
+                  "datasetName": "card_in_out",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_base_using_customer_type",
+                "query": {
+                  "datasetName": "card_base_using",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_balance_customer_type",
+                "query": {
+                  "datasetName": "card_balance",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_volume_customer_type",
+                "query": {
+                  "datasetName": "card_volume",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_ticket_customer_type",
+                "query": {
+                  "datasetName": "card_ticket",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_mix_sector_customer_type",
+                "query": {
+                  "datasetName": "card_mix_sector",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_mix_location_customer_type",
+                "query": {
+                  "datasetName": "card_mix_location",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_card_mix_channel_customer_type",
+                "query": {
+                  "datasetName": "card_mix_channel",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "customer_type",
+                    "displayName": "Customer type",
+                    "queryName": "options"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_kpi_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_kpi_compare_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_new_acq_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_in_out_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_base_using_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_balance_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_volume_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_ticket_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_mix_sector_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_mix_location_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_mix_channel_customer_type"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Customer type"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "CENTER"
+    }
+  }
+}

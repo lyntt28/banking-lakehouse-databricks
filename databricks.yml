@@ -16,6 +16,10 @@ variables:
       Truyền khi deploy: databricks bundle deploy -t prod --var notification_email=you@example.com
     default: alerts@example.com
 
+  warehouse_id:
+    description: SQL warehouse chạy 3 dashboard AI/BI (Free Edition có sẵn "Serverless Starter Warehouse")
+    lookup:
+      warehouse: Serverless Starter Warehouse
   governance_dry_run:
     description: >
       true = chỉ in SQL governance (Free Edition không có account groups);
