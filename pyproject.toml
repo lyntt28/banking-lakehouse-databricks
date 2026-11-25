@@ -4,7 +4,8 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["src/00_setup", "src/01_bronze", "src/02_silver", "src/03_gold", "src/04_ml"]
+
+extend-exclude = ["reference", "src/00_setup", "src/01_bronze", "src/02_silver", "src/03_gold", "src/04_ml"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]
