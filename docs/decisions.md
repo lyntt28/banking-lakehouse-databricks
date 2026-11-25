@@ -41,4 +41,9 @@ Each decision: context → decision → alternatives considered → consequences
 - **Pipeline identity:** once governance is on, Silver/Gold refuse to run unless the job identity is in `bank_admins` or `data_engineers`; otherwise SCD2 would hash masked values and Gold would read row-filtered tables.
 - **Free Edition:** account groups are not available, so `governance_dry_run` defaults to `true` (prints SQL only). Set it to `false` on a workspace with groups.
 
+## ADR-009: Promotion test → prod through GitHub environments
+- **Decision:** CD deploys to `test` on every push to `main` and runs the full daily job there; the job's own DQ gate and reconciliation checks act as the smoke test. `prod` uses a GitHub environment with required reviewers, so a person approves each release. Auth prefers GitHub OIDC federation (no long-lived token in GitHub); a PAT secret still works.
+- **Alternatives:** deploying prod on tag only (kept possible via `workflow_dispatch`), Databricks Git folders pull (no review step, no test run).
+- **Consequences:** A broken DQ rule or reconciliation mismatch on test data blocks prod. Only prod runs on a schedule, so test costs nothing between releases.
+
 <!-- TODO: liquid clustering -->
