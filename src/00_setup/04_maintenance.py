@@ -47,7 +47,10 @@ try:
     spark.conf.set("spark.databricks.io.cache.enabled", "false")
 except Exception:  # serverless không cho đổi -> vẫn đo, ghi chú trong kết quả
     pass
-spark.sql("SET use_cached_result = false")
+try:
+    spark.sql("SET use_cached_result = false")
+except Exception:  # cấu hình của SQL warehouse; notebook serverless có thể không nhận
+    pass
 
 # COMMAND ----------
 
