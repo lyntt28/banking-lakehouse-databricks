@@ -56,7 +56,7 @@ def build_dim_product(products: DataFrame) -> DataFrame:
 
 CUSTOMER_COLS = ["customer_id", "cust_type", "full_name", "id_no", "dob", "gender", "phone",
                  "email", "address", "province", "branchnbr", "segment", "monthly_income",
-                 "open_date"]
+                 "open_date", "nationality"]
 
 
 def build_dim_customer(customers_scd2: DataFrame) -> DataFrame:
