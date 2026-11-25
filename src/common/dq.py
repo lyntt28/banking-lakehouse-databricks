@@ -54,18 +54,26 @@ def apply_dq(df: DataFrame, rules: list[Rule]) -> tuple[DataFrame, DataFrame]:
 
 
 def dq_summary(df: DataFrame, rules: list[Rule], table_name: str) -> DataFrame:
-    """1 dòng cho mỗi rule: tổng số dòng, số dòng lỗi, % lỗi, trạng thái."""
-    total = df.count()
-    flagged = _violation_flags(df, rules).cache()
+    """1 dòng cho mỗi rule: tổng số dòng, số dòng lỗi, % lỗi, trạng thái.
+
+    Đếm mọi rule trong MỘT lần quét dữ liệu (1 agg), không count() riêng từng rule.
+    """
     spark = df.sparkSession
-    rows = []
-    for r in rules:
+    flagged = _violation_flags(df, rules)
+    aggs = [F.count(F.lit(1)).alias("_total")]
+    for i, r in enumerate(rules):
         col = "_failed_rules" if r.severity == "FAIL" else "_warned_rules"
-        failed = flagged.filter(F.array_contains(col, r.name)).count()
+        aggs.append(
+            F.sum(F.array_contains(col, r.name).cast("long")).alias(f"_r{i}")
+        )
+    counts = flagged.agg(*aggs).first()
+    total = counts["_total"]
+    rows = []
+    for i, r in enumerate(rules):
+        failed = counts[f"_r{i}"] or 0
         pct = (failed / total * 100) if total else 0.0
         status = "PASS" if failed == 0 else r.severity
         rows.append((table_name, r.name, r.severity, total, failed, round(pct, 4), status))
-    flagged.unpersist()
     return spark.createDataFrame(
         rows,
         "table_name string, rule_name string, severity string, total_rows long, "

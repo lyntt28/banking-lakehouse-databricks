@@ -46,6 +46,14 @@ targets:
           email_notifications:
             on_failure:
               - ${var.notification_email}
+        banking_maintenance_weekly:
+          email_notifications:
+            on_failure:
+              - ${var.notification_email}
+        banking_ml_cross_sell_weekly:
+          email_notifications:
+            on_failure:
+              - ${var.notification_email}
 
   prod:
     mode: production
@@ -62,9 +70,20 @@ targets:
             quartz_cron_expression: "0 30 6 * * ?"
             timezone_id: Asia/Ho_Chi_Minh
             pause_status: UNPAUSED
+          email_notifications:
+            on_failure:
+              - ${var.notification_email}
         banking_maintenance_weekly:
           schedule:
             quartz_cron_expression: "0 0 3 ? * SUN"   # 03:00 Chủ nhật
+            timezone_id: Asia/Ho_Chi_Minh
+            pause_status: UNPAUSED
+          email_notifications:
+            on_failure:
+              - ${var.notification_email}
+        banking_ml_cross_sell_weekly:
+          schedule:
+            quartz_cron_expression: "0 30 8 ? * MON"   # 08:30 thứ Hai, sau job daily
             timezone_id: Asia/Ho_Chi_Minh
             pause_status: UNPAUSED
           email_notifications:
