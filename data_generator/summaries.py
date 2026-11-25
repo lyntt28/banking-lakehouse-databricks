@@ -15,7 +15,7 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-from data_generator.common import BRANCH_BY_NBR, DEPOSIT_PRODUCTS, USD_RATE, write_csv
+from data_generator.common import BRANCH_BY_NBR, DEPOSIT_ALL, USD_RATE, write_csv
 
 KPI_FILES = ["01_member_eop", "02_member_usage", "03_new_consumer", "04_member_closed",
              "05_balance_eop", "06_spend_sector", "07_spend_location", "08_spend_channel",
@@ -110,7 +110,7 @@ def deposit_summary(accounts: list[dict], failed: set[str], as_of: date,
                     prev: dict, month_hist: dict) -> list[list]:
     """Tổng hợp số dư tiền gửi theo (nhóm TK, tiền tệ, chi nhánh). `prev`/`month_hist`
     giữ số liệu các ngày trước để tính chênh lệch T-1 và bình quân tháng."""
-    groups = {p[0]: (p[1], p[2]) for p in DEPOSIT_PRODUCTS}
+    groups = {p[0]: (p[1], p[2]) for p in DEPOSIT_ALL}
     bal: dict[tuple, float] = defaultdict(float)
     for a in accounts:
         if a["product_type"] == "LOAN" or a["account_id"] in failed:
