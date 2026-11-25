@@ -64,15 +64,19 @@ Reconciliation: `mart_deposit_daily` vs `deposit_summary` (bang1247) source file
 | `mart_card_kpi_monthly` | done: stock = last day of month, flow = month sum, MoM / YoY %, % of month / year target (`targets`) |
 | `ops.recon_card_kpi` | done: all 45 `card_kpi` metric codes vs Gold; stock metrics exact, transaction-based within 1% (see ADR-007) |
 | `ops.recon_deposit` | done: `mart_deposit_daily` vs `deposit_summary` per group x currency x branch, exact |
-| `mart_deposit_by_tenor`, `mart_casa_customer`, `mart_deposit_new_accounts` | not yet (generator gaps below) |
+| `mart_deposit_trend` | done: balance by account group x class x currency x region, share %, diff vs D-1 / M-1 / Y-1 (`src/common/gold_deposit.py`) |
+| `mart_deposit_by_tenor` | done: TD / ISA by tenor, min / max / avg / balance-weighted rate |
+| `mart_casa_customer` | done: retail customers, CASA customers, active vs dormant, penetration % |
+| `mart_deposit_new_accounts` | done: new accounts by open month + YTD (filter `EDUSAVE` for Edu-Save) |
+| Dashboards on Databricks SQL | not yet: needs a workspace run |
 
 ## Data the generator still needs for these dashboards
 
 | Gap | Needed by | Change |
 |---|---|---|
-| ≥ 13 months of history (MoM/YoY, 7-month trends) | all three | backfill mode: month-end snapshots for past 13 months + daily for recent days |
+| ~~≥ 13 months of history~~ | done | `generate(..., history_months=13)`: month-end snapshots before the daily range; load with notebook `00_setup/05_backfill.py` |
 | ~~Targets (month / year)~~ | done | `targets` table: metric, period, branch, target value |
 | ~~Card acquisition channel~~ | done | `acquisition_channel` in `cards` (SMART_CREDIT / BRANCH) |
 | ~~Customer nationality~~ | done | `nationality` in `customers` |
-| Deposit tenor + 3-ISA class, Edu-Save product | DEPOSIT tenor chart, Edu-Save chart | `tenor_months`, product `EDUSAVE`, ISA group in `accounts` |
+| ~~Deposit tenor + 3-ISA class, Edu-Save product~~ | done | `tenor_months`, products `ISA` (3-ISA) and `EDUSAVE` |
 | ~~Amounts in USD (K USD)~~ | done | `fx_rates` (rate to VND per day) |
