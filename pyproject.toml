@@ -1,0 +1,10 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["src/00_setup", "src/01_bronze", "src/02_silver", "src/03_gold"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
