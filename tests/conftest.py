@@ -56,14 +56,14 @@ def bronze(spark, tmp_path_factory):
 
 @pytest.fixture(scope="session")
 def results(bronze):
-    from common.silver import TABLES, prepare_silver
+    from common.silver import ORDER, TABLES, prepare_silver
 
     out = {}
-    for t in ["branches", "products", "customers", "loans"]:
-        out[t] = prepare_silver(bronze[t], TABLES[t])
-    out["accounts"] = prepare_silver(
-        bronze["accounts"], TABLES["accounts"], out["customers"].valid.select("customer_id"))
-    out["transactions"] = prepare_silver(
-        bronze["transactions"], TABLES["transactions"],
-        out["accounts"].valid.select("account_id"))
+    for t in ORDER:   # bảng tham chiếu chạy trước bảng có khóa ngoại
+        spec = TABLES[t]
+        ref = None
+        if spec.fk:
+            parent = spec.fk[1]
+            ref = out[parent].known_keys(TABLES[parent].key[0])
+        out[t] = prepare_silver(bronze[t], spec, ref)
     return out

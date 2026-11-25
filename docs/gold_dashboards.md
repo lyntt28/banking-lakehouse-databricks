@@ -55,13 +55,24 @@ Filters: region, currency, nationality, group class (1-CASA / 2-TDA / 3-ISA).
 
 Reconciliation: `mart_deposit_daily` vs `deposit_summary` (bang1247) source files.
 
+## Built so far (`src/common/gold_cards.py`)
+
+| Table | Status |
+|---|---|
+| `mart_card_kpi_daily` | done: members EOP/new/closed/using, balance, revolving, spend by type/location/channel, DPD 1+/10+/30+/90+, by branch x customer type x acquisition channel |
+| `mart_card_spend_mix` | done |
+| `mart_card_kpi_monthly` | done: stock = last day of month, flow = month sum, MoM / YoY %, % of month / year target (`targets`) |
+| `ops.recon_card_kpi` | done: all 45 `card_kpi` metric codes vs Gold; stock metrics exact, transaction-based within 1% (see ADR-007) |
+| `ops.recon_deposit` | done: `mart_deposit_daily` vs `deposit_summary` per group x currency x branch, exact |
+| `mart_deposit_by_tenor`, `mart_casa_customer`, `mart_deposit_new_accounts` | not yet (generator gaps below) |
+
 ## Data the generator still needs for these dashboards
 
 | Gap | Needed by | Change |
 |---|---|---|
 | ≥ 13 months of history (MoM/YoY, 7-month trends) | all three | backfill mode: month-end snapshots for past 13 months + daily for recent days |
-| Targets (month / year) | Card KPI cards, RCD gauges | `targets` table: metric, period, branch, target value |
-| Card acquisition channel | New Acquisition chart | `acquisition_channel` in `cards` (SMART_CREDIT / BRANCH) |
-| Customer nationality | RCD filter, bang1247 NATION | `nationality` in `customers` |
+| ~~Targets (month / year)~~ | done | `targets` table: metric, period, branch, target value |
+| ~~Card acquisition channel~~ | done | `acquisition_channel` in `cards` (SMART_CREDIT / BRANCH) |
+| ~~Customer nationality~~ | done | `nationality` in `customers` |
 | Deposit tenor + 3-ISA class, K-Study product | RCD tenor chart, K-Study chart | `tenor_months`, product `KSTUDY`, ISA group in `accounts` |
-| Amounts in USD (K USD) | Card dashboard | FX rate table `fx_rates` (VND → USD) |
+| ~~Amounts in USD (K USD)~~ | done | `fx_rates` (rate to VND per day) |

@@ -30,7 +30,7 @@ HEADERS = {
                  "product_group", "scope", "term_months"],
     "customers": ["customer_id", "cust_type", "full_name", "id_no", "dob", "gender", "phone",
                   "email", "address", "province", "branchnbr", "segment", "monthly_income",
-                  "open_date", "updated_at"],
+                  "open_date", "updated_at", "nationality"],
     "accounts": ["account_id", "customer_id", "branchnbr", "product_type", "currencycd",
                  "status", "open_date", "close_date", "balance", "int_rate"],
     "loans": ["etl_dt", "br_area", "branchnbr", "br_name", "acctnbr", "customer_id", "scope",
@@ -97,13 +97,22 @@ def evolve_customers(rnd: random.Random, customers: list[dict], rate: float = 0.
     return changed
 
 
+FOREIGN = ["KR", "JP", "CN", "US", "SG"]
+
+
+def nationality(customer_id: str) -> str:
+    """~3% KH nước ngoài; suy ra từ id để không đổi chuỗi ngẫu nhiên của bộ sinh."""
+    n = int(customer_id)
+    return FOREIGN[n % len(FOREIGN)] if n % 33 == 0 else "VN"
+
+
 def snap_customers(rnd: random.Random, base: list[dict], as_of: date) -> list[list]:
     rows = []
     for c in base:
         r = [c["customer_id"], c["cust_type"], c["full_name"], c["id_no"], mdy(c["dob"]),
              c["gender"], c["phone"], c["email"], c["address"], c["province"], c["branchnbr"],
              c["segment"], f"{c['monthly_income']:.0f}", mdy(c["open_date"]),
-             f"{as_of.isoformat()} 00:00:00"]
+             f"{as_of.isoformat()} 00:00:00", nationality(c["customer_id"])]
         if hit(rnd):
             r[3] = r[3][:7]  # CCCD sai độ dài (WARN)
         if hit(rnd):

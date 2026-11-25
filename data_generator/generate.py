@@ -11,6 +11,7 @@ Bảng chi tiết (Bronze -> Silver -> Gold):
     cards, card_transactions,  : thẻ tín dụng (MCC, merchant, kênh, trong nước/nước ngoài),
     card_statements              dư nợ thẻ, DPD
     insurance_policies         : hợp đồng bảo hiểm -> label cho ML cross-sell
+    targets, fx_rates          : chỉ tiêu kế hoạch theo chi nhánh x kỳ, tỷ giá về VND
 
 File tổng hợp để đối soát (tính từ bản ghi hợp lệ):
     card_kpi                   : 9 file KPI thẻ dạng dọc (tab, số có dấu phẩy, tỷ lệ %)
@@ -31,8 +32,9 @@ from pathlib import Path
 
 from data_generator import cards as cd
 from data_generator import core
+from data_generator import reference as ref
 from data_generator import summaries as sm
-from data_generator.common import write_csv, write_jsonl
+from data_generator.common import BRANCHES, USD_RATE, write_csv, write_jsonl
 
 
 @dataclass
@@ -79,11 +81,23 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
                                       core.HEADERS["branches"], core.branch_rows()))
             add("products", write_csv(path("products", "products.csv"),
                                       core.HEADERS["products"], core.product_rows()))
+            nb = len(BRANCHES)
+            dep_vnd = sum(a["balance"] * (USD_RATE if a["currencycd"] == "USD" else 1)
+                          for a in accounts if a["product_type"] != "LOAN")
+            add("targets", write_csv(path("targets", "targets.csv"), ref.TARGET_HEADER,
+                                     ref.target_rows(seed, start.year, {
+                                         "CARD_NEW_ACQ": len(cards) * 0.0015 * 30 / nb,
+                                         "CARD_SALES_VOLUME": sizes.card_txns_per_day
+                                         * 2.5e6 * 30 / nb,
+                                         "DEPOSIT_BALANCE": dep_vnd / nb,
+                                     })))
         else:
             core.evolve_customers(rnd, customers)
             cd.evolve_cards(rnd, cards, customers, as_of)
             cd.evolve_insurance(rnd, policies, customers, cards, as_of)
 
+        add("fx_rates", write_csv(path("fx_rates", "fx_rates.csv"), ref.FX_HEADER,
+                                  ref.fx_rows(as_of)))
         cust_rows = core.snap_customers(rnd, customers, as_of)
         add("customers", write_csv(path("customers", "customers.csv"),
                                    core.HEADERS["customers"], cust_rows))
