@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retail Deposit Performance Dashboard</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta http-equiv="Last-Modified" content="0">
+    <link rel="stylesheet" href="flatpickr.min.css">
+    <link rel="stylesheet" href="all.min.css">
+    <link rel="stylesheet" href="styles.css?v=1.1">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <style>
+    .gauge-donut-row {
+        display: flex;
+        gap: 24px;
+        margin-bottom: 2rem;
+    }
+    .gauge-container {
+        flex: 1;
+        background: #fff;
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-width: 220px;
+    }
+    .gauge-container h4 {
+        text-align: center;
+        margin-bottom: 12px;
+        font-size: 16px;
+        font-weight: 600;
+    }
+    
+    /* Navigation Tabs Styles */
+    .nav-tabs {
+        display: flex;
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 4px;
+        margin-bottom: 2rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .nav-tab {
+        flex: 1;
+        padding: 12px 24px;
+        text-align: center;
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 14px;
+        color: #6c757d;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .nav-tab:hover {
+        background: rgba(255,255,255,0.8);
+        color: #495057;
+    }
+    
+    .nav-tab.active {
+        background: #fff;
+        color: #007bff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .page-content {
+        display: none;
+    }
+    
+    .page-content.active {
+        display: block;
+    }
+
+    /* ===== CSS CHO 3 GAUGE CHARTS ===== */
+    .gauge-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        margin-bottom: 32px;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .gauge-box {
+        background: #fff;
+        border-radius: 18px;
+        padding: 28px 32px 18px 32px;
+        box-shadow: 0 6px 24px rgba(0,0,0,0.10), 0 1.5px 6px rgba(0,0,0,0.08);
+        flex: 1;
+        min-width: 420px; /* Khớp với ticker */
+        max-width: 580px; /* Khớp với ticker */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        border: 2.5px solid #e5e7eb;
+        margin: 0 4px;
+    }
+
+    .gauge-box h4 {
+        color: #1e40af;
+        font-size: 22px;
+        font-weight: 700;
+        margin: 22px 0 22px 0;
+        text-align: center;
+        letter-spacing: 0.5px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .gauge-main {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 10px 0;
+        position: relative;
+        width: 100%;
+        height: 200px;
+    }
+
+    .gauge-stats {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        margin-top: 15px;
+        width: 100%;
+    }
+
+    .gauge-value {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #1e293b;
+        text-align: center;
+    }
+
+    .gauge-target {
+        font-size: 1rem;
+        color: #000000;
+        font-weight: 500;
+        text-align: center;
+    }
+
+    /* Color variations for different gauges */
+    .gauge-box:nth-child(1) h4 {
+        color: #223A5E;
+    }
+
+    .gauge-box:nth-child(2) h4 {
+        color: #009688;
+    }
+
+    .gauge-box:nth-child(3) h4 {
+        color: #F4A300;
+    }
+
+    .gauge-box:nth-child(1) .gauge-value {
+        color: #223A5E;
+    }
+
+    .gauge-box:nth-child(2) .gauge-value {
+        color: #009688;
+    }
+
+    .gauge-box:nth-child(3) .gauge-value {
+        color: #F4A300;
+    }
+
+    /* Responsive design cho gauge row */
+    @media (max-width: 1400px) {
+        .gauge-row {
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .gauge-box {
+            min-width: 350px;
+            max-width: 500px;
+        }
+    }
+
+    @media (max-width: 900px) {
+        .gauge-row {
+            grid-template-columns: 1fr;
+            gap: 18px;
+        }
+        
+        .gauge-box {
+            max-width: 100%;
+            min-width: 300px;
+            margin: 0;
+        }
+        
+        .gauge-main {
+            height: 180px;
+        }
+    }
+
+    @media (max-width: 700px) {
+        .gauge-box {
+            min-width: 280px;
+            padding: 24px 28px 16px 28px;
+        }
+        
+        .gauge-main {
+            height: 160px;
+        }
+        
+        .gauge-main canvas {
+            width: 220px !important;
+            height: 140px !important;
+        }
+        
+        .gauge-value {
+            font-size: 1.3rem;
+        }
+        
+        .gauge-target {
+            font-size: 0.9rem;
+        }
+    }
+
+    /* Loading animation for gauges */
+    .gauge-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 200px;
+        font-size: 16px;
+        color: #666;
+    }
+
+    .gauge-loading::after {
+        content: "Loading...";
+        animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    /* Error state */
+    .gauge-error {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 200px;
+        font-size: 14px;
+        color: #ef4444;
+        text-align: center;
+    }
+
+    /* ===== BALANCE BY PRODUCT TABLE FILTERS STYLES ===== */
+    .table-filters-section {
+        margin-bottom: 1rem;
+    }
+    
+    .table-filters-container {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        padding: 16px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        flex-wrap: wrap;
+    }
+    
+    .table-filters-title {
+        margin: 0;
+        color: #495057;
+        font-size: 16px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+    
+    .table-filter-group {
+        display: flex;
+        flex-direction: column;
+        min-width: 120px;
+        flex: 1;
+        max-width: 200px;
+    }
+    
+    .table-filter-label {
+        font-size: 12px;
+        color: #6c757d;
+        margin-bottom: 4px;
+        font-weight: 500;
+    }
+    
+    .table-filter-select {
+        padding: 6px 8px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 14px;
+        background: white;
+        color: #495057;
+        min-width: 0;
+    }
+    
+    .table-filters-actions {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+    
+    .clear-filters-btn {
+        padding: 6px 12px;
+        background: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: background-color 0.2s;
+    }
+    
+    .clear-filters-btn:hover {
+        background: #5a6268;
+    }
+    
+    @media (max-width: 768px) {
+        .table-filters-container {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        
+        .table-filters-title {
+            align-self: center;
+        }
+        
+        .table-filter-group {
+            max-width: none;
+            width: 100%;
+        }
+        
+        .table-filters-actions {
+            margin-left: 0;
+            align-self: center;
+        }
+    }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1 style="margin-bottom: 2rem;">Retail Deposit Performance</h1>
+            <div class="filters">
+                <label style="text-align: left;">
+                    Date
+                    <input type="text" id="date-picker" placeholder="YYYY-MM-DD">
+                </label>
+                <label style="text-align: left;">
+                    Region 
+                    <select id="region-select"><option value="">All Regions</option></select>
+                </label>
+                <label style="text-align: left;">
+                    Branch 
+                    <input type="text" id="branch-input" placeholder="Enter branch code">
+                </label>
+                <span style="text-align: right; margin-left: auto;">Unit: USD 1,000 | Fx Rate = 26,315.789</span>
+                <button id="get-data-button"><i class="fas fa-sync-alt"></i> Get Data</button>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-page="overview">
+                <i class="fas fa-chart-line"></i> Overview & Performance
+            </button>
+            <button class="nav-tab" data-page="insights">
+                <i class="fas fa-users"></i> Customer & Product Insights
+            </button>
+        </div>
+
+        <!-- Page 1: Overview & Performance -->
+        <div id="overview-page" class="page-content active">
+            <!-- Ticker Row -->
+            <section class="ticker-row">
+                <div class="ticker-box">
+                    <h4><span class="usd-bill-icon"></span>Ending Balance</h4>
+                    <div class="ticker-main" id="current-balance">-</div>
+                    <ul>
+                        <li><span>vs Last Day</span><span id="vs-last-day">-</span></li>
+                        <li><span>vs Last Month</span><span id="vs-last-month">-</span></li>
+                        <li><span>vs Last Year</span><span id="vs-last-year">-</span></li>
+                    </ul>
+                </div>
+                <div class="ticker-box">
+                    <h4><span class="monthly-chart-icon"></span>Monthly Avg Balance</h4>
+                    <div class="ticker-main" id="monthly-avg-balance">-</div>
+                    <ul>
+                        <li><span>vs Last Day</span><span id="monthly-vs-last-day">-</span></li>
+                        <li><span>vs Last Month</span><span id="monthly-vs-last-month">-</span></li>
+                        <li><span>vs Last Year</span><span id="monthly-vs-last-year">-</span></li>
+                    </ul>
+                </div>
+                <div class="ticker-box">
+                    <h4><span class="people-icon"></span>Retail Customers</h4>
+                    <div class="ticker-main" id="retail-customers">-</div>
+                    <ul>
+                        <li><span>vs Last Day</span><span id="retail-vs-last-day" class="ticker-value">-</span></li>
+                        <li><span>vs Last Month</span><span id="retail-vs-last-month" class="ticker-value">-</span></li>
+                        <li><span>vs Last Year</span><span id="retail-vs-last-year" class="ticker-value">-</span></li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Simplified HTML - Gauge Section Only -->
+            <section class="gauge-row">
+                <div class="gauge-box">
+                    <h4>All Products Target (%)</h4>
+                    <div style="font-size: 12px; color: #6c757d; text-align: center; margin-top: -10px; margin-bottom: 10px;">update later</div>
+                    <div class="gauge-main">
+                        <canvas id="gauge-all" width="280" height="200"></canvas>
+                    </div>
+                    <div class="gauge-stats">
+                        <div class="gauge-value" id="gauge-all-value">0</div>
+                        <div class="gauge-target">Target: <span id="gauge-all-target">0</span></div>
+                    </div>
+                </div>
+                <div class="gauge-box">
+                    <h4>CASA Target (%)</h4>
+                    <div style="font-size: 12px; color: #6c757d; text-align: center; margin-top: -10px; margin-bottom: 10px;">update later</div>
+                    <div class="gauge-main">
+                        <canvas id="gauge-casa" width="280" height="200"></canvas>
+                    </div>
+                    <div class="gauge-stats">
+                        <div class="gauge-value" id="gauge-casa-value">0</div>
+                        <div class="gauge-target">Target: <span id="gauge-casa-target">0</span></div>
+                    </div>
+                </div>
+                <div class="gauge-box">
+                    <h4>TDA/ISA Target (%)</h4>
+                    <div style="font-size: 12px; color: #6c757d; text-align: center; margin-top: -10px; margin-bottom: 10px;">update later</div>
+                    <div class="gauge-main">
+                        <canvas id="gauge-tda" width="280" height="200"></canvas>
+                    </div>
+                    <div class="gauge-stats">
+                        <div class="gauge-value" id="gauge-tda-value">0</div>
+                        <div class="gauge-target">Target: <span id="gauge-tda-target">0</span></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Ending Balance Chart (Last 30 Days) -->
+            <section class="chart-section" style="height: 500px;">
+                <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 1rem; position: relative;">
+                    <h3 style="margin: 0; flex: 1; text-align: center;"><strong>Ending Balance - Last 30 Days</strong></h3>
+                    <div style="position: absolute; right: 0; display: flex; align-items: center; gap: 12px;">
+                        <label style="font-weight: bold; font-size: 14px;">Product:</label>
+                        <select id="product-filter" style="padding: 8px; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 14px;">
+                            <option value="ALL">ALL</option>
+                            <option value="1-CASA">1-CASA</option>
+                            <option value="2-TIME">2-TDA</option>
+                            <option value="3-ISA">3-ISA</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="height: calc(100% - 3rem); background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <canvas id="daily-balance-chart" style="width: 100%; height: 100%; margin-top: 24px;"></canvas>
+                </div>
+            </section>
+
+            <!-- Monthly Balance Chart -->
+            <section class="chart-section" style="height: 720px; margin-bottom: 2rem;">
+                <h3><strong>Monthly Average Balance (MoM)</strong></h3>
+                <div style="width: 100%; height: calc(100% - 3rem); background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <div style="height: 75%; margin-bottom: 20px;">
+                        <canvas id="stacked-bar-chart" width="1800" style="max-width: 100%; height: 100%; display: block; margin: 0 auto;"></canvas>
+                    </div>
+                    <div id="stacked-bar-custom-legend" style="margin-top: 0;"></div>
+                </div>
+            </section>
+            <!-- Moved: Regional Deposit Distribution and Deposit by Term and IR (in Jun) -->
+            <section class="triple-table-row">
+                <div class="table-container">
+                    <div class="table-header" style="display: flex; justify-content: center; align-items: center; position: relative;">
+                        <h3 style="margin: 0; flex: 1; text-align: center; padding-right: 140px;">Regional Deposit Distribution</h3>
+                        <div style="position: absolute; right: 0; display: flex; align-items: center; gap: 12px;">
+                            <label style="font-weight: bold; font-size: 14px;">Product:</label>
+                            <select id="region-pie-product-filter" style="padding: 8px; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 14px;">
+                                <option value="ALL">ALL</option>
+                                <option value="1-CASA">1-CASA</option>
+                                <option value="2-TIME">2-TDA</option>
+                                <option value="3-ISA">3-ISA</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-section">
+                        <canvas id="region-pie-chart"></canvas>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3>Deposit by Term and IR (in Month)</h3>
+                    </div>
+                    <div class="chart-section">
+                        <canvas id="term-mix-chart"></canvas>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Page 2: Customer & Product Insights -->
+        <div id="insights-page" class="page-content">
+            <!-- CASA Customer Chart -->
+            <section class="triple-table-row">
+                <div class="table-container">
+                <div class="table-header">
+                        <h3>CASA Customer Distribution</h3>
+                    </div>
+                    <div class="chart-section">
+                        <div id="casa-customer-chart"></div>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3>Edu-Save New open Account_ Accumulate by Month</h3>
+                </div>
+                <div class="chart-section">
+                    <canvas id="edusave-newopen-chart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Product Summary Table with integrated filters -->
+            <section class="full-width-table" style="margin-top: 1cm;">
+                <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 1.5rem; position: relative;">
+                    <h3 style="margin: 0; flex: 1; text-align: center;">Balance by Product</h3>
+                    <div style="position: absolute; right: 0; display: flex; align-items: center; gap: 12px;">
+                        <label style="font-weight: bold; font-size: 14px;">Currency:</label>
+                        <select id="product-currency-filter"></select>
+                        <label style="font-weight: bold; font-size: 14px;">Nationality:</label>
+                        <select id="product-nationality-filter"></select>
+                        <button id="clear-product-filters" style="padding: 6px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; font-size: 14px; cursor: pointer;">
+                            <i class="fas fa-times" style="margin-right: 4px;"></i>
+                            Clear
+                        </button>
+                        <button id="get-product-data-button" style="padding: 6px 12px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 14px; cursor: pointer;">
+                            <i class="fas fa-sync-alt" style="margin-right: 4px;"></i>
+                            Get Data
+                        </button>
+                    </div>
+                </div>
+                <table id="account-group-table" class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Balance by Product</th>
+                            <th class="numeric">Ending Balance</th>
+                            <th class="numeric">Portion</th>
+                            <th class="numeric">+/- Last Day</th>
+                            <th class="numeric">+/- Last Month</th>
+                            <th class="numeric">+/- Last Year</th>
+                        </tr>
+                    </thead>
+                    <tbody id="account-group-table-body"></tbody>
+                </table>
+            </section>
+        </div>
+    </div>
+
+    <!-- Scripts with version parameters -->
+    <script src="flatpickr.js"></script>
+    <script src="chart.js"></script>
+    <script src="chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="dashboardv2.js?v=1.2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>  
+    <script src="casa.js"></script>
+    <script>
+    // MINIMAL SCRIPT - Only essential code, let dashboardv2.js handle gauges
+    var charts = {};
+
+    // DISABLED: Force reload for cache busting - User requested no auto-refresh
+    // if (location.hostname === '<internal-host>') {
+    //     console.log('🔥 Production mode: Cache busting enabled');
+    //     // Force reload every 5 minutes to ensure fresh content
+    //     setInterval(() => {
+    //         location.reload(true);
+    //     }, 300000);
+    // }
+
+    // DISABLED: Dev mode auto-reload - User requested no auto-refresh
+    // if (location.hostname === 'localhost' || location.hostname === '<internal-host>') {
+    //     console.log('🔥 Dev mode: Auto-reload enabled');
+    //     document.addEventListener('keydown', function(e) {
+    //         if (e.ctrlKey && e.altKey && e.key === 'r') {
+    //             e.preventDefault();
+    //             location.reload(true);
+    //         }
+    //     });
+    // }
+    
+    // Manual refresh shortcut still available: Ctrl+Alt+R
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.altKey && e.key === 'r') {
+                e.preventDefault();
+            console.log('🔄 Manual refresh triggered by Ctrl+Alt+R');
+                location.reload(true);
+            }
+        });
+    </script>
+</body>
+</html>
