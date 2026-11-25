@@ -353,14 +353,32 @@ DEPOSIT_SUMMARY = SilverTable(
     ],
 )
 
+INSURANCE_POLICIES = SilverTable(
+    name="insurance_policies",
+    key=["policy_id"],
+    cast={
+        "policy_id": _str("policy_id"), "customer_id": _str("customer_id"),
+        "product_code": _str("product_code"), "start_date": _date("start_date", "yyyy-MM-dd"),
+        "annual_premium": _num("annual_premium"), "status": _str("status"),
+        "sold_channel": _str("sold_channel"),
+    },
+    fk=("customer_id", "customers"),
+    rules=[
+        Rule("policy_id_not_null", "policy_id IS NOT NULL"),
+        Rule("policy_key_unique", "_dup_key_count = 1"),
+        Rule("policy_customer_exists", "_fk_ok"),
+        Rule("policy_status_known", "status IN ('INFORCE', 'LAPSED')", "WARN"),
+    ],
+)
+
 TABLES = {t.name: t for t in [BRANCHES, PRODUCTS, CUSTOMERS, ACCOUNTS, LOANS, TRANSACTIONS,
                                FX_RATES, TARGETS, CARDS, CARD_TRANSACTIONS, CARD_STATEMENTS,
-                               CARD_KPI, DEPOSIT_SUMMARY]}
+                               CARD_KPI, DEPOSIT_SUMMARY, INSURANCE_POLICIES]}
 # Thứ tự chạy: bảng tham chiếu trước (FK: accounts -> customers, transactions -> accounts,
 # card_transactions / card_statements -> cards)
 ORDER = ["branches", "products", "customers", "accounts", "loans", "transactions",
          "fx_rates", "targets", "cards", "card_transactions", "card_statements",
-         "card_kpi", "deposit_summary"]
+         "card_kpi", "deposit_summary", "insurance_policies"]
 
 
 # ---------------------------------------------------------------- các bước
