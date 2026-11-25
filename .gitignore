@@ -221,3 +221,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---- Databricks / project ----
+.databrickscfg
+.databricks/
+*.env
+data/raw/
+data/local/
+spark-warehouse/
+metastore_db/
+derby.log
