@@ -53,6 +53,11 @@ targets:
     resources:
       jobs:
         banking_lakehouse_daily:
+          # Chỉ prod chạy theo lịch: 06:30 hằng ngày giờ Việt Nam (sau khi file nguồn về)
+          schedule:
+            quartz_cron_expression: "0 30 6 * * ?"
+            timezone_id: Asia/Ho_Chi_Minh
+            pause_status: UNPAUSED
           email_notifications:
             on_failure:
               - ${var.notification_email}

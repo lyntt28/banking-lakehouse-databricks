@@ -53,6 +53,11 @@ Deployment   : Declarative Automation Bundles (DAB) + GitHub Actions
 - **Idempotent ingestion** — Auto Loader checkpoints: re-running reads only new files.
 - **CI/CD** — ruff + pytest on every PR; bundle validation; dev → test → prod deploy.
 
+## CI/CD
+- **CI** (`.github/workflows/ci.yml`, every PR): ruff, pytest on local Spark, `bundle validate`.
+- **CD** (`.github/workflows/cd.yml`, push to `main`): tests → deploy bundle to `test` and run the daily job there (DQ gate and reconciliation failures stop the pipeline) → wait for approval → deploy to `prod`. Only `prod` has a schedule (06:30 Asia/Ho_Chi_Minh).
+- One-time setup in GitHub → Settings → Environments: create `test` and `prod`, add secret `DATABRICKS_HOST` and either `DATABRICKS_CLIENT_ID` (OIDC, preferred: federation policy for `repo:<owner>/<repo>:environment:<env>`) or `DATABRICKS_TOKEN`; add *Required reviewers* to `prod`. Without secrets the deploy jobs only print a warning.
+
 ## Repository layout
 ```
 databricks.yml          Bundle: variables + targets dev / test / prod
@@ -96,7 +101,7 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [x] Gold card marts (daily, spend mix, monthly MoM/YoY + % target) and reconciliation with source summary files (card KPI, bang1247)
 - [ ] Deposit tenor / CASA customer / K-Study marts, 13-month history backfill, Databricks SQL dashboards
 - [ ] Gold ML feature table + insurance cross-sell model (MLflow)
-- [ ] CD: dev → test → manual approval → prod, OIDC auth
+- [x] CD: main → test (deploy + run job as smoke test) → manual approval → prod, OIDC or token auth (needs GitHub environments + secrets)
 - [x] Unity Catalog governance as code: RBAC grants, PII column masks + tags, branch row filter (dry-run on Free Edition)
 - [ ] Performance tuning (liquid clustering, OPTIMIZE) with before/after numbers
 - [ ] Azure Databricks deployment (ADLS Gen2, Terraform, service principal)
