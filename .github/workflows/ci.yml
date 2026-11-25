@@ -34,11 +34,22 @@ jobs:
     needs: lint-and-test
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+    permissions:
+      contents: read
+      id-token: write   # OIDC (giống CD)
     steps:
       - uses: actions/checkout@v4
 
-      - uses: databricks/setup-cli@main
+      - uses: databricks/setup-cli@v1.28.0
+
+      - name: Auth mode
+        if: env.DATABRICKS_HOST != ''
+        run: |
+          if [ -n "$DATABRICKS_CLIENT_ID" ]; then
+            echo "DATABRICKS_AUTH_TYPE=github-oidc" >> "$GITHUB_ENV"
+          fi
 
       - name: Validate bundle (dev)
         if: env.DATABRICKS_HOST != ''
@@ -49,5 +60,5 @@ jobs:
       - name: Bundle NOT validated (secrets missing)
         if: env.DATABRICKS_HOST == ''
         run: |
-          echo "::warning title=Bundle not validated::Add DATABRICKS_HOST and DATABRICKS_TOKEN repo secrets to validate the bundle."
+          echo "::warning title=Bundle not validated::Add DATABRICKS_HOST and DATABRICKS_CLIENT_ID (OIDC) or DATABRICKS_TOKEN repo secrets to validate the bundle."
           echo "## ⚠️ Bundle validation skipped: Databricks secrets not configured" >> "$GITHUB_STEP_SUMMARY"

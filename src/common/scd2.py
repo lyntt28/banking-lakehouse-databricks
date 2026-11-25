@@ -16,6 +16,8 @@ Cách làm (1 lệnh MERGE, chạy lại an toàn):
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
+from common.dates import check_date
+
 
 def add_row_hash(df: DataFrame, tracked_cols: list[str]) -> DataFrame:
     parts = [F.coalesce(F.col(c).cast("string"), F.lit("<NULL>")) for c in tracked_cols]
@@ -47,6 +49,8 @@ def apply_scd2(staging: DataFrame, target_table: str, key: str, effective_date: 
     """MERGE staging vào bảng Delta đích. Chỉ chạy trên Databricks (cần Delta Lake)."""
     from delta.tables import DeltaTable
 
+    effective_date = check_date(effective_date)
+
     spark = staging.sparkSession
     target = DeltaTable.forName(spark, target_table)
     data_cols = [c for c in staging.columns if c != "merge_key"]
@@ -60,7 +64,11 @@ def apply_scd2(staging: DataFrame, target_table: str, key: str, effective_date: 
         .merge(staging.alias("s"), f"t.{key} = s.merge_key AND t.is_current = TRUE")
         .whenMatchedUpdate(
             condition="t.row_hash <> s.row_hash",
-            set={"valid_to": f"DATE'{effective_date}' - INTERVAL 1 DAY", "is_current": "FALSE"},
+            # greatest(): bản ghi đổi 2 lần trong cùng ngày không bị valid_to < valid_from
+            set={
+                "valid_to": f"greatest(DATE'{effective_date}' - INTERVAL 1 DAY, t.valid_from)",
+                "is_current": "FALSE",
+            },
         )
         .whenNotMatchedInsert(values=insert_values)
         .execute()

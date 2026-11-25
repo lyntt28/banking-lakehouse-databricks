@@ -43,6 +43,7 @@ import mlflow  # noqa: E402
 from pyspark.sql import Window  # noqa: E402
 from pyspark.sql import functions as F  # noqa: E402
 
+from common.dates import check_date  # noqa: E402
 from common.delta_io import overwrite_date  # noqa: E402
 from common.governance import assert_pipeline_identity  # noqa: E402
 from common.ml_features import (  # noqa: E402
@@ -57,6 +58,7 @@ S, G = f"{catalog}.silver", f"{catalog}.gold"
 if not as_of_date:
     as_of_date = str(spark.table(f"{S}.loans").agg(F.max("as_of_date")).first()[0])
 assert_pipeline_identity(spark, catalog)
+as_of_date = check_date(as_of_date)
 day = F.lit(as_of_date).cast("date")
 print(f"as_of_date={as_of_date} label_mode={label_mode}")
 

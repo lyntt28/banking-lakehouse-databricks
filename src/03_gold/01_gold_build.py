@@ -34,8 +34,9 @@ from pyspark.sql import functions as F  # noqa: E402
 from common import gold as g  # noqa: E402
 from common import gold_cards as gc  # noqa: E402
 from common import gold_deposit as gd  # noqa: E402
-from common.governance import assert_pipeline_identity  # noqa: E402
+from common.dates import check_date  # noqa: E402
 from common.delta_io import merge_upsert, overwrite, overwrite_date  # noqa: E402
+from common.governance import assert_pipeline_identity  # noqa: E402
 
 if not as_of_date:
     try:  # chạy trong Job: lấy ngày từ task silver
@@ -45,6 +46,7 @@ if not as_of_date:
         as_of_date = ""
 if not as_of_date:
     as_of_date = str(spark.table(f"{catalog}.silver.loans").agg(F.max("as_of_date")).first()[0])
+as_of_date = check_date(as_of_date)
 print(f"catalog={catalog} as_of_date={as_of_date}")
 assert_pipeline_identity(spark, catalog)  # governance bật -> phải thấy PII
 
