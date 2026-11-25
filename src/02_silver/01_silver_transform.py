@@ -74,7 +74,7 @@ for name in ORDER:
         continue
 
     res = prepare_silver(bronze, spec, ref_keys(spec.fk[1]) if spec.fk else None)
-    res.checked.cache()
+    # Không .cache(): serverless (Free Edition) báo NOT_SUPPORTED_WITH_SERVERLESS
     known[name] = res.known_keys(spec.key[0])
 
     # 1) Kết quả DQ
@@ -106,7 +106,6 @@ for name in ORDER:
     n_valid, n_quar = res.valid.count(), res.quarantine.count()
     report.append((name, n_bronze, n_valid, n_quar, res.exact_dupes,
                    n_bronze == n_valid + n_quar + res.exact_dupes))
-    res.checked.unpersist()
 
 # COMMAND ----------
 
