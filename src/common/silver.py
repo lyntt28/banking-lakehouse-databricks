@@ -64,6 +64,7 @@ class SilverTable:
     raw_cols: list[str] = field(default_factory=list)   # giữ _raw_<c> để viết rule
     fk: tuple[str, str] | None = None       # (cột, bảng tham chiếu) -> cột _fk_ok
     write_mode: str = "merge"               # merge | scd2 | append
+    optional: list[str] = field(default_factory=list)   # cột nguồn mới, file cũ có thể thiếu
 
 
 D_MDY = "MM/dd/yyyy"
@@ -123,8 +124,10 @@ CUSTOMERS = SilverTable(
         "monthly_income": _num("monthly_income"),
         "open_date": _date("open_date", D_MDY),
         "updated_at": _ts("updated_at", "yyyy-MM-dd HH:mm:ss"),
+        "nationality": _str("nationality"),
     },
     raw_cols=["dob"],
+    optional=["nationality"],
     rules=[
         Rule("customer_id_not_null", "customer_id IS NOT NULL"),
         Rule("customer_key_unique", "_dup_key_count = 1"),
@@ -219,9 +222,143 @@ TRANSACTIONS = SilverTable(
     write_mode="append",
 )
 
-TABLES = {t.name: t for t in [BRANCHES, PRODUCTS, CUSTOMERS, ACCOUNTS, LOANS, TRANSACTIONS]}
-# Thứ tự chạy: bảng tham chiếu trước (FK của accounts cần customers, transactions cần accounts)
-ORDER = ["branches", "products", "customers", "accounts", "loans", "transactions"]
+# ---- tham chiếu: tỷ giá, chỉ tiêu kế hoạch
+FX_RATES = SilverTable(
+    name="fx_rates",
+    key=["rate_date", "currencycd"],
+    cast={"rate_date": _date("rate_date", "yyyy-MM-dd"), "currencycd": _str("currencycd"),
+          "rate_to_vnd": _num("rate_to_vnd", "decimal(18,4)")},
+    rules=[
+        Rule("fx_key_not_null", "rate_date IS NOT NULL AND currencycd IS NOT NULL"),
+        Rule("fx_key_unique", "_dup_key_count = 1"),
+        Rule("fx_rate_positive", "rate_to_vnd > 0"),
+    ],
+)
+
+TARGETS = SilverTable(
+    name="targets",
+    key=["metric_code", "period_type", "period", "branchnbr"],
+    cast={"metric_code": _str("metric_code"), "period_type": _str("period_type"),
+          "period": _str("period"), "branchnbr": _str("branchnbr"),
+          "target_value": _num("target_value", "decimal(22,2)")},
+    rules=[
+        Rule("target_key_not_null", "metric_code IS NOT NULL AND period IS NOT NULL "
+                                    "AND branchnbr IS NOT NULL"),
+        Rule("target_key_unique", "_dup_key_count = 1"),
+        Rule("period_type_known", "period_type IN ('MONTH', 'YEAR')"),
+        Rule("target_not_negative", "target_value >= 0", "WARN"),
+    ],
+)
+
+# ---- thẻ tín dụng
+CARDS = SilverTable(
+    name="cards",
+    key=["card_no"],
+    cast={
+        "card_no": _str("card_no"), "customer_id": _str("customer_id"),
+        "cust_type": _str("cust_type"), "branchnbr": _str("branchnbr"),
+        "card_product": _str("card_product"), "card_grade": _str("card_grade"),
+        "credit_limit": _num("credit_limit"), "open_date": _date("open_date", "yyyy-MM-dd"),
+        "status": _str("status"), "close_date": _date("close_date", "yyyy-MM-dd"),
+        "snapshot_date": _date("snapshot_date", "yyyy-MM-dd"),
+        "acquisition_channel": _str("acquisition_channel"),
+    },
+    optional=["acquisition_channel"],
+    rules=[
+        Rule("card_no_not_null", "card_no IS NOT NULL"),
+        Rule("card_key_unique", "_dup_key_count = 1"),
+        Rule("card_status_known", "status IN ('ACTIVE', 'CLOSED')", "WARN"),
+        Rule("credit_limit_positive", "credit_limit > 0", "WARN"),
+    ],
+)
+
+CARD_TRANSACTIONS = SilverTable(
+    name="card_transactions",
+    key=["txn_id"],
+    cast={
+        "txn_id": _str("txn_id"), "card_no": _str("card_no"),
+        "txn_ts": _ts("txn_ts", "yyyy-MM-dd HH:mm:ss"), "amount": _num("amount"),
+        "currencycd": _str("currencycd"), "txn_type": _str("txn_type"), "mcc": _str("mcc"),
+        "merchant_name": _str("merchant_name"), "channel": _str("channel"),
+        "location": _str("location"),
+    },
+    fk=("card_no", "cards"),
+    rules=[
+        Rule("card_txn_id_not_null", "txn_id IS NOT NULL"),
+        Rule("card_txn_key_unique", "_dup_key_count = 1"),
+        Rule("card_txn_amount_positive", "amount > 0"),
+        Rule("card_exists", "_fk_ok"),
+        Rule("card_txn_type_known",
+             "txn_type IN ('PURCHASE', 'CASH_ADVANCE', 'INSTALLMENT', 'FLEXI')", "WARN"),
+    ],
+    write_mode="append",
+)
+
+CARD_STATEMENTS = SilverTable(
+    name="card_statements",
+    key=["stnd_dt", "card_no"],
+    cast={
+        "stnd_dt": _date("stnd_dt", "yyyy-MM-dd"), "card_no": _str("card_no"),
+        "outstanding_balance": _num("outstanding_balance"),
+        "revolving_balance": _num("revolving_balance"),
+        "min_payment_due": _num("min_payment_due"), "dpd": _num("dpd", "int"),
+        "credit_limit": _num("credit_limit"),
+    },
+    fk=("card_no", "cards"),
+    rules=[
+        Rule("statement_key_not_null", "stnd_dt IS NOT NULL AND card_no IS NOT NULL"),
+        Rule("statement_key_unique", "_dup_key_count = 1"),
+        Rule("statement_card_exists", "_fk_ok"),
+        Rule("statement_balance_not_negative", "outstanding_balance >= 0"),
+        Rule("statement_limit_positive", "credit_limit > 0", "WARN"),
+    ],
+)
+
+# ---- file tổng hợp của hệ thống nguồn (để đối soát với Gold)
+CARD_KPI = SilverTable(
+    name="card_kpi",
+    key=["trx_date", "metric_code"],
+    cast={
+        "trx_date": _date("Trx_Date", "yyyy-MM-dd"), "metric_code": _str("Metric_Code"),
+        # "219,627" -> 219627 ; "56.78%" -> 56.78 (đơn vị %)
+        "metric_value": lambda: F.expr(
+            "try_cast(regexp_replace(trim(Metric_Value), '[,%]', '') AS decimal(24,4))"),
+        "is_rate": lambda: F.trim(F.col("Metric_Value")).endswith("%"),
+    },
+    rules=[
+        Rule("kpi_key_not_null", "trx_date IS NOT NULL AND metric_code IS NOT NULL"),
+        Rule("kpi_key_unique", "_dup_key_count = 1"),
+        Rule("kpi_value_numeric", "metric_value IS NOT NULL"),
+    ],
+)
+
+DEPOSIT_SUMMARY = SilverTable(
+    name="deposit_summary",
+    key=["stnd_dt", "account_group", "currencycd", "branchnbr"],
+    cast={
+        "stnd_dt": _date("STND_DT", "yyyyMMdd"), "account_group": _str("ACCOUNT_GROUP"),
+        "group_class": _str("GROUP_CLASS"), "currencycd": _str("CURRENCY"),
+        "branchnbr": _str("MANAGE_BRANCH"), "region": _str("REGION"),
+        "balance_mil_vnd": _num("BAL", "decimal(22,2)"),
+        "share_pct": _num("PORT", "decimal(9,2)"),
+        "diff_d1_mil_vnd": _num("DIFF_T_T1", "decimal(22,4)"),
+        "month_avg_bal_mil_vnd": _num("MON_AVG_BAL_T", "decimal(22,2)"),
+    },
+    rules=[
+        Rule("dep_sum_key_not_null", "stnd_dt IS NOT NULL AND account_group IS NOT NULL"),
+        Rule("dep_sum_key_unique", "_dup_key_count = 1"),
+        Rule("dep_sum_balance_numeric", "balance_mil_vnd IS NOT NULL"),
+    ],
+)
+
+TABLES = {t.name: t for t in [BRANCHES, PRODUCTS, CUSTOMERS, ACCOUNTS, LOANS, TRANSACTIONS,
+                               FX_RATES, TARGETS, CARDS, CARD_TRANSACTIONS, CARD_STATEMENTS,
+                               CARD_KPI, DEPOSIT_SUMMARY]}
+# Thứ tự chạy: bảng tham chiếu trước (FK: accounts -> customers, transactions -> accounts,
+# card_transactions / card_statements -> cards)
+ORDER = ["branches", "products", "customers", "accounts", "loans", "transactions",
+         "fx_rates", "targets", "cards", "card_transactions", "card_statements",
+         "card_kpi", "deposit_summary"]
 
 
 # ---------------------------------------------------------------- các bước
@@ -234,6 +371,9 @@ def drop_exact_duplicates(df: DataFrame) -> tuple[DataFrame, int]:
 
 def cast_columns(df: DataFrame, spec: SilverTable) -> DataFrame:
     """Chọn cột đích đã ép kiểu + _raw_* + cột kỹ thuật (_source_file, _as_of_date, _load_ts)."""
+    for c in spec.optional:
+        if c not in df.columns:
+            df = df.withColumn(c, F.lit(None).cast("string"))
     sel = [make().alias(name) for name, make in spec.cast.items()]
     sel += [_blank_to_null(c).alias(f"_raw_{c}") for c in spec.raw_cols]
     sel += [F.col(c) for c in ["_source_file", "_as_of_date", "_load_ts"] if c in df.columns]
@@ -276,6 +416,14 @@ class SilverResult:
     valid: DataFrame        # sẵn sàng MERGE (đã bỏ cột phụ, có debt_group/is_npl cho loans)
     quarantine: DataFrame   # mọi cột + _failed_rules
     checked: DataFrame      # bản trước DQ, để dq_summary
+
+    def known_keys(self, col: str) -> DataFrame:
+        """Mọi khóa có trong lô nguồn (kể cả bản ghi bị quarantine vì lỗi thuộc tính khác).
+
+        Dùng làm tham chiếu FK: tài khoản của KH có ngày sinh sai định dạng vẫn là tài khoản
+        của một KH CÓ THẬT -> không quarantine theo; chỉ quarantine khi KH không tồn tại.
+        """
+        return self.checked.select(col).filter(F.col(col).isNotNull()).distinct()
     exact_dupes: int
 
 
