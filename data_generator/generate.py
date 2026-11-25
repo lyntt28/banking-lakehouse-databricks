@@ -98,8 +98,12 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
             add("products", write_csv(path("products", "products.csv"),
                                       core.HEADERS["products"], core.product_rows()))
             nb = len(BRANCHES)
-            dep_vnd = sum(a["balance"] * (USD_RATE if a["currencycd"] == "USD" else 1)
-                          for a in accounts if a["product_type"] != "LOAN")
+            def dep_sum(types=None):
+                return sum(a["balance"] * (USD_RATE if a["currencycd"] == "USD" else 1)
+                           for a in accounts if a["product_type"] != "LOAN"
+                           and (types is None or a["product_type"] in types))
+
+            dep_vnd = dep_sum()
             add("targets", write_csv(path("targets", "targets.csv"), ref.TARGET_HEADER,
                                      [r for y in sorted({x.year for x in dates})
                                       for r in ref.target_rows(seed, y, {
@@ -107,6 +111,9 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
                                           "CARD_SALES_VOLUME": sizes.card_txns_per_day
                                           * 2.5e6 * 30 / nb,
                                           "DEPOSIT_BALANCE": dep_vnd / nb,
+                                          "DEPOSIT_CASA": dep_sum({"CASA", "PAYROLL", "SAVING",
+                                                                   "KSTUDY"}) / nb,
+                                          "DEPOSIT_TD_ISA": dep_sum({"TD", "ISA"}) / nb,
                                       })]))
         else:
             core.evolve_customers(rnd, customers)
