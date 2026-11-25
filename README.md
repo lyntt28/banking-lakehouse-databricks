@@ -97,7 +97,7 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [ ] Deposit tenor / CASA customer / Edu-Save marts, 13-month history backfill, Databricks SQL dashboards
 - [ ] Gold ML feature table + insurance cross-sell model (MLflow)
 - [ ] CD: dev → test → manual approval → prod, OIDC auth
-- [ ] Unity Catalog governance: RBAC, column masks, PII tags
+- [x] Unity Catalog governance as code: RBAC grants, PII column masks + tags, branch row filter (dry-run on Free Edition)
 - [ ] Performance tuning (liquid clustering, OPTIMIZE) with before/after numbers
 - [ ] Azure Databricks deployment (ADLS Gen2, Terraform, service principal)
 - [ ] Streaming AML alerts
