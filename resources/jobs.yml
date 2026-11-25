@@ -1,5 +1,4 @@
 # Định nghĩa Job. Free Edition chỉ có serverless nên không khai báo cluster.
-# Các task bronze/silver/gold sẽ được thêm khi có code (ngày 1-2).
 resources:
   jobs:
     banking_lakehouse_daily:
@@ -28,5 +27,19 @@ resources:
           max_retries: 1
           min_retry_interval_millis: 60000
 
-        # - task_key: silver
-        #   depends_on: [{task_key: bronze}]
+        # Silver: ép kiểu + DQ gate (dừng nếu rule FAIL > 5%) + MERGE / SCD2
+        - task_key: silver
+          depends_on:
+            - task_key: bronze
+          notebook_task:
+            notebook_path: ../src/02_silver/01_silver_transform.py
+          max_retries: 0          # lỗi DQ không tự hết khi chạy lại -> không retry
+
+        # Gold: star schema + mart cho dashboard
+        - task_key: gold
+          depends_on:
+            - task_key: silver
+          notebook_task:
+            notebook_path: ../src/03_gold/01_gold_build.py
+          max_retries: 1
+          min_retry_interval_millis: 60000
