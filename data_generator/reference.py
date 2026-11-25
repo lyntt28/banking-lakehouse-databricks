@@ -24,6 +24,8 @@ TARGET_METRICS = {
     "CARD_NEW_ACQ": "cards",          # số thẻ mở mới trong kỳ
     "CARD_SALES_VOLUME": "VND",       # doanh số chi tiêu thẻ trong kỳ
     "DEPOSIT_BALANCE": "VND",         # số dư tiền gửi cuối kỳ
+    "DEPOSIT_CASA": "VND",            # số dư CASA cuối kỳ (đồng hồ CASA)
+    "DEPOSIT_TD_ISA": "VND",          # số dư có kỳ hạn + ISA cuối kỳ (đồng hồ TDA/ISA)
 }
 
 
@@ -38,7 +40,7 @@ def target_rows(seed: int, year: int, per_branch_month: dict[str, float]) -> lis
                 v = round(base * rnd.uniform(0.9, 1.2) * (1 + 0.01 * m), 0)
                 year_total += v
                 rows.append([code, "MONTH", f"{year}-{m:02d}", b[0], f"{v:.0f}"])
-            if code == "DEPOSIT_BALANCE":       # số dư: chỉ tiêu năm = cuối năm, không cộng dồn
+            if code.startswith("DEPOSIT_"):   # số dư: chỉ tiêu năm = cuối năm, không cộng dồn
                 year_total = v
             rows.append([code, "YEAR", str(year), b[0], f"{year_total:.0f}"])
     return rows
