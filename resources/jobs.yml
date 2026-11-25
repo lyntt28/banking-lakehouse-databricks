@@ -5,9 +5,8 @@ resources:
     banking_lakehouse_daily:
       name: banking_lakehouse_daily
       max_concurrent_runs: 1
-      email_notifications:
-        on_failure:
-          - ${var.notification_email}
+      # Email cảnh báo khi lỗi: chỉ khai báo ở target test/prod (databricks.yml),
+      # vì email rỗng ở dev làm bundle deploy báo lỗi.
 
       parameters:
         - name: catalog
