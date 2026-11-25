@@ -16,6 +16,12 @@ variables:
       Truyền khi deploy: databricks bundle deploy -t prod --var notification_email=you@example.com
     default: alerts@example.com
 
+  governance_dry_run:
+    description: >
+      true = chỉ in SQL governance (Free Edition không có account groups);
+      false = áp dụng GRANT / column mask / row filter.
+    default: "true"
+
 targets:
   dev:
     mode: development       # tên Job có tiền tố [dev <user>], Job bị pause sẵn
