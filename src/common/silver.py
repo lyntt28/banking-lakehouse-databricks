@@ -151,7 +151,9 @@ ACCOUNTS = SilverTable(
         "open_date": _date("open_date", D_MDY),
         "close_date": _date("close_date", D_MDY),
         "balance": _num("balance"), "int_rate": _num("int_rate", "decimal(9,5)"),
+        "tenor_months": _num("tenor_months", "int"),
     },
+    optional=["tenor_months"],
     fk=("customer_id", "customers"),
     rules=[
         Rule("account_id_not_null", "account_id IS NOT NULL"),
