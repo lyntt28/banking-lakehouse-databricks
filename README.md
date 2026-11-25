@@ -103,6 +103,6 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [ ] Gold ML feature table + insurance cross-sell model (MLflow)
 - [x] CD: main → test (deploy + run job as smoke test) → manual approval → prod, OIDC or token auth (needs GitHub environments + secrets)
 - [x] Unity Catalog governance as code: RBAC grants, PII column masks + tags, branch row filter (dry-run on Free Edition)
-- [ ] Performance tuning (liquid clustering, OPTIMIZE) with before/after numbers
+- [x] Performance tuning code: liquid clustering, OPTIMIZE/VACUUM weekly job, before/after benchmark notebook (numbers pending a Databricks run)
 - [ ] Azure Databricks deployment (ADLS Gen2, Terraform, service principal)
 - [ ] Streaming AML alerts
