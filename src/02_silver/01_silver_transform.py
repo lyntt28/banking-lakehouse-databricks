@@ -29,6 +29,7 @@ if src_dir not in sys.path:
 
 from pyspark.sql import functions as F  # noqa: E402
 
+from common.governance import assert_pipeline_identity  # noqa: E402
 from common.delta_io import merge_upsert, scd2_upsert  # noqa: E402
 from common.dq import dq_summary, should_stop  # noqa: E402
 from common.silver import (  # noqa: E402
@@ -42,6 +43,7 @@ from common.silver import (  # noqa: E402
 if not as_of_date:
     as_of_date = str(spark.table(f"{catalog}.bronze.loans").agg(F.max("_as_of_date")).first()[0])
 run_id = str(uuid.uuid4())
+assert_pipeline_identity(spark, catalog)  # governance bật -> phải thấy PII
 print(f"catalog={catalog} as_of_date={as_of_date} run_id={run_id}")
 
 # COMMAND ----------
