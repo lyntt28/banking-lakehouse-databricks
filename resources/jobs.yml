@@ -56,3 +56,17 @@ resources:
             base_parameters:
               dry_run: ${var.governance_dry_run}
           max_retries: 0
+
+    # Bảo trì Delta hằng tuần: liquid clustering + OPTIMIZE + VACUUM (giữ 7 ngày)
+    banking_maintenance_weekly:
+      name: banking_maintenance_weekly
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+      tasks:
+        - task_key: maintain
+          notebook_task:
+            notebook_path: ../src/00_setup/04_maintenance.py
+            base_parameters:
+              mode: maintain
