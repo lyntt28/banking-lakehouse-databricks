@@ -6,6 +6,8 @@
 # MAGIC - Mart: `mart_loan_overdue_daily`, `mart_npl_daily` (so D-1 / M-1 / Y-1),
 # MAGIC   `mart_deposit_daily`, `mart_customer_360`. Xem `docs/gold_dashboards.md`.
 # MAGIC - Thẻ: `mart_card_kpi_daily`, `mart_card_spend_mix`, `mart_card_kpi_monthly` (MoM/YoY, % chỉ tiêu).
+# MAGIC - Tiền gửi: `mart_deposit_trend` (D-1/M-1/Y-1), `mart_deposit_by_tenor`,
+# MAGIC   `mart_casa_customer`, `mart_deposit_new_accounts` (Edu-Save).
 # MAGIC - Đối soát với file tổng hợp nguồn -> `ops.recon_card_kpi`, `ops.recon_deposit`;
 # MAGIC   có MISMATCH -> job lỗi.
 # MAGIC - Chạy lại cùng ngày an toàn: fact MERGE theo khóa, mart ghi đè đúng ngày.
@@ -31,6 +33,7 @@ from pyspark.sql import functions as F  # noqa: E402
 
 from common import gold as g  # noqa: E402
 from common import gold_cards as gc  # noqa: E402
+from common import gold_deposit as gd  # noqa: E402
 from common.governance import assert_pipeline_identity  # noqa: E402
 from common.delta_io import merge_upsert, overwrite, overwrite_date  # noqa: E402
 
@@ -104,13 +107,30 @@ overwrite(gc.build_mart_card_kpi_monthly(spark.table(f"{G}.mart_card_kpi_daily")
 
 # COMMAND ----------
 
+# Tiền gửi
+acc = spark.table(f"{S}.accounts")
+fx_day = spark.table(f"{S}.fx_rates").filter(F.col("rate_date") == day)
+trend_hist = (spark.table(f"{G}.mart_deposit_trend")
+              if spark.catalog.tableExists(f"{G}.mart_deposit_trend") else None)
+overwrite_date(gd.build_mart_deposit_trend(acc, dim_product, fx_day, spark.table(f"{S}.branches"),
+                                           as_of_date, history=trend_hist),
+               f"{G}.mart_deposit_trend", "as_of_date", as_of_date)
+overwrite_date(gd.build_mart_deposit_by_tenor(acc, dim_product, fx_day, as_of_date),
+               f"{G}.mart_deposit_by_tenor", "as_of_date", as_of_date)
+overwrite_date(gd.build_mart_casa_customer(acc, dim_product, dim_customer.filter("is_current"),
+                                           as_of_date),
+               f"{G}.mart_casa_customer", "as_of_date", as_of_date)
+overwrite(gd.build_mart_deposit_new_accounts(acc), f"{G}.mart_deposit_new_accounts")
+
+# COMMAND ----------
+
 # Đối soát Gold vs file tổng hợp của hệ thống nguồn
 recon_card = gc.reconcile(gc.card_kpi_metrics(card_daily),
                           spark.table(f"{S}.card_kpi").filter(F.col("trx_date") == day))
 overwrite_date(recon_card, f"{catalog}.ops.recon_card_kpi", "as_of_date", as_of_date)
 
-groups = {"CASA": "Current Account", "PAYROLL": "Payroll / Payroll Plus Account",
-          "SAVING": "Time Saving Account", "TD": "Term Deposit"}
+groups = {r.prodcode: r.product_name for r in
+          dim_product.filter("product_family = 'DEPOSIT'").collect()}
 recon_dep = gc.deposit_reconciliation(
     spark.table(f"{G}.mart_deposit_daily").filter(F.col("as_of_date") == day),
     spark.table(f"{S}.deposit_summary").filter(F.col("stnd_dt") == day),

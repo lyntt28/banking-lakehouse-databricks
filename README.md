@@ -99,7 +99,8 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [x] Silver: typing, DQ gate, MERGE, SCD2 — code + unit tests, run on Databricks pending
 - [x] Gold BI star schema + marts (loan overdue / NPL with D-1·M-1·Y-1, deposit, customer 360), Silver↔Gold reconciliation — run on Databricks pending
 - [x] Gold card marts (daily, spend mix, monthly MoM/YoY + % target) and reconciliation with source summary files (card KPI, bang1247)
-- [ ] Deposit tenor / CASA customer / Edu-Save marts, 13-month history backfill, Databricks SQL dashboards
+- [x] Deposit marts (trend D-1/M-1/Y-1, tenor, CASA customers, Edu-Save new accounts) + 13-month history generation and backfill notebook
+- [ ] Databricks SQL dashboards on top of the marts
 - [ ] Gold ML feature table + insurance cross-sell model (MLflow)
 - [x] CD: main → test (deploy + run job as smoke test) → manual approval → prod, OIDC or token auth (needs GitHub environments + secrets)
 - [x] Unity Catalog governance as code: RBAC grants, PII column masks + tags, branch row filter (dry-run on Free Edition)
