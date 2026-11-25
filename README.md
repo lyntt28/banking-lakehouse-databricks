@@ -77,6 +77,7 @@ docs/gold_dashboards.md Gold BI spec (card, overdue, deposit dashboards)
 ## Run it
 ```bash
 # local tests
+# requires Python 3.11 (see .python-version) and Java 17
 pip install -r requirements-dev.txt
 ruff check . && pytest -q
 
