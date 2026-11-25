@@ -5,9 +5,8 @@ resources:
     banking_lakehouse_daily:
       name: banking_lakehouse_daily
       max_concurrent_runs: 1
-      email_notifications:
-        on_failure:
-          - ${var.notification_email}
+      # Email cảnh báo khi lỗi: chỉ khai báo ở target test/prod (databricks.yml),
+      # vì email rỗng ở dev làm bundle deploy báo lỗi.
 
       parameters:
         - name: catalog
@@ -20,7 +19,14 @@ resources:
           max_retries: 1
           min_retry_interval_millis: 60000
 
-        # - task_key: bronze
-        #   depends_on: [{task_key: setup}]
-        #   notebook_task:
-        #     notebook_path: ../src/01_bronze/...
+        # Bronze: Auto Loader nạp file mới từ Volume landing (chạy lại không nhân đôi)
+        - task_key: bronze
+          depends_on:
+            - task_key: setup
+          notebook_task:
+            notebook_path: ../src/01_bronze/01_bronze_ingest.py
+          max_retries: 1
+          min_retry_interval_millis: 60000
+
+        # - task_key: silver
+        #   depends_on: [{task_key: bronze}]
