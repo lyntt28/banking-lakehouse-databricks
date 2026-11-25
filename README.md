@@ -67,6 +67,7 @@ src/00_setup/           Catalog, schemas, volume, ops tables; sample data genera
 src/01_bronze/          Auto Loader ingestion
 src/02_silver/          Typing, DQ gate, quarantine, MERGE / SCD2
 src/03_gold/            Star schema (dim/fact) and dashboard marts
+src/04_ml/              Insurance cross-sell: features, training, MLflow, scoring
 src/common/             Reusable logic: bronze, silver, gold, gold_cards, dq, scd2, banking, delta_io
 tests/                  pytest unit tests (local Spark)
 docs/decisions.md       Architecture decision records
@@ -101,7 +102,7 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [x] Gold card marts (daily, spend mix, monthly MoM/YoY + % target) and reconciliation with source summary files (card KPI, bang1247)
 - [x] Deposit marts (trend D-1/M-1/Y-1, tenor, CASA customers, K-Study new accounts) + 13-month history generation and backfill notebook
 - [ ] Databricks SQL dashboards on top of the marts
-- [ ] Gold ML feature table + insurance cross-sell model (MLflow)
+- [x] Gold ML feature table + insurance cross-sell propensity model (MLflow, UC registry, scored list) — run on Databricks pending
 - [x] CD: main → test (deploy + run job as smoke test) → manual approval → prod, OIDC or token auth (needs GitHub environments + secrets)
 - [x] Unity Catalog governance as code: RBAC grants, PII column masks + tags, branch row filter (dry-run on Free Edition)
 - [x] Performance tuning code: liquid clustering, OPTIMIZE/VACUUM weekly job, before/after benchmark notebook (numbers pending a Databricks run)
