@@ -17,6 +17,7 @@ def spark():
         .appName("unit-tests")
         .config("spark.sql.shuffle.partitions", "1")
         .config("spark.ui.enabled", "false")
+        .config("spark.driver.memory", "2g")  # nhiều fixture + plan lớn khi chạy cả bộ test
         .getOrCreate()
     )
     yield session

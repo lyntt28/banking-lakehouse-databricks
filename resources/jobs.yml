@@ -70,3 +70,18 @@ resources:
             notebook_path: ../src/00_setup/04_maintenance.py
             base_parameters:
               mode: maintain
+
+    # ML bán chéo bảo hiểm: feature table + train + MLflow (UC registry) + chấm điểm
+    banking_ml_cross_sell_weekly:
+      name: banking_ml_cross_sell_weekly
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: label_mode
+          default: holder
+      tasks:
+        - task_key: train_and_score
+          notebook_task:
+            notebook_path: ../src/04_ml/01_insurance_cross_sell.py
+          # thư viện cài bằng %pip ở đầu notebook (serverless notebook task)

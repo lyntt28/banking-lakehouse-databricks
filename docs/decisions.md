@@ -51,3 +51,7 @@ Each decision: context → decision → alternatives considered → consequences
 - **Decision:** `CLUSTER BY` on the filter / join columns (`src/common/maintenance.py`), `OPTIMIZE` weekly, `VACUUM` keeping 7 days. Branch-filtered tables cluster on `branchnbr` so the row filter (ADR-008) can skip files.
 - **Measuring:** notebook `00_setup/04_maintenance.py` (`mode=benchmark`) times 4 dashboard-style queries before and after clustering (median of N runs, result cache off) and records file counts, into `ops.perf_benchmark`.
 
+## ADR-011: Insurance cross-sell as a propensity model on Silver features
+- **Context:** The generator plants a buying pattern (income, card grade, travel / health / education spend, segment). A short daily history has few new purchases, so "will buy in the next 90 days" has too few positives at first.
+- **Decision:** Default label `holder` (customer already holds an in-force policy) trains a look-alike propensity model; `future` (new policy within `horizon_days` after `as_of`, existing holders removed) is ready for when history is long enough. Features are point-in-time (customer SCD2 version valid at `as_of`, transactions ≤ `as_of`) and never read insurance tables. Model: scikit-learn HistGradientBoosting (balanced classes), tracked in MLflow, registered in Unity Catalog, scores written for non-holders with deciles.
+- **Consequences:** Metrics reported: ROC-AUC, PR-AUC, lift in the top 10%. On generated data the test asserts ROC-AUC > 0.65 and lift > 1.5.
