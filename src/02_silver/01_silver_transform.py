@@ -47,12 +47,16 @@ print(f"catalog={catalog} as_of_date={as_of_date} run_id={run_id}")
 # COMMAND ----------
 
 
+known = {}   # bảng -> khóa có trong lô hôm nay (kể cả bản ghi bị quarantine)
+
+
 def ref_keys(table: str):
-    """Khóa tham chiếu cho FK: lấy từ bảng silver đã ghi ở bước trước."""
-    if table == "customers":
-        return spark.table(f"{catalog}.silver.customers").filter("is_current") \
-            .select("customer_id")
-    return spark.table(f"{catalog}.silver.{table}").select(TABLES[table].key[0])
+    """Khóa tham chiếu cho FK = khóa đã có ở silver + khóa xuất hiện trong lô hôm nay."""
+    col = TABLES[table].key[0]
+    keys = spark.table(f"{catalog}.silver.{table}").select(col)
+    if table in known:
+        keys = keys.unionByName(known[table])
+    return keys.distinct()
 
 
 report = []
@@ -67,6 +71,7 @@ for name in ORDER:
 
     res = prepare_silver(bronze, spec, ref_keys(spec.fk[1]) if spec.fk else None)
     res.checked.cache()
+    known[name] = res.known_keys(spec.key[0])
 
     # 1) Kết quả DQ
     summary = dq_summary(res.checked, spec.rules, name)
