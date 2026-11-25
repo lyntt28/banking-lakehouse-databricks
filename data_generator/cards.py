@@ -26,7 +26,8 @@ from data_generator.common import (
 
 HEADERS = {
     "cards": ["card_no", "customer_id", "cust_type", "branchnbr", "card_product", "card_grade",
-              "credit_limit", "open_date", "status", "close_date", "snapshot_date"],
+              "credit_limit", "open_date", "status", "close_date", "snapshot_date",
+              "acquisition_channel"],
     "card_statements": ["stnd_dt", "card_no", "outstanding_balance", "revolving_balance",
                         "min_payment_due", "dpd", "credit_limit"],
     "insurance_policies": ["policy_id", "customer_id", "product_code", "start_date",
@@ -48,6 +49,8 @@ def _new_card(rnd: random.Random, seq: int, c: dict, as_of: date, opened: date) 
         "branchnbr": c["branchnbr"], "product": prod[0], "grade": prod[1],
         "limit": round(rnd.uniform(prod[2], prod[3]), -6), "open_date": opened,
         "status": "ACTIVE", "close_date": None,
+        # kênh phát hành: ~40% Smart Credit (online), còn lại tại chi nhánh
+        "channel": "SMART_CREDIT" if seq % 5 < 2 else "BRANCH",
         "activity": rnd.betavariate(2, 3),  # mức độ hay dùng thẻ
         "lifestyle": rnd.random() < 0.25,   # hay chi du lịch / y tế / giáo dục
         "revolver": rnd.random() < 0.3,     # hay trả tối thiểu -> dư nợ quay vòng
@@ -83,7 +86,8 @@ def evolve_cards(rnd: random.Random, cards: list[dict], customers: list[dict],
 def snap_cards(rnd: random.Random, cards: list[dict], as_of: date) -> list[list]:
     rows = [[c["card_no"], c["customer_id"], c["cust_type"], c["branchnbr"], c["product"],
              c["grade"], f"{c['limit']:.0f}", c["open_date"].isoformat(), c["status"],
-             c["close_date"].isoformat() if c["close_date"] else "", as_of.isoformat()]
+             c["close_date"].isoformat() if c["close_date"] else "", as_of.isoformat(),
+             c["channel"]]
             for c in cards]
     rows += rnd.sample(rows, max(1, len(rows) // 300))  # trùng card_no (Silver phải bỏ trùng)
     return rows
