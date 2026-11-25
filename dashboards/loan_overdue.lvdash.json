@@ -1,0 +1,1485 @@
+{
+  "datasets": [
+    {
+      "name": "ovd_tickers",
+      "displayName": "Tickers",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_loan_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.mart_loan_overdue_daily WHERE :branch = 'all' OR branchnbr = :branch),\n",
+        "day AS (SELECT as_of_date, sum(overdue_balance) ovd, sum(portfolio_balance) port\n",
+        "        FROM f GROUP BY as_of_date)\n",
+        "\n",
+        "SELECT x.ovd / nullif(x.port, 0) * 100 AS overdue_ratio,\n",
+        "       x.ovd / p.usd AS overdue_usd, x.port / p.usd AS ending_usd\n",
+        "FROM day x, p WHERE x.as_of_date = p.d\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ovd_compare",
+      "displayName": "Tickers vs last day / month / year",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_loan_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.mart_loan_overdue_daily WHERE :branch = 'all' OR branchnbr = :branch),\n",
+        "day AS (SELECT as_of_date, sum(overdue_balance) ovd, sum(portfolio_balance) port\n",
+        "        FROM f GROUP BY as_of_date)\n",
+        "\n",
+        ", pick AS (\n",
+        "  SELECT 1 AS ord, 'vs Last Day' AS cmp,\n",
+        "         (SELECT max(as_of_date) FROM day, p WHERE as_of_date < p.d) AS dd FROM p\n",
+        "  UNION ALL SELECT 2, 'vs Last Month', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p\n",
+        "  UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),\n",
+        "cur AS (SELECT x.* FROM day x, p WHERE x.as_of_date = p.d)\n",
+        "SELECT pk.ord, pk.cmp,\n",
+        "  (cur.ovd / nullif(cur.port, 0) - c.ovd / nullif(c.port, 0)) * 100 AS ratio_pp,\n",
+        "  (cur.ovd - c.ovd) / p.usd AS overdue_usd, (cur.port - c.port) / p.usd AS ending_usd\n",
+        "FROM pick pk CROSS JOIN cur CROSS JOIN p LEFT JOIN day c ON c.as_of_date = pk.dd\n",
+        "ORDER BY pk.ord\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ovd_last5",
+      "displayName": "Overdue Trend (Last 5 Days)",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_loan_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.mart_loan_overdue_daily WHERE :branch = 'all' OR branchnbr = :branch),\n",
+        "day AS (SELECT as_of_date, sum(overdue_balance) ovd, sum(portfolio_balance) port\n",
+        "        FROM f GROUP BY as_of_date)\n",
+        "\n",
+        "SELECT date_format(x.as_of_date, 'dd/MM') AS day, x.ovd / p.usd / 1000 AS overdue_k_usd,\n",
+        "       x.ovd / nullif(x.port, 0) * 100 AS overdue_ratio\n",
+        "FROM day x, p WHERE x.as_of_date IN (\n",
+        "  SELECT as_of_date FROM day, p WHERE as_of_date <= p.d ORDER BY as_of_date DESC LIMIT 5)\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ovd_monthly",
+      "displayName": "Overdue Trend (Monthly)",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_loan_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.mart_loan_overdue_daily WHERE :branch = 'all' OR branchnbr = :branch),\n",
+        "day AS (SELECT as_of_date, sum(overdue_balance) ovd, sum(portfolio_balance) port\n",
+        "        FROM f GROUP BY as_of_date)\n",
+        "\n",
+        ", m AS (SELECT date_format(as_of_date, 'yyyy-MM') AS month, max(as_of_date) AS last_d\n",
+        "        FROM day, p WHERE as_of_date <= p.d GROUP BY 1)\n",
+        "SELECT m.month, x.ovd / p.usd / 1000 AS overdue_k_usd,\n",
+        "       x.ovd / nullif(x.port, 0) * 100 AS overdue_ratio\n",
+        "FROM m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
+        "WHERE m.month > date_format(add_months(p.d, -6), 'yyyy-MM')\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ovd_debt_groups",
+      "displayName": "Overdue Amount by Debt Groups",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_loan_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.mart_loan_overdue_daily WHERE :branch = 'all' OR branchnbr = :branch),\n",
+        "day AS (SELECT as_of_date, sum(overdue_balance) ovd, sum(portfolio_balance) port\n",
+        "        FROM f GROUP BY as_of_date)\n",
+        "\n",
+        ", m AS (SELECT date_format(as_of_date, 'yyyy-MM') AS month, max(as_of_date) AS last_d\n",
+        "        FROM day, p WHERE as_of_date <= p.d GROUP BY 1)\n",
+        "SELECT m.month, concat('Group ', f.debt_group) AS debt_group,\n",
+        "       sum(f.overdue_balance) / p.usd / 1000 AS overdue_k_usd\n",
+        "FROM m JOIN f ON f.as_of_date = m.last_d CROSS JOIN p\n",
+        "WHERE f.debt_group >= 2 AND m.month > date_format(add_months(p.d, -6), 'yyyy-MM')\n",
+        "GROUP BY m.month, f.debt_group, p.usd\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ovd_product_amount",
+      "displayName": "Overdue Amount by Product Groups",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_loan_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.mart_loan_overdue_daily WHERE :branch = 'all' OR branchnbr = :branch),\n",
+        "day AS (SELECT as_of_date, sum(overdue_balance) ovd, sum(portfolio_balance) port\n",
+        "        FROM f GROUP BY as_of_date)\n",
+        "\n",
+        "SELECT coalesce(f.product_group, 'Other') AS product_group,\n",
+        "       sum(f.overdue_balance) / p.usd / 1000 AS overdue_k_usd\n",
+        "FROM f, p WHERE f.as_of_date = p.d GROUP BY 1, p.usd\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ovd_product_ratio",
+      "displayName": "Overdue Ratio by Product Groups",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_loan_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.mart_loan_overdue_daily WHERE :branch = 'all' OR branchnbr = :branch),\n",
+        "day AS (SELECT as_of_date, sum(overdue_balance) ovd, sum(portfolio_balance) port\n",
+        "        FROM f GROUP BY as_of_date)\n",
+        "\n",
+        "SELECT coalesce(f.product_group, 'Other') AS product_group,\n",
+        "       sum(f.overdue_balance) / nullif(sum(f.portfolio_balance), 0) * 100 AS overdue_ratio\n",
+        "FROM f, p WHERE f.as_of_date = p.d GROUP BY 1\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ovd_branch_top5",
+      "displayName": "Overdue Ratio by Branches - Top5",
+      "queryLines": [
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.mart_loan_overdue_daily WHERE as_of_date <= :report_date) AS d),\n",
+        "b AS (SELECT o.branchnbr, coalesce(db.br_name, o.branchnbr) AS branch,\n",
+        "             sum(o.overdue_balance) / nullif(sum(o.portfolio_balance), 0) * 100 AS ratio\n",
+        "      FROM gold.mart_loan_overdue_daily o CROSS JOIN p\n",
+        "      LEFT JOIN gold.dim_branch db ON db.branchnbr = o.branchnbr\n",
+        "      WHERE o.as_of_date = p.d GROUP BY 1, 2)\n",
+        "SELECT concat('#', rn) AS rank, concat('#', rn, ' ', branch) AS branch, ratio\n",
+        "FROM (SELECT *, row_number() OVER (ORDER BY ratio DESC) AS rn FROM b) WHERE rn <= 5\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ovd_branch_options",
+      "displayName": "Branch options",
+      "queryLines": [
+        "SELECT 'all' AS branch UNION ALL\n",
+        "SELECT DISTINCT branchnbr FROM gold.dim_branch\n"
+      ],
+      "parameters": []
+    }
+  ],
+  "pages": [
+    {
+      "name": "overdue",
+      "displayName": "Retail Loan Overdue Tracking",
+      "layout": [
+        {
+          "widget": {
+            "name": "text_01",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# RETAIL LOAN OVERDUE TRACKING"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_02",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_tickers",
+                  "fields": [
+                    {
+                      "name": "overdue_ratio",
+                      "expression": "`overdue_ratio`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "overdue_ratio",
+                  "displayName": "Overdue Ratio",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
+                  },
+                  "style": {
+                    "color": "#48bb78"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Overdue Ratio"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_03",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_tickers",
+                  "fields": [
+                    {
+                      "name": "overdue_usd",
+                      "expression": "`overdue_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "overdue_usd",
+                  "displayName": "Overdue Balance (USD)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  },
+                  "style": {
+                    "color": "#4299e1"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Overdue Balance (USD)"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_04",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_tickers",
+                  "fields": [
+                    {
+                      "name": "ending_usd",
+                      "expression": "`ending_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "ending_usd",
+                  "displayName": "Ending Balance (USD)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "compact",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  },
+                  "style": {
+                    "color": "#ed8936"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ending Balance (USD)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "table_05",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_compare",
+                  "fields": [
+                    {
+                      "name": "cmp",
+                      "expression": "`cmp`"
+                    },
+                    {
+                      "name": "ratio_pp",
+                      "expression": "`ratio_pp`"
+                    },
+                    {
+                      "name": "overdue_usd",
+                      "expression": "`overdue_usd`"
+                    },
+                    {
+                      "name": "ending_usd",
+                      "expression": "`ending_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "cmp",
+                    "displayName": "",
+                    "title": "",
+                    "order": 100000,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "ratio_pp",
+                    "displayName": "Overdue Ratio (pp)",
+                    "title": "Overdue Ratio (pp)",
+                    "order": 100001,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "0.00"
+                  },
+                  {
+                    "fieldName": "overdue_usd",
+                    "displayName": "Overdue Balance (USD)",
+                    "title": "Overdue Balance (USD)",
+                    "order": 100002,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "#,##0.00"
+                  },
+                  {
+                    "fieldName": "ending_usd",
+                    "displayName": "Ending Balance (USD)",
+                    "title": "Ending Balance (USD)",
+                    "order": 100003,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "#,##0.00"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Comparison"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "combo_06",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_last5",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "sum(overdue_k_usd)",
+                      "expression": "SUM(`overdue_k_usd`)"
+                    },
+                    {
+                      "name": "sum(overdue_ratio)",
+                      "expression": "SUM(`overdue_ratio`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "combo",
+              "encodings": {
+                "x": {
+                  "fieldName": "day",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "day"
+                },
+                "y": {
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "primary": {
+                    "fields": [
+                      {
+                        "fieldName": "sum(overdue_k_usd)",
+                        "displayName": "Overdue Amount (1000 USD)"
+                      }
+                    ]
+                  },
+                  "secondary": {
+                    "fields": [
+                      {
+                        "fieldName": "sum(overdue_ratio)",
+                        "displayName": "Overdue Ratio (%)"
+                      }
+                    ]
+                  }
+                },
+                "color": {
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Overdue Amount (1000 USD)",
+                        "color": "#3498DB"
+                      },
+                      {
+                        "value": "Overdue Ratio (%)",
+                        "color": "#E67E22"
+                      }
+                    ]
+                  }
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Overdue Trend (Last 5 Days)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 2,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "combo_07",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_monthly",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "sum(overdue_k_usd)",
+                      "expression": "SUM(`overdue_k_usd`)"
+                    },
+                    {
+                      "name": "sum(overdue_ratio)",
+                      "expression": "SUM(`overdue_ratio`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "combo",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "month"
+                },
+                "y": {
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "primary": {
+                    "fields": [
+                      {
+                        "fieldName": "sum(overdue_k_usd)",
+                        "displayName": "Overdue Amount (1000 USD)"
+                      }
+                    ]
+                  },
+                  "secondary": {
+                    "fields": [
+                      {
+                        "fieldName": "sum(overdue_ratio)",
+                        "displayName": "Overdue Ratio (%)"
+                      }
+                    ]
+                  }
+                },
+                "color": {
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Overdue Amount (1000 USD)",
+                        "color": "#3498DB"
+                      },
+                      {
+                        "value": "Overdue Ratio (%)",
+                        "color": "#E67E22"
+                      }
+                    ]
+                  }
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Overdue Trend (Monthly)"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 8,
+            "width": 4,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_08",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_debt_groups",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "debt_group",
+                      "expression": "`debt_group`"
+                    },
+                    {
+                      "name": "sum(overdue_k_usd)",
+                      "expression": "SUM(`overdue_k_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "month"
+                },
+                "y": {
+                  "fieldName": "sum(overdue_k_usd)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "1000 USD"
+                },
+                "color": {
+                  "fieldName": "debt_group",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Group 2",
+                        "color": "#90CAF9"
+                      },
+                      {
+                        "value": "Group 3",
+                        "color": "#42A5F5"
+                      },
+                      {
+                        "value": "Group 4",
+                        "color": "#1E88E5"
+                      },
+                      {
+                        "value": "Group 5",
+                        "color": "#0D47A1"
+                      }
+                    ]
+                  },
+                  "displayName": "Series"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Overdue Amount by Debt Groups"
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 15,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "pie_09",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_product_amount",
+                  "fields": [
+                    {
+                      "name": "product_group",
+                      "expression": "`product_group`"
+                    },
+                    {
+                      "name": "sum(overdue_k_usd)",
+                      "expression": "SUM(`overdue_k_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "sum(overdue_k_usd)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "overdue_k_usd"
+                },
+                "color": {
+                  "fieldName": "product_group",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Nhom SP tai tro TMTN",
+                        "color": "#3498DB"
+                      },
+                      {
+                        "value": "Nhom SP tai tro du an va dau tu TSCD",
+                        "color": "#E74C3C"
+                      },
+                      {
+                        "value": "Nhom SP cho vay tieu dung",
+                        "color": "#2ECC71"
+                      },
+                      {
+                        "value": "Other",
+                        "color": "#F39C12"
+                      }
+                    ]
+                  },
+                  "displayName": "product_group"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Overdue Amount by Product Groups"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 22,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_10",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_product_ratio",
+                  "fields": [
+                    {
+                      "name": "product_group",
+                      "expression": "`product_group`"
+                    },
+                    {
+                      "name": "sum(overdue_ratio)",
+                      "expression": "SUM(`overdue_ratio`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "sum(overdue_ratio)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "overdue_ratio"
+                },
+                "y": {
+                  "fieldName": "product_group",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "x-reversed"
+                    }
+                  },
+                  "displayName": "product_group"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Overdue Ratio by Product Groups"
+              },
+              "mark": {
+                "colors": [
+                  "#3498DB"
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 22,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_11",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_branch_top5",
+                  "fields": [
+                    {
+                      "name": "branch",
+                      "expression": "`branch`"
+                    },
+                    {
+                      "name": "rank",
+                      "expression": "`rank`"
+                    },
+                    {
+                      "name": "sum(ratio)",
+                      "expression": "SUM(`ratio`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "sum(ratio)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "ratio"
+                },
+                "y": {
+                  "fieldName": "branch",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "x-reversed"
+                    }
+                  },
+                  "displayName": "branch"
+                },
+                "color": {
+                  "fieldName": "rank",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "#1",
+                        "color": "#3498DB"
+                      },
+                      {
+                        "value": "#2",
+                        "color": "#E74C3C"
+                      },
+                      {
+                        "value": "#3",
+                        "color": "#2ECC71"
+                      },
+                      {
+                        "value": "#4",
+                        "color": "#F39C12"
+                      },
+                      {
+                        "value": "#5",
+                        "color": "#9B59B6"
+                      }
+                    ]
+                  },
+                  "displayName": "Series"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Overdue Ratio by Branches - Top5"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 29,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_12",
+            "queries": [
+              {
+                "name": "param_ovd_tickers_report_date",
+                "query": {
+                  "datasetName": "ovd_tickers",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_compare_report_date",
+                "query": {
+                  "datasetName": "ovd_compare",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_last5_report_date",
+                "query": {
+                  "datasetName": "ovd_last5",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_monthly_report_date",
+                "query": {
+                  "datasetName": "ovd_monthly",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_debt_groups_report_date",
+                "query": {
+                  "datasetName": "ovd_debt_groups",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_product_amount_report_date",
+                "query": {
+                  "datasetName": "ovd_product_amount",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_product_ratio_report_date",
+                "query": {
+                  "datasetName": "ovd_product_ratio",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_branch_top5_report_date",
+                "query": {
+                  "datasetName": "ovd_branch_top5",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_ovd_tickers_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_ovd_compare_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_ovd_last5_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_ovd_monthly_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_ovd_debt_groups_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_ovd_product_amount_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_ovd_product_ratio_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_ovd_branch_top5_report_date"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Report date"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_13",
+            "queries": [
+              {
+                "name": "options",
+                "query": {
+                  "datasetName": "ovd_branch_options",
+                  "fields": [
+                    {
+                      "name": "branch",
+                      "expression": "`branch`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_tickers_branch",
+                "query": {
+                  "datasetName": "ovd_tickers",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_compare_branch",
+                "query": {
+                  "datasetName": "ovd_compare",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_last5_branch",
+                "query": {
+                  "datasetName": "ovd_last5",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_monthly_branch",
+                "query": {
+                  "datasetName": "ovd_monthly",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_debt_groups_branch",
+                "query": {
+                  "datasetName": "ovd_debt_groups",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_product_amount_branch",
+                "query": {
+                  "datasetName": "ovd_product_amount",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_product_ratio_branch",
+                "query": {
+                  "datasetName": "ovd_product_ratio",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "branch",
+                    "displayName": "Branch",
+                    "queryName": "options"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_ovd_tickers_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_ovd_compare_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_ovd_last5_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_ovd_monthly_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_ovd_debt_groups_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_ovd_product_amount_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_ovd_product_ratio_branch"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Branch"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "CENTER"
+    }
+  }
+}

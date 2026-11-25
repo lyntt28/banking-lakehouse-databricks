@@ -1,0 +1,26 @@
+# 3 dashboard AI/BI (Lakeview) dựng lại từ dashboard Flask + Chart.js gốc.
+# File JSON sinh từ src/common/lakeview.py:  python src/common/lakeview.py dashboards
+# Bảng trong JSON không có catalog (gold.xxx, silver.xxx); dataset_catalog gắn catalog
+# của từng môi trường (bank_dev / bank_test / bank_prod).
+resources:
+  dashboards:
+    card_business:
+      display_name: Card Business Dashboard
+      file_path: ../dashboards/card_business.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
+      embed_credentials: false
+
+    loan_overdue:
+      display_name: Retail Loan Overdue Tracking
+      file_path: ../dashboards/loan_overdue.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
+      embed_credentials: false
+
+    retail_deposit:
+      display_name: Retail Deposit Performance
+      file_path: ../dashboards/retail_deposit.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
+      embed_credentials: false
