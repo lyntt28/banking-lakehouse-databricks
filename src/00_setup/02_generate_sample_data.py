@@ -11,9 +11,11 @@
 dbutils.widgets.text("catalog", "bank_dev")
 dbutils.widgets.text("start_date", "2026-11-01")
 dbutils.widgets.text("days", "3")
+dbutils.widgets.text("history_months", "13")  # snapshot cuối tháng trước start_date (YoY)
 catalog = dbutils.widgets.get("catalog")
 start_date = dbutils.widgets.get("start_date")
 days = int(dbutils.widgets.get("days"))
+history_months = int(dbutils.widgets.get("history_months"))
 
 # COMMAND ----------
 
@@ -34,7 +36,7 @@ from data_generator.generate import generate  # noqa: E402
 
 # Sinh data thẳng vào Volume (Volume được mount như thư mục thường)
 out = Path(f"/Volumes/{catalog}/landing/raw_files")
-counts = generate(out, date.fromisoformat(start_date), days)
+counts = generate(out, date.fromisoformat(start_date), days, history_months=history_months)
 for table, n in counts.items():
     print(f"{table:<13} {n:>7} rows")
 

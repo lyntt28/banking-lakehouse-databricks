@@ -46,10 +46,27 @@ class Sizes:
     card_txns_per_day: int = 50_000
 
 
+def month_ends_before(start: date, months: int) -> list[date]:
+    """`months` ngày cuối tháng liền trước `start` (cũ -> mới)."""
+    out, d = [], start.replace(day=1) - timedelta(days=1)
+    for _ in range(months):
+        out.append(d)
+        d = d.replace(day=1) - timedelta(days=1)
+    return out[::-1]
+
+
 def generate(out: Path, start: date, days: int, seed: int = 42,
-             sizes: Sizes | None = None) -> dict[str, int]:
-    """Sinh `days` ngày dữ liệu bắt đầu từ `start`. Trả về tổng số dòng theo bảng."""
+             sizes: Sizes | None = None, history_months: int = 0) -> dict[str, int]:
+    """Sinh `days` ngày dữ liệu bắt đầu từ `start`. Trả về tổng số dòng theo bảng.
+
+    history_months > 0: trước đó sinh thêm snapshot CUỐI THÁNG của N tháng liền trước
+    (cho so sánh MoM / YoY, xu hướng 7-13 tháng). Mỗi mốc là 1 bước tiến hoá trạng thái
+    (KH đổi thông tin, thẻ mở/đóng, DPD tăng...), giống 1 ngày thường.
+    """
     sizes = sizes or Sizes()
+    dates = month_ends_before(start, history_months) + \
+        [start + timedelta(days=d) for d in range(days)]
+    start = dates[0]
     rnd = random.Random(seed)  # seed cố định: chạy lại ra đúng bộ data cũ
     out = Path(out)
     counts: dict[str, int] = {}
@@ -69,8 +86,7 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
     dep_prev: dict = {}
     dep_month: dict = {}
 
-    for d in range(days):
-        as_of = start + timedelta(days=d)
+    for d, as_of in enumerate(dates):
         part = f"as_of_date={as_of.isoformat()}"
 
         def path(table: str, fname: str, _part: str = part) -> Path:
@@ -85,12 +101,13 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
             dep_vnd = sum(a["balance"] * (USD_RATE if a["currencycd"] == "USD" else 1)
                           for a in accounts if a["product_type"] != "LOAN")
             add("targets", write_csv(path("targets", "targets.csv"), ref.TARGET_HEADER,
-                                     ref.target_rows(seed, start.year, {
-                                         "CARD_NEW_ACQ": len(cards) * 0.0015 * 30 / nb,
-                                         "CARD_SALES_VOLUME": sizes.card_txns_per_day
-                                         * 2.5e6 * 30 / nb,
-                                         "DEPOSIT_BALANCE": dep_vnd / nb,
-                                     })))
+                                     [r for y in sorted({x.year for x in dates})
+                                      for r in ref.target_rows(seed, y, {
+                                          "CARD_NEW_ACQ": len(cards) * 0.0015 * 30 / nb,
+                                          "CARD_SALES_VOLUME": sizes.card_txns_per_day
+                                          * 2.5e6 * 30 / nb,
+                                          "DEPOSIT_BALANCE": dep_vnd / nb,
+                                      })]))
         else:
             core.evolve_customers(rnd, customers)
             cd.evolve_cards(rnd, cards, customers, as_of)
@@ -141,9 +158,12 @@ def main() -> None:
     p.add_argument("--days", type=int, default=3)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--scale", type=float, default=1.0, help="nhân số dòng (0.1 = 10%%)")
+    p.add_argument("--history-months", type=int, default=0,
+                   help="thêm snapshot cuối tháng của N tháng trước start-date (13 = YoY)")
     a = p.parse_args()
     sizes = Sizes(*(max(1, int(getattr(Sizes(), f.name) * a.scale)) for f in fields(Sizes)))
-    counts = generate(Path(a.out), date.fromisoformat(a.start_date), a.days, a.seed, sizes)
+    counts = generate(Path(a.out), date.fromisoformat(a.start_date), a.days, a.seed, sizes,
+                      a.history_months)
     for t, n in counts.items():
         print(f"{t:<19} {n:>9,} rows")
 

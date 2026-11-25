@@ -75,12 +75,12 @@ def test_spend_mix_sums_to_daily(results, card_daily):
 
 
 def test_deposit_reconciles_with_bang1247(results):
-    from data_generator.common import DEPOSIT_PRODUCTS
+    from data_generator.common import DEPOSIT_ALL
 
     mart = build_mart_deposit_daily(results["accounts"].valid, AS_OF)
     r = deposit_reconciliation(mart, results["deposit_summary"].valid,
                                results["fx_rates"].valid,
-                               {p[0]: p[1] for p in DEPOSIT_PRODUCTS})
+                               {p[0]: p[1] for p in DEPOSIT_ALL})
     st = r.groupBy("status").count().collect()
     assert {x.status for x in st} == {"MATCH"}, r.filter("status <> 'MATCH'").limit(5).collect()
 
