@@ -1,3 +1,8 @@
+[project]
+name = "banking-lakehouse"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
@@ -5,7 +10,12 @@ testpaths = ["tests"]
 line-length = 100
 target-version = "py311"
 
-extend-exclude = ["reference", "src/00_setup", "src/01_bronze", "src/02_silver", "src/03_gold", "src/04_ml"]
+extend-exclude = ["reference"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]
+
+# Notebook Databricks: spark/dbutils/display có sẵn (F821), import sau cell sys.path (E402),
+# dòng "# MAGIC" markdown dài (E501)
+[tool.ruff.lint.per-file-ignores]
+"src/0*/*.py" = ["F821", "E402", "E501"]

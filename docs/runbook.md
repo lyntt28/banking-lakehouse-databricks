@@ -53,6 +53,9 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
 - **MỤC ĐÍCH:** chạy `02_silver/01_silver_transform` rồi `03_gold/01_gold_build` cho từng ngày
   theo thứ tự thời gian (SCD2 và so sánh D-1/M-1/Y-1 cần đúng thứ tự).
 - **Widget:** `catalog = bank_dev`, `from_date` để trống
+- **Lưu ý SCD2:** `silver.customers` từ chối nạp ngày cũ hơn bản hiện hành (báo lỗi
+  "thứ tự ngày"). Muốn chạy lại backfill từ ngày cũ: `DROP TABLE <catalog>.silver.customers`
+  (và `gold.dim_customer`) trước, rồi chạy lại từ đầu.
 - **KIỂM TRA:**
   ```sql
   -- DQ từng rule, ngày mới nhất

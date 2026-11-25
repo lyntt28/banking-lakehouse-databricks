@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pyspark.sql import DataFrame
 
+from common.dates import check_date
 from common.scd2 import apply_scd2, build_scd2_staging
 from common.silver import merge_condition
 
@@ -31,6 +32,7 @@ def merge_upsert(df: DataFrame, target: str, key: list[str], insert_only: bool =
 
 def overwrite_date(df: DataFrame, target: str, date_col: str, as_of_date: str) -> None:
     """Ghi đè đúng 1 ngày (replaceWhere) - dùng cho mart tính lại toàn bộ ngày đó."""
+    as_of_date = check_date(as_of_date)
     spark = df.sparkSession
     if not table_exists(spark, target):
         df.write.format("delta").saveAsTable(target)
@@ -59,6 +61,15 @@ def scd2_upsert(df: DataFrame, target: str, key: str, tracked: list[str],
                  .withColumn("valid_to", F.lit(None).cast("date"))
                  .withColumn("is_current", F.lit(None).cast("boolean")))
         empty.write.format("delta").saveAsTable(target)
+    effective_date = check_date(effective_date)
     current = spark.table(target).filter("is_current")
+    # Chặn nạp ngày cũ hơn bản hiện hành (backfill phải chạy theo thứ tự ngày tăng dần),
+    # nếu không lịch sử SCD2 sẽ có khoảng hiệu lực ngược.
+    newer = current.filter(F.col("valid_from") > F.lit(effective_date).cast("date")).limit(1)
+    if newer.count() > 0:
+        raise ValueError(
+            f"SCD2 {target}: đã có bản ghi hiệu lực sau {effective_date}; "
+            "backfill phải chạy theo thứ tự ngày tăng dần"
+        )
     staging = build_scd2_staging(df, current, key, tracked)
     apply_scd2(staging, target, key, effective_date)
