@@ -35,4 +35,10 @@ Each decision: context → decision → alternatives considered → consequences
 - **Decision:** Gold recomputes every metric from detail records and writes a per-metric comparison to `ops.recon_card_kpi` / `ops.recon_deposit`. Stock metrics (card counts, balances, DPD) must match within rounding. Transaction-based metrics may differ by ≤ 1%: when two card transactions share a `txn_id`, Silver quarantines both (it cannot know which is real) while the source keeps the first. Any `MISMATCH` fails the job.
 - **FK rule:** a foreign key is valid if the parent key exists in the source batch, even when the parent row itself was quarantined for another reason (e.g. bad date of birth). Otherwise one bad customer attribute would silently drop that customer's accounts from deposit totals.
 
-<!-- TODO: liquid clustering, column masking -->
+## ADR-008: Governance as code (Unity Catalog)
+- **Context:** Customer PII (name, ID number, phone, email, address, date of birth, income) must not be visible to analysts or branch staff, and branch staff must only see their own branch.
+- **Decision:** `src/common/governance.py` generates all SQL: catalog/schema GRANTs per group (least privilege), column masks as SQL functions in `ops` (keep last 3-4 digits, first letter of each name word, year of birth only, income hidden), `pii` column tags, and a row filter on `branchnbr` driven by `ops.user_branch`. The `governance` job task re-applies everything after Gold (Gold overwrites some tables).
+- **Pipeline identity:** once governance is on, Silver/Gold refuse to run unless the job identity is in `bank_admins` or `data_engineers`; otherwise SCD2 would hash masked values and Gold would read row-filtered tables.
+- **Free Edition:** account groups are not available, so `governance_dry_run` defaults to `true` (prints SQL only). Set it to `false` on a workspace with groups.
+
+<!-- TODO: liquid clustering -->
