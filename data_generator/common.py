@@ -51,6 +51,15 @@ DEPOSIT_PRODUCTS = [
     ("SAVING", "Time Saving Account", "1-CASA"),
     ("TD", "Term Deposit", "2-TD"),
 ]
+# Sản phẩm suy ra từ sản phẩm gốc theo account_id (không thêm lượt ngẫu nhiên -> dữ liệu cũ
+# giữ nguyên): 1/4 SAVING là ISA (tích luỹ cá nhân), 1/25 CASA là K-Study (du học)
+DEPOSIT_DERIVED = [
+    ("ISA", "Individual Saving Account", "3-ISA"),
+    ("KSTUDY", "K-Study Account", "1-CASA"),
+]
+DEPOSIT_ALL = DEPOSIT_PRODUCTS + DEPOSIT_DERIVED
+TENORS = [1, 3, 6, 12, 24, 36]                       # kỳ hạn TD / ISA (tháng)
+TENOR_RATE = {1: 0.030, 3: 0.034, 6: 0.045, 12: 0.052, 24: 0.055, 36: 0.057}
 # card_product, card_grade, hạn mức min/max (VND)
 CARD_PRODUCTS = [
     ("VISA_CLASSIC", "CLASSIC", 10_000_000, 50_000_000),

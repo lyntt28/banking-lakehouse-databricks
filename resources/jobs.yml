@@ -1,17 +1,17 @@
 # Định nghĩa Job. Free Edition chỉ có serverless nên không khai báo cluster.
-# Các task bronze/silver/gold sẽ được thêm khi có code (ngày 1-2).
 resources:
   jobs:
     banking_lakehouse_daily:
       name: banking_lakehouse_daily
       max_concurrent_runs: 1
-      email_notifications:
-        on_failure:
-          - ${var.notification_email}
+      # Email cảnh báo khi lỗi: chỉ khai báo ở target test/prod (databricks.yml),
+      # vì email rỗng ở dev làm bundle deploy báo lỗi.
 
       parameters:
         - name: catalog
           default: ${var.catalog}
+        - name: as_of_date        # trống = ngày mới nhất có trong bronze
+          default: ""
 
       tasks:
         - task_key: setup
@@ -20,7 +20,77 @@ resources:
           max_retries: 1
           min_retry_interval_millis: 60000
 
-        # - task_key: bronze
-        #   depends_on: [{task_key: setup}]
-        #   notebook_task:
-        #     notebook_path: ../src/01_bronze/...
+        # Bronze: Auto Loader nạp file mới từ Volume landing (chạy lại không nhân đôi)
+        - task_key: bronze
+          depends_on:
+            - task_key: setup
+          notebook_task:
+            notebook_path: ../src/01_bronze/01_bronze_ingest.py
+          max_retries: 1
+          min_retry_interval_millis: 60000
+
+        # Silver: ép kiểu + DQ gate (dừng nếu rule FAIL > 5%) + MERGE / SCD2
+        - task_key: silver
+          depends_on:
+            - task_key: bronze
+          notebook_task:
+            notebook_path: ../src/02_silver/01_silver_transform.py
+          max_retries: 0          # lỗi DQ không tự hết khi chạy lại -> không retry
+
+        # Gold: star schema + mart cho dashboard
+        - task_key: gold
+          depends_on:
+            - task_key: silver
+          notebook_task:
+            notebook_path: ../src/03_gold/01_gold_build.py
+          max_retries: 1
+          min_retry_interval_millis: 60000
+
+        # View cho dashboard (1 view / visual)
+        - task_key: dashboard_views
+          depends_on:
+            - task_key: gold
+          notebook_task:
+            notebook_path: ../src/03_gold/02_dashboard_views.py
+          max_retries: 1
+          min_retry_interval_millis: 60000
+
+        # Governance: GRANT + che cột PII + lọc dòng theo chi nhánh. Chạy SAU gold vì
+        # gold ghi đè một số bảng; câu lệnh idempotent.
+        - task_key: governance
+          depends_on:
+            - task_key: dashboard_views
+          notebook_task:
+            notebook_path: ../src/00_setup/03_governance.py
+            base_parameters:
+              dry_run: ${var.governance_dry_run}
+          max_retries: 0
+
+    # Bảo trì Delta hằng tuần: liquid clustering + OPTIMIZE + VACUUM (giữ 7 ngày)
+    banking_maintenance_weekly:
+      name: banking_maintenance_weekly
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+      tasks:
+        - task_key: maintain
+          notebook_task:
+            notebook_path: ../src/00_setup/04_maintenance.py
+            base_parameters:
+              mode: maintain
+
+    # ML bán chéo bảo hiểm: feature table + train + MLflow (UC registry) + chấm điểm
+    banking_ml_cross_sell_weekly:
+      name: banking_ml_cross_sell_weekly
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: label_mode
+          default: holder
+      tasks:
+        - task_key: train_and_score
+          notebook_task:
+            notebook_path: ../src/04_ml/01_insurance_cross_sell.py
+          # thư viện cài bằng %pip ở đầu notebook (serverless notebook task)

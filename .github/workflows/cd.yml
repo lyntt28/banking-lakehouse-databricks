@@ -1,0 +1,114 @@
+name: CD
+
+# main -> test (tự động, chạy job + kiểm tra) -> prod (cần người duyệt)
+#
+# Cấu hình 1 lần trong GitHub (Settings -> Environments):
+#   - environment `test`: secret DATABRICKS_HOST (+ DATABRICKS_CLIENT_ID nếu dùng OIDC,
+#     hoặc DATABRICKS_TOKEN nếu dùng token)
+#   - environment `prod`: như trên + "Required reviewers" (người bấm duyệt deploy prod)
+# Auth ưu tiên OIDC (không lưu secret dài hạn): tạo federation policy cho service principal
+# với issuer https://token.actions.githubusercontent.com, subject repo:<owner>/<repo>:environment:<env>.
+# Chưa có secret -> job chỉ ghi warning và bỏ qua (không fail).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      as_of_date:
+        description: "Ngày dữ liệu chạy smoke test trên test (YYYY-MM-DD, trống = mới nhất)"
+        required: false
+        default: ""
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write   # OIDC
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest -q
+
+  deploy-test:
+    needs: tests
+    runs-on: ubuntu-latest
+    environment: test
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Skip (secrets missing)
+        if: env.DATABRICKS_HOST == ''
+        run: echo "::warning title=CD skipped::Environment 'test' has no DATABRICKS_HOST secret."
+      - name: Auth mode
+        if: env.DATABRICKS_HOST != ''
+        run: |
+          if [ -n "$DATABRICKS_CLIENT_ID" ]; then
+            echo "DATABRICKS_AUTH_TYPE=github-oidc" >> "$GITHUB_ENV"
+          fi
+      - name: Validate + deploy bundle (test)
+        if: env.DATABRICKS_HOST != ''
+        run: |
+          databricks bundle validate -t test
+          databricks bundle deploy -t test
+      - name: Smoke test - run the daily job on test
+        if: env.DATABRICKS_HOST != ''
+        env:
+          AS_OF_DATE: ${{ inputs.as_of_date }}   # qua env, không chèn thẳng vào script
+        run: |
+          params=""
+          if [ -n "$AS_OF_DATE" ]; then
+            [[ "$AS_OF_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "bad date"; exit 1; }
+            params="--params as_of_date=$AS_OF_DATE"
+          fi
+          # Job fail (DQ gate, đối soát lệch...) -> lệnh trả mã lỗi -> không lên prod
+          databricks bundle run banking_lakehouse_daily -t test $params
+
+  deploy-prod:
+    needs: deploy-test
+    runs-on: ubuntu-latest
+    environment: prod   # Required reviewers -> chờ người duyệt
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Skip (secrets missing)
+        if: env.DATABRICKS_HOST == ''
+        run: echo "::warning title=CD skipped::Environment 'prod' has no DATABRICKS_HOST secret."
+      - name: Auth mode
+        if: env.DATABRICKS_HOST != ''
+        run: |
+          if [ -n "$DATABRICKS_CLIENT_ID" ]; then
+            echo "DATABRICKS_AUTH_TYPE=github-oidc" >> "$GITHUB_ENV"
+          fi
+      - name: Validate + deploy bundle (prod)
+        if: env.DATABRICKS_HOST != ''
+        run: |
+          databricks bundle validate -t prod
+          databricks bundle deploy -t prod
+      - name: Summary
+        if: env.DATABRICKS_HOST != ''
+        run: |
+          echo "## Deployed to prod" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit \`${GITHUB_SHA::7}\`. The job runs on its own schedule; not triggered here." >> "$GITHUB_STEP_SUMMARY"
