@@ -1,0 +1,3 @@
+Trx_Date	Metric_Code	Metric_Value
+2026-01-12	Total_Outstanding_Balance	164,197,527
+2026-01-12	Avg_Balance_Per_Member	862

@@ -1,0 +1,4 @@
+Trx_Date	Metric_Code	Metric_Value
+2026-01-12	New_Consumer	3,717
+2026-01-12	New_Corporate	159
+2026-01-12	New_Member	3,907

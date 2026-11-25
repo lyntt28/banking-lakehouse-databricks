@@ -1,0 +1,5 @@
+Trx_Date	Metric_Code	Metric_Value
+2026-01-12	Using_Consumer	106,879
+2026-01-12	Usage_Consumer_Rate	56.78%
+2026-01-12	Using_Corporate	1,832
+2026-01-12	Usage_Corporate_Rate	67.70%
