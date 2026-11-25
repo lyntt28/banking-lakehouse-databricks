@@ -46,11 +46,20 @@ resources:
           max_retries: 1
           min_retry_interval_millis: 60000
 
+        # View cho dashboard (1 view / visual)
+        - task_key: dashboard_views
+          depends_on:
+            - task_key: gold
+          notebook_task:
+            notebook_path: ../src/03_gold/02_dashboard_views.py
+          max_retries: 1
+          min_retry_interval_millis: 60000
+
         # Governance: GRANT + che cột PII + lọc dòng theo chi nhánh. Chạy SAU gold vì
         # gold ghi đè một số bảng; câu lệnh idempotent.
         - task_key: governance
           depends_on:
-            - task_key: gold
+            - task_key: dashboard_views
           notebook_task:
             notebook_path: ../src/00_setup/03_governance.py
             base_parameters:

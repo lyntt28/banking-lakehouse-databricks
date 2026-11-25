@@ -71,10 +71,13 @@ jobs:
           databricks bundle deploy -t test
       - name: Smoke test - run the daily job on test
         if: env.DATABRICKS_HOST != ''
+        env:
+          AS_OF_DATE: ${{ inputs.as_of_date }}   # qua env, không chèn thẳng vào script
         run: |
           params=""
-          if [ -n "${{ inputs.as_of_date }}" ]; then
-            params="--params as_of_date=${{ inputs.as_of_date }}"
+          if [ -n "$AS_OF_DATE" ]; then
+            [[ "$AS_OF_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "bad date"; exit 1; }
+            params="--params as_of_date=$AS_OF_DATE"
           fi
           # Job fail (DQ gate, đối soát lệch...) -> lệnh trả mã lỗi -> không lên prod
           databricks bundle run banking_lakehouse_daily -t test $params
