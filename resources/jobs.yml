@@ -10,6 +10,8 @@ resources:
       parameters:
         - name: catalog
           default: ${var.catalog}
+        - name: as_of_date        # trống = ngày mới nhất có trong bronze
+          default: ""
 
       tasks:
         - task_key: setup
