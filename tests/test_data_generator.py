@@ -91,18 +91,15 @@ def test_customers_change_for_scd2(out):
 def test_card_kpi_reconciles_with_valid_transactions(out):
     cards = {r["card_no"] for r in _t(out, "cards", D2)}
     ctx = _jsonl(out / "card_transactions" / f"as_of_date={D2}" / "card_transactions.json")
-    seen, total = set(), 0.0
-    dup_ids = {t["txn_id"] for t in ctx if [x["txn_id"] for x in ctx].count(t["txn_id"]) > 1} \
-        if len(ctx) < 5000 else set()
+    counts: dict[str, int] = {}
     for t in ctx:
-        # Quy tắc Silver: amount > 0, card tồn tại, txn_id trùng -> giữ bản ghi đầu tiên
-        if t["amount"] <= 0 or t["card_no"] not in cards or t["txn_id"] in seen:
-            continue
-        seen.add(t["txn_id"])
-        total += t["amount"]
-    assert dup_ids  # có trùng txn_id
+        counts[t["txn_id"]] = counts.get(t["txn_id"], 0) + 1
+    assert any(n > 1 for n in counts.values())  # có trùng txn_id
+    # Quy tắc Silver: amount > 0, card tồn tại, txn_id trùng -> quarantine CẢ các bản ghi
+    total = sum(t["amount"] for t in ctx
+                if t["amount"] > 0 and t["card_no"] in cards and counts[t["txn_id"]] == 1)
     kpi = {r["Metric_Code"]: r["Metric_Value"] for r in
-           _t(out, "card_kpi", D2, "06_spend_sector_20261102.txt", "\t")}
+           _t(out, "card_kpi", D2, "06_spend_sector_20261102.txt", "	")}
     assert float(kpi["Total_Spending_Amt"].replace(",", "")) == pytest.approx(total, abs=1)
 
 

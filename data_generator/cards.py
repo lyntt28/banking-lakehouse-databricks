@@ -129,12 +129,16 @@ def gen_card_transactions(rnd: random.Random, n: int, cards: list[dict],
         elif hit(rnd, ERROR_RATE / 2):
             t["card_no"], bad = f"9{i:015d}", True  # thẻ không tồn tại (FAIL)
         elif i and hit(rnd, ERROR_RATE / 4):
-            # trùng txn_id (FAIL) - bản ghi gốc vẫn hợp lệ
+            # trùng txn_id khác nội dung (FAIL): Silver quarantine CẢ HAI bản ghi
+            # vì không biết bản nào đúng -> bản gốc cũng bị loại khỏi `clean` (xem cuối hàm)
             t["txn_id"], bad = out[rnd.randint(0, i - 1)]["txn_id"], True
         out.append(t)
         if not bad:
             clean.append(t)
             c["balance"] = min(c["limit"] * 1.1, c["balance"] + amt)
+    seen: set[str] = set()
+    dup_ids = {t["txn_id"] for t in out if t["txn_id"] in seen or seen.add(t["txn_id"])}
+    clean = [t for t in clean if t["txn_id"] not in dup_ids]
     return out, clean
 
 
