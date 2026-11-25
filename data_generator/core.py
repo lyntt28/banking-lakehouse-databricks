@@ -11,12 +11,15 @@ from datetime import date, datetime, timedelta
 
 from data_generator.common import (
     BRANCHES,
+    DEPOSIT_ALL,
     DEPOSIT_PRODUCTS,
     DN,
     ERROR_RATE,
     LOAN_PRODUCTS,
     LV,
     TEN,
+    TENOR_RATE,
+    TENORS,
     USD_RATE,
     debt_group,
     hit,
@@ -32,7 +35,7 @@ HEADERS = {
                   "email", "address", "province", "branchnbr", "segment", "monthly_income",
                   "open_date", "updated_at", "nationality"],
     "accounts": ["account_id", "customer_id", "branchnbr", "product_type", "currencycd",
-                 "status", "open_date", "close_date", "balance", "int_rate"],
+                 "status", "open_date", "close_date", "balance", "int_rate", "tenor_months"],
     "loans": ["etl_dt", "br_area", "branchnbr", "br_name", "acctnbr", "customer_id", "scope",
               "mjacctcd", "miacctcd", "prodcode", "tensp", "nhomsp", "currencycd", "int_rate",
               "datestart", "datemat", "loan_dur", "dudau", "chovay", "thuno", "thulai", "ducuoi",
@@ -52,7 +55,7 @@ def branch_rows() -> list[list]:
 
 def product_rows() -> list[list]:
     rows = [[p[0], p[3], "LOAN", p[1], p[2], p[4], p[5], p[6]] for p in LOAN_PRODUCTS]
-    rows += [[d[0], d[1], "DEPOSIT", "", "", d[2], "ALL", 0] for d in DEPOSIT_PRODUCTS]
+    rows += [[d[0], d[1], "DEPOSIT", "", "", d[2], "ALL", 0] for d in DEPOSIT_ALL]
     return rows
 
 
@@ -149,7 +152,23 @@ def base_deposit_accounts(rnd: random.Random, n: int, customers: list[dict],
             "balance": 0.0 if st == "CLOSED" else bal,
             "int_rate": rnd.uniform(0.001, 0.075),
         })
+        _derive_deposit_terms(out[-1], i)
     return out
+
+
+def _derive_deposit_terms(a: dict, i: int) -> None:
+    """ISA / K-Study, kỳ hạn và lãi suất theo kỳ hạn - suy từ số thứ tự, không dùng rnd."""
+    if a["product_type"] == "SAVING" and i % 4 == 0:
+        a["product_type"] = "ISA"
+    elif a["product_type"] == "CASA" and i % 25 == 0:
+        a["product_type"] = "KSTUDY"
+    if a["product_type"] in ("TD", "ISA"):
+        t = TENORS[i % len(TENORS)]
+        a["tenor_months"] = t
+        # lãi suất bám theo kỳ hạn, giữ một phần chênh lệch ngẫu nhiên đã sinh
+        a["int_rate"] = TENOR_RATE[t] + (a["int_rate"] - 0.038) * 0.1
+    else:
+        a["tenor_months"] = 0
 
 
 def snap_accounts(rnd: random.Random, accounts: list[dict]) -> tuple[list[list], set[str]]:
@@ -161,7 +180,7 @@ def snap_accounts(rnd: random.Random, accounts: list[dict]) -> tuple[list[list],
         r = [a["account_id"], a["customer_id"], a["branchnbr"], a["product_type"],
              a["currencycd"], a["status"], mdy(a["open_date"]),
              mdy(a["close_date"]) if a["close_date"] else "", f"{a['balance']:.2f}",
-             f"{a['int_rate']:.5f}"]
+             f"{a['int_rate']:.5f}", a.get("tenor_months", 0)]
         if hit(rnd):
             r[5] = rnd.choice(["active", "ACTV", "FROZEN"])  # trạng thái lạ (WARN)
         if hit(rnd, ERROR_RATE / 2):
