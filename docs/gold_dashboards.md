@@ -68,7 +68,8 @@ Reconciliation: `mart_deposit_daily` vs `deposit_summary` (bang1247) source file
 | `mart_deposit_by_tenor` | done: TD / ISA by tenor, min / max / avg / balance-weighted rate |
 | `mart_casa_customer` | done: retail customers, CASA customers, active vs dormant, penetration % |
 | `mart_deposit_new_accounts` | done: new accounts by open month + YTD (filter `KSTUDY` for K-Study) |
-| Dashboards on Databricks SQL | not yet: needs a workspace run |
+| Dashboard views `gold.v_*` | done: one view per visual, in dashboard order (`src/common/dashboard_views.py`, task `dashboard_views`) |
+| Dashboards on Databricks SQL | not yet: layout, chart types and colours must copy the original dashboards (screenshots / Flask source needed) |
 
 ## Data the generator still needs for these dashboards
 
