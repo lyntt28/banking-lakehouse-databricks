@@ -466,11 +466,19 @@ FROM day x, p WHERE x.as_of_date = p.d
   UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p
          WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),
 cur AS (SELECT x.* FROM day x, p WHERE x.as_of_date = p.d)
-SELECT pk.ord, pk.cmp,
+SELECT pk.ord, pk.cmp, v.ratio_pp, v.overdue_usd, v.ending_usd,
+  -- như dashboard gốc: ▲ / ▼ / ▪ + trị tuyệt đối (USD làm tròn, % 2 số lẻ)
+  concat(CASE WHEN v.ratio_pp > 0 THEN '▲ ' WHEN v.ratio_pp < 0 THEN '▼ ' ELSE '▪ ' END,
+         format_number(abs(v.ratio_pp), 2), '%') AS ratio_txt,
+  concat(CASE WHEN v.overdue_usd > 0 THEN '▲ ' WHEN v.overdue_usd < 0 THEN '▼ ' ELSE '▪ ' END,
+         format_number(abs(v.overdue_usd), 0)) AS overdue_txt,
+  concat(CASE WHEN v.ending_usd > 0 THEN '▲ ' WHEN v.ending_usd < 0 THEN '▼ ' ELSE '▪ ' END,
+         format_number(abs(v.ending_usd), 0)) AS ending_txt
+FROM pick pk CROSS JOIN cur CROSS JOIN p LEFT JOIN day c ON c.as_of_date = pk.dd
+LATERAL VIEW inline(array(struct(
   round((cur.ovd / nullif(cur.port, 0) - c.ovd / nullif(c.port, 0)) * 100, 2) AS ratio_pp,
   round((cur.ovd - c.ovd) / p.usd, 0) AS overdue_usd,
-  round((cur.port - c.port) / p.usd, 0) AS ending_usd
-FROM pick pk CROSS JOIN cur CROSS JOIN p LEFT JOIN day c ON c.as_of_date = pk.dd
+  round((cur.port - c.port) / p.usd, 0) AS ending_usd))) v
 ORDER BY pk.ord
 """, ["report_date", "branch"])
     # 5 ngày có data gần nhất (chọn ngày KHÔNG theo chi nhánh, giá trị theo chi nhánh)
@@ -527,10 +535,12 @@ SELECT DISTINCT mng_br FROM {T} WHERE mng_br IS NOT NULL
             ("overdue_usd", "Overdue Balance (USD)", "overdue", "int"),
             ("ending_usd", "Ending Balance (USD)", "ending", "int")]):
         d.counter(ds_tick, col, title, 2 * i, 2, w=2, color=c["ticker"][key], fmt=fmt)
-    d.table(ds_cmp, "Comparison", [
-        ("cmp", "Compare", "text"), ("ratio_pp", "Overdue Ratio (pp)", "pct"),
-        ("overdue_usd", "Overdue Balance (USD)", "int"),
-        ("ending_usd", "Ending Balance (USD)", "int")], 0, 5, 6, 3)
+    # vs Last Day / Month / Year ngay dưới từng ticker (như stat-trends của bản gốc)
+    for i, (col, title) in enumerate([("ratio_txt", "Overdue Ratio"),
+                                      ("overdue_txt", "Overdue Balance (USD)"),
+                                      ("ending_txt", "Ending Balance (USD)")]):
+        d.table(ds_cmp, f"{title} vs Last Day / Month / Year",
+                [("cmp", "Compare", "text"), (col, "Change", "text")], 2 * i, 5, 2, 3)
     # top-charts-grid 1fr 1.5fr -> 2 + 4
     d.combo(ds_5d, "Overdue Trend (Last 5 Days)", 0, 8, 2, 7, cat="day",
             bar="overdue_k_usd", line="overdue_ratio", bar_title="Overdue Amount (1000 USD)",
