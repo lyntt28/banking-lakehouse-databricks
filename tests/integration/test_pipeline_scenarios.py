@@ -209,7 +209,7 @@ def test_4_duplicate_file_does_not_double_count(spark, env):
 def test_5_reconciliation_failure_keeps_serving_gold(spark, env):
     from pyspark.sql import functions as F
 
-    from pipelines.gold import GateFailed, GoldConfig
+    from pipelines.gold import PUBLISHED_TABLES, GateFailed, GoldConfig
     from pipelines.gold import run as gold_run
 
     n_pub = spark.table("ops.published_batches").count()
@@ -232,7 +232,7 @@ def test_5_reconciliation_failure_keeps_serving_gold(spark, env):
     assert spark.table("ops.published_batches").count() == n_pub
     # có version trước publish của mọi bảng Gold (để RESTORE)
     assert spark.sql("SELECT count(DISTINCT table_name) FROM ops.publish_versions "
-                     "WHERE layer = 'gold'").first()[0] == 17
+                     "WHERE layer = 'gold'").first()[0] == len(PUBLISHED_TABLES)
     assert _runs(spark, "gold")[-1] == (D2, "FAILED")
     gate = spark.sql("SELECT status, error FROM ops.task_runs WHERE layer = 'gold' "
                      "AND step = 'gold:gate' ORDER BY logged_at DESC LIMIT 1").first()
