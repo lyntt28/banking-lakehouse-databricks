@@ -81,6 +81,7 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
                                            first_acct=300_000_000)
     accounts += loan_accounts
     acc_ids = [a["account_id"] for a in accounts]
+    new_accounts: list[dict] = []   # TK mở sau ngày đầu (xem core.open_new_accounts)
     cards = cd.base_cards(rnd, customers, start)
     policies = cd.base_insurance(rnd, customers, cards, start)
     dep_prev: dict = {}
@@ -120,6 +121,10 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
             core.evolve_customers(rnd, customers)
             cd.evolve_cards(rnd, cards, customers, as_of)
             cd.evolve_insurance(rnd, policies, customers, cards, as_of)
+            # TK mở mới trong kỳ: danh sách RIÊNG + rnd riêng (cả lúc mở lẫn lúc snapshot),
+            # nên chuỗi ngẫu nhiên của mọi dữ liệu khác (thẻ, giao dịch...) giữ nguyên
+            core.open_new_accounts(random.Random(f"{seed}-{as_of}"), new_accounts, customers,
+                                   as_of, max(1, sizes.accounts // 100))
 
         add("fx_rates", write_csv(path("fx_rates", "fx_rates.csv"), ref.FX_HEADER,
                                   ref.fx_rows(as_of)))
@@ -127,11 +132,16 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
         add("customers", write_csv(path("customers", "customers.csv"),
                                    core.HEADERS["customers"], cust_rows))
         acc_rows, acc_failed = core.snap_accounts(rnd, accounts)
+        if new_accounts:
+            new_rows, new_failed = core.snap_accounts(
+                random.Random(f"{seed}-snap-{as_of}"), new_accounts)
+            acc_rows, acc_failed = acc_rows + new_rows, acc_failed | new_failed
+        all_accounts = accounts + new_accounts
         # KH bị NULL id hôm nay -> TK của KH đó rơi vào quarantine (FK) ở Silver, TRỪ KHI
         # KH đã có trong Silver từ ngày trước (Silver lấy khóa FK = silver hiện có + lô hôm nay)
         seen_cust |= {r[0] for r in cust_rows if r[0]}
         cust_ok = seen_cust
-        acc_failed |= {a["account_id"] for a in accounts if a["customer_id"] not in cust_ok}
+        acc_failed |= {a["account_id"] for a in all_accounts if a["customer_id"] not in cust_ok}
         add("accounts", write_csv(path("accounts", "accounts.csv"),
                                   core.HEADERS["accounts"], acc_rows))
         add("loans", write_csv(path("loans", "loans.csv"), core.HEADERS["loans"],
@@ -156,7 +166,7 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
         add("card_kpi", sm.write_card_kpis(out / "card_kpi" / part, kpis, as_of))
         add("deposit_summary", write_csv(
             path("deposit_summary", f"bang1247_{as_of:%Y%m%d}.txt"), sm.DEPOSIT_HEADER,
-            sm.deposit_summary(accounts, acc_failed, as_of, dep_prev, dep_month),
+            sm.deposit_summary(all_accounts, acc_failed, as_of, dep_prev, dep_month),
             delimiter="\t"))
     return counts
 

@@ -93,12 +93,16 @@ def ensure_ops_tables(spark, catalog: str) -> None:
         spark.sql(ddl.format(table=fq(catalog, "ops", name)))
 
 
+# Số file nguồn gửi mỗi ngày theo hợp đồng dữ liệu (mặc định 1). card_kpi: 1 file / nhóm KPI.
+EXPECTED_FILES = {"card_kpi_source": 9}
+
+
 def manifest_status(table: str, file_count: int, order: list[str]) -> str:
     """ARRIVED | MISSING (bảng bắt buộc chưa có file) | NOT_SENT (bảng tham chiếu không gửi)
-    | MULTIPLE_FILES (nhiều file cùng ngày: nguồn gửi lại / sửa file - cần kiểm tra)."""
+    | MULTIPLE_FILES (nhiều file hơn hợp đồng: nguồn gửi lại / sửa file - cần kiểm tra)."""
     if file_count == 0:
         return "MISSING" if table in required_tables(order) else "NOT_SENT"
-    return "MULTIPLE_FILES" if file_count > 1 else "ARRIVED"
+    return "MULTIPLE_FILES" if file_count > EXPECTED_FILES.get(table, 1) else "ARRIVED"
 
 
 def required_tables(order: list[str]) -> list[str]:
