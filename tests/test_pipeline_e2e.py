@@ -1,4 +1,4 @@
-"""End-to-end: chạy CHÍNH các notebook Silver + Gold qua nhiều ngày liên tiếp, như 05_backfill.
+"""End-to-end: chạy CHÍNH notebook 05_backfill (Silver + Gold qua nhiều ngày liên tiếp).
 
 Bắt các lỗi chỉ lộ ra từ ngày thứ 2 trở đi (MERGE / SCD2 có lịch sử, đối soát với file nguồn).
 Notebook chạy thật trên Spark + Delta local; chỉ giả lập `dbutils` và `display`.
@@ -108,9 +108,7 @@ def pipeline(spark, tmp_path_factory):
     days = [str(r[0]) for r in spark.table(f"{CATALOG}.bronze.loans")
             .select("_as_of_date").distinct().orderBy("_as_of_date").collect()]
     assert days == DAYS
-    for d in days:   # giống vòng lặp trong 05_backfill
-        run_notebook(spark, "src/02_silver/01_silver_transform.py", catalog=CATALOG, as_of_date=d)
-        run_notebook(spark, "src/03_gold/01_gold_build.py", catalog=CATALOG, as_of_date=d)
+    run_notebook(spark, "src/00_setup/05_backfill.py", catalog=CATALOG)
     return spark
 
 

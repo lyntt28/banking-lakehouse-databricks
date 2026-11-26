@@ -39,10 +39,19 @@ print(f"{len(days)} ngày: {days[:3]} ... {days[-3:]}")
 
 # COMMAND ----------
 
-for d in days:
-    args = {"catalog": catalog, "as_of_date": d}
-    dbutils.notebook.run("../02_silver/01_silver_transform", 3600, args)
-    dbutils.notebook.run("../03_gold/01_gold_build", 3600, args)
+import os  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+src_dir = str(Path(os.getcwd()).parents[0])
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
+
+from common.pipeline import run_gold, run_silver  # noqa: E402
+
+for d in days:   # cũ -> mới: SCD2 / so sánh D-1, M-1 cần đúng thứ tự
+    run_silver(spark, catalog, d)
+    run_gold(spark, catalog, d)
     print("xong", d)
 
 display(spark.table(f"{catalog}.gold.loan_mart_npl_daily").orderBy(F.desc("as_of_date")))
