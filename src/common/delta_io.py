@@ -71,5 +71,5 @@ def scd2_upsert(df: DataFrame, target: str, key: str, tracked: list[str],
             f"SCD2 {target}: đã có bản ghi hiệu lực sau {effective_date}; "
             "backfill phải chạy theo thứ tự ngày tăng dần"
         )
-    staging = build_scd2_staging(df, current, key, tracked)
+    staging = build_scd2_staging(df, current, key, tracked, effective_date)
     apply_scd2(staging, target, key, effective_date)

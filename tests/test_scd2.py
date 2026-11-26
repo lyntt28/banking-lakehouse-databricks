@@ -37,3 +37,18 @@ def test_new_customer_only_inserted(spark):
     staging = build_scd2_staging(incoming, _current(spark), "customer_id", TRACKED).collect()
     assert len(staging) == 1
     assert staging[0].merge_key is None
+
+
+def test_same_day_change_is_correction_not_new_version(spark):
+    from datetime import date
+
+    from pyspark.sql import functions as F
+
+    cur = _current(spark).withColumn("valid_from", F.lit(date(2026, 11, 2)))
+    incoming = spark.createDataFrame(
+        [("C2", "Tran B", "Thu Duc")], "customer_id string, full_name string, address string"
+    )
+    rows = build_scd2_staging(incoming, cur, "customer_id", TRACKED, "2026-11-02").collect()
+    assert [(r.merge_key, r._action) for r in rows] == [("C2", "correct")]
+    rows = build_scd2_staging(incoming, cur, "customer_id", TRACKED, "2026-11-03").collect()
+    assert sorted(r._action for r in rows) == ["close", "insert"]
