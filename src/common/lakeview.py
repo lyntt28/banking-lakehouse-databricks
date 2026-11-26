@@ -433,16 +433,9 @@ SELECT explode(array('consumer', 'corporate', 'all')) AS customer_type
 OVD_COLORS = {   # reference/dashboards/overdue/dashboardv200.js
     "amount": "#3498DB", "ratio": "#E67E22", "fx": "#0077B6",
     "ticker": {"ratio": "#48bb78", "overdue": "#4299e1", "ending": "#ed8936"},
-    # stackedColors (xanh nhạt -> đậm) theo thứ tự nhóm nợ
-    "debt_groups": {"1-10": "#BBDEFB", "11-90": "#90CAF9", "91-180": "#64B5F6",
-                    "181-360": "#42A5F5", "361+": "#1E88E5"},
     "products": ["#3498DB", "#E74C3C", "#2ECC71", "#F39C12", "#9B59B6", "#1ABC9C", "#E67E22",
                  "#34495E", "#E91E63", "#00BCD4"],
-    "top5": ["#3498DB", "#1976D2", "#2196F3", "#42A5F5", "#64B5F6"],
 }
-OVD_DEBT_GROUPS = list(OVD_COLORS["debt_groups"])   # bỏ nhóm "0" (chưa quá hạn)
-OVD_EXCLUDED_BRANCHES = ("8125",)                    # api_server: mng_br NOT IN ('8125')
-OVD_TOP_MIN_USD = 10_000                             # chỉ xếp hạng CN có nợ quá hạn > 10k USD
 
 
 def overdue_dashboard(catalog: str) -> dict:
@@ -500,12 +493,13 @@ SELECT m.month, coalesce(x.ovd, 0) / p.usd / 1000 AS overdue_k_usd,
        coalesce(x.ovd / nullif(x.port, 0) * 100, 0) AS overdue_ratio
 FROM m CROSS JOIN p LEFT JOIN day x ON x.as_of_date = m.last_d
 """, ["report_date", "branch"])
-    groups = ", ".join(f"'{g}'" for g in OVD_DEBT_GROUPS)
-    ds_dg = d.dataset("ovd_debt_groups", "Overdue Amount by Debt Groups", base + months + f"""
-SELECT m.month, f.del_grp AS debt_group, sum(f.ovd_bal) / p.usd / 1000 AS overdue_k_usd
-FROM m JOIN f ON f.as_of_date = m.last_d CROSS JOIN p
-WHERE f.del_grp IN ({groups})
-GROUP BY m.month, f.del_grp, p.usd
+    # như Last 5 Days nhưng theo tháng, từ tháng 1 năm của report_date (ngày cuối mỗi tháng)
+    ds_dg = d.dataset("ovd_debt_groups", "Overdue Amount by Debt Groups", base + f"""
+, m AS (SELECT date_format(as_of_date, 'yyyy-MM') AS month, max(as_of_date) AS last_d
+        FROM {T}, p WHERE as_of_date <= p.d AND year(as_of_date) = year(p.d) GROUP BY 1)
+SELECT m.month, coalesce(x.ovd, 0) / p.usd / 1000 AS overdue_k_usd,
+       coalesce(x.ovd / nullif(x.port, 0) * 100, 0) AS overdue_ratio
+FROM m CROSS JOIN p LEFT JOIN day x ON x.as_of_date = m.last_d
 """, ["report_date", "branch"])
     ds_pa = d.dataset("ovd_product_amount", "Overdue Amount by Product Groups", base + """
 SELECT coalesce(f.product_group, 'Other') AS product_group,
@@ -518,17 +512,6 @@ SELECT product_group, overdue_ratio FROM (
          coalesce(sum(f.ovd_bal) / nullif(sum(f.port_bal), 0) * 100, 0) AS overdue_ratio
   FROM f, p WHERE f.as_of_date = p.d GROUP BY 1)
 ORDER BY overdue_ratio DESC LIMIT 5
-""", ["report_date", "branch"])
-    excl = ", ".join(f"'{b}'" for b in OVD_EXCLUDED_BRANCHES)
-    ds_top = d.dataset("ovd_branch_top5", "Overdue Ratio by Branches - Top5", base + f"""
-, b AS (SELECT f.mng_br, coalesce(max(db.br_name), f.mng_br) AS branch,
-               sum(f.ovd_bal) / nullif(sum(f.port_bal), 0) * 100 AS ratio,
-               sum(f.ovd_bal) / max(p.usd) AS overdue_usd
-        FROM f CROSS JOIN p LEFT JOIN {G}.dim_branch db ON db.branchnbr = f.mng_br
-        WHERE f.as_of_date = p.d AND f.mng_br NOT IN ({excl}) GROUP BY f.mng_br)
-SELECT concat('#', rn) AS rank, concat('#', rn, ' ', upper(branch)) AS branch, ratio
-FROM (SELECT *, row_number() OVER (ORDER BY ratio DESC) AS rn FROM b
-      WHERE overdue_usd > {OVD_TOP_MIN_USD}) WHERE rn <= 5
 """, ["report_date", "branch"])
     ds_br = d.dataset("ovd_branch_options", "Branch options", f"""
 SELECT 'all' AS branch UNION ALL
@@ -556,19 +539,15 @@ SELECT DISTINCT mng_br FROM {T} WHERE mng_br IS NOT NULL
             bar="overdue_k_usd", line="overdue_ratio", bar_title="Overdue Amount (1000 USD)",
             line_title="Overdue Ratio (%)", bar_color=c["amount"], line_color=c["ratio"])
     # debt-groups-grid 1fr
-    d.chart("bar", ds_dg, "Overdue Amount by Debt Groups", 0, 15, 6, 7, cat="month",
-            series="debt_group", val="overdue_k_usd", layout="stack",
-            colors=c["debt_groups"], val_title="1000 USD")
+    d.combo(ds_dg, "Overdue Amount by Debt Groups", 0, 15, 6, 7, cat="month",
+            bar="overdue_k_usd", line="overdue_ratio", bar_title="Overdue Amount (1000 USD)",
+            line_title="Overdue Ratio (%)", bar_color=c["amount"], line_color=c["ratio"])
     # product-groups-grid 1fr 1fr
     d.chart("pie", ds_pa, "Overdue Amount by Product Groups", 0, 22, 3, 7,
             cat="product_group", val="overdue_k_usd", val_title="1000 USD")
     d.chart("bar", ds_pr, "Overdue Ratio by Product Groups", 3, 22, 3, 7,
             cat="product_group", val="overdue_ratio", horizontal=True,
             single_color=c["amount"], sort_desc=True, val_title="Overdue Ratio (%)")
-    # branches-grid 1fr (treemap gốc -> bar ngang top 5)
-    d.chart("bar", ds_top, "Overdue Ratio by Branches - Top5", 0, 29, 6, 6, cat="branch",
-            val="ratio", horizontal=True, series="rank", sort_desc=True,
-            colors={f"#{i + 1}": col for i, col in enumerate(c["top5"])})
     d.param_filter("report_date", "Report date", "filter-date-picker", 4, 0)
     d.param_filter("branch", "Branch", "filter-single-select", 5, 0,
                    options_ds=ds_br, options_col="branch")
