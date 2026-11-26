@@ -236,9 +236,9 @@ def card_dashboard(catalog: str) -> dict:
     d.param("customer_type", "Customer type", "STRING", "consumer")
     usd = USD_RATE.format(silver=_q(catalog, "silver"))
     base = f"""
-WITH p AS (SELECT {_report_day(f'{G}.mart_card_kpi_daily')} AS d, {usd} AS usd),
+WITH p AS (SELECT {_report_day(f'{G}.card_mart_kpi_daily')} AS d, {usd} AS usd),
 f AS (
-  SELECT k.* FROM {G}.mart_card_kpi_daily k
+  SELECT k.* FROM {G}.card_mart_kpi_daily k
   WHERE :customer_type = 'all'
      OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),
 day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,
@@ -321,12 +321,12 @@ ORDER BY k.ord
 """, ["report_date", "customer_type"])
 
     ds_new = d.dataset("card_new_acq", "New Acquisition by channel", f"""
-WITH p AS (SELECT {_report_day(f'{G}.mart_card_kpi_daily')} AS d)
+WITH p AS (SELECT {_report_day(f'{G}.card_mart_kpi_daily')} AS d)
 SELECT date_format(k.as_of_date, 'yyyy-MM') AS month,
        CASE k.acquisition_channel WHEN 'SMART_CREDIT' THEN 'Smart Credit'
             ELSE 'Branches' END AS channel,
        sum(k.new_members) AS cards
-FROM {G}.mart_card_kpi_daily k CROSS JOIN p
+FROM {G}.card_mart_kpi_daily k CROSS JOIN p
 WHERE k.as_of_date <= p.d
   AND date_format(k.as_of_date, 'yyyy-MM') > date_format(add_months(p.d, -7), 'yyyy-MM')
   AND (:customer_type = 'all'
@@ -454,8 +454,8 @@ def overdue_dashboard(catalog: str) -> dict:
     d.param("branch", "Branch", "STRING", "all")
     usd = USD_RATE.format(silver=_q(catalog, "silver"))
     base = f"""
-WITH p AS (SELECT {_report_day(f'{G}.mart_loan_overdue_daily')} AS d, {usd} AS usd),
-f AS (SELECT * FROM {G}.mart_loan_overdue_daily WHERE :branch = 'all' OR branchnbr = :branch),
+WITH p AS (SELECT {_report_day(f'{G}.loan_mart_overdue_daily')} AS d, {usd} AS usd),
+f AS (SELECT * FROM {G}.loan_mart_overdue_daily WHERE :branch = 'all' OR branchnbr = :branch),
 day AS (SELECT as_of_date, sum(overdue_balance) ovd, sum(portfolio_balance) port
         FROM f GROUP BY as_of_date)
 """
@@ -513,10 +513,10 @@ SELECT coalesce(f.product_group, 'Other') AS product_group,
 FROM f, p WHERE f.as_of_date = p.d GROUP BY 1
 """, ["report_date", "branch"])
     ds_top = d.dataset("ovd_branch_top5", "Overdue Ratio by Branches - Top5", f"""
-WITH p AS (SELECT {_report_day(f'{G}.mart_loan_overdue_daily')} AS d),
+WITH p AS (SELECT {_report_day(f'{G}.loan_mart_overdue_daily')} AS d),
 b AS (SELECT o.branchnbr, coalesce(db.br_name, o.branchnbr) AS branch,
              sum(o.overdue_balance) / nullif(sum(o.portfolio_balance), 0) * 100 AS ratio
-      FROM {G}.mart_loan_overdue_daily o CROSS JOIN p
+      FROM {G}.loan_mart_overdue_daily o CROSS JOIN p
       LEFT JOIN {G}.dim_branch db ON db.branchnbr = o.branchnbr
       WHERE o.as_of_date = p.d GROUP BY 1, 2)
 SELECT concat('#', rn) AS rank, concat('#', rn, ' ', branch) AS branch, ratio
@@ -588,14 +588,14 @@ def deposit_dashboard(catalog: str) -> dict:
     d.param("report_date", "Report date", "DATE", "now/d")
     d.param("region", "Region", "STRING", "all")
     base = f"""
-WITH p AS (SELECT {_report_day(f'{G}.mart_deposit_trend')} AS d),
-f AS (SELECT * FROM {G}.mart_deposit_trend WHERE :region = 'all' OR region = :region),
+WITH p AS (SELECT {_report_day(f'{G}.dep_mart_trend')} AS d),
+f AS (SELECT * FROM {G}.dep_mart_trend WHERE :region = 'all' OR region = :region),
 day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)
 """
     ds_tick = d.dataset("dep_tickers", "Tickers", base + f"""
 , cust AS (
   SELECT c.as_of_date, sum(c.retail_customers) AS retail
-  FROM {G}.mart_casa_customer c LEFT JOIN {G}.dim_branch b ON b.branchnbr = c.branchnbr
+  FROM {G}.dep_mart_casa_customer c LEFT JOIN {G}.dim_branch b ON b.branchnbr = c.branchnbr
   WHERE :region = 'all' OR b.region = :region GROUP BY 1)
 SELECT x.bal AS ending_balance,
   (SELECT avg(bal) FROM day, p WHERE date_trunc('MM', as_of_date) = date_trunc('MM', p.d)
@@ -656,18 +656,18 @@ FROM m, p WHERE m.yr IN (year(p.d), year(p.d) - 1) AND make_date(m.yr, m.mn, 1) 
 SELECT region, sum(balance_vnd) AS balance FROM f, p WHERE f.as_of_date = p.d GROUP BY 1
 """, ["report_date", "region"])
     ds_term = d.dataset("dep_term", "Deposit by Term and IR (in Month)", f"""
-WITH p AS (SELECT {_report_day(f'{G}.mart_deposit_by_tenor')} AS d)
+WITH p AS (SELECT {_report_day(f'{G}.dep_mart_by_tenor')} AS d)
 SELECT concat(t.tenor_months, 'M') AS tenor, t.tenor_months,
        sum(t.balance_vnd) AS balance,
        sum(t.weighted_rate * t.balance_vnd) / nullif(sum(t.balance_vnd), 0) * 100 AS avg_interest
-FROM {G}.mart_deposit_by_tenor t, p WHERE t.as_of_date = p.d GROUP BY 1, 2
+FROM {G}.dep_mart_by_tenor t, p WHERE t.as_of_date = p.d GROUP BY 1, 2
 ORDER BY t.tenor_months
 """, ["report_date"])
     ds_casa = d.dataset("dep_casa_customer", "CASA Customer Distribution", f"""
-WITH p AS (SELECT {_report_day(f'{G}.mart_casa_customer')} AS d),
+WITH p AS (SELECT {_report_day(f'{G}.dep_mart_casa_customer')} AS d),
 c AS (SELECT sum(c.retail_customers) retail, sum(c.casa_active_customers) active,
              sum(c.casa_dormant_customers) dormant
-      FROM {G}.mart_casa_customer c CROSS JOIN p
+      FROM {G}.dep_mart_casa_customer c CROSS JOIN p
       LEFT JOIN {G}.dim_branch b ON b.branchnbr = c.branchnbr
       WHERE c.as_of_date = p.d AND (:region = 'all' OR b.region = :region))
 SELECT 'Non-CASA' AS segment, retail - active - dormant AS customers FROM c
@@ -675,9 +675,9 @@ UNION ALL SELECT 'Active', active FROM c
 UNION ALL SELECT 'Dormant', dormant FROM c
 """, ["report_date", "region"])
     ds_ks = d.dataset("dep_edusave", "Edu-Save New open Account_ Accumulate by Month", f"""
-WITH p AS (SELECT {_report_day(f'{G}.mart_deposit_trend')} AS d)
+WITH p AS (SELECT {_report_day(f'{G}.dep_mart_trend')} AS d)
 SELECT n.open_month AS month, sum(n.new_accounts_ytd) AS cumulative_accounts
-FROM {G}.mart_deposit_new_accounts n CROSS JOIN p
+FROM {G}.dep_mart_new_accounts n CROSS JOIN p
 LEFT JOIN {G}.dim_branch b ON b.branchnbr = n.branchnbr
 WHERE n.product_type = 'EDUSAVE' AND n.open_month <= date_format(p.d, 'yyyy-MM')
   AND n.open_month > date_format(add_months(p.d, -12), 'yyyy-MM')

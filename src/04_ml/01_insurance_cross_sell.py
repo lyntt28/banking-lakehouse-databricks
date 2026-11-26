@@ -1,12 +1,12 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # 04 - ML: bán chéo bảo hiểm (propensity) - feature table, train, MLflow, chấm điểm
-# MAGIC 1. Feature 1 dòng / KH cá nhân / ngày từ Silver -> `gold.feature_customer_insurance`.
+# MAGIC 1. Feature 1 dòng / KH cá nhân / ngày từ Silver -> `gold.ins_feature_customer`.
 # MAGIC 2. Nhãn: `label_mode=holder` (đang có HĐ INFORCE) hoặc `future` (mua mới trong
 # MAGIC    `horizon_days` sau as_of; cần lịch sử, chọn as_of cũ hơn ngày mới nhất >= horizon).
 # MAGIC 3. Train HistGradientBoosting, log MLflow (ROC-AUC, PR-AUC, lift top 10%),
-# MAGIC    đăng ký model Unity Catalog `<catalog>.gold.insurance_propensity`.
-# MAGIC 4. Chấm điểm KH CHƯA có HĐ -> `gold.insurance_propensity_scores` (danh sách cho telesale).
+# MAGIC    đăng ký model Unity Catalog `<catalog>.gold.ins_propensity_model`.
+# MAGIC 4. Chấm điểm KH CHƯA có HĐ -> `gold.ins_propensity_scores` (danh sách cho telesale).
 
 # COMMAND ----------
 
@@ -56,7 +56,7 @@ from common.ml_features import (  # noqa: E402
 
 S, G = f"{catalog}.silver", f"{catalog}.gold"
 if not as_of_date:
-    as_of_date = str(spark.table(f"{S}.loans").agg(F.max("as_of_date")).first()[0])
+    as_of_date = str(spark.table(f"{S}.loan_snapshots").agg(F.max("as_of_date")).first()[0])
 assert_pipeline_identity(spark, catalog)
 as_of_date = check_date(as_of_date)
 day = F.lit(as_of_date).cast("date")
@@ -65,20 +65,20 @@ print(f"as_of_date={as_of_date} label_mode={label_mode}")
 # COMMAND ----------
 
 # 1) Feature table (point-in-time: phiên bản KH có hiệu lực tại as_of)
-customers = spark.table(f"{S}.customers").filter(
+customers = spark.table(f"{S}.core_customers").filter(
     (F.col("valid_from") <= day) & (F.col("valid_to").isNull() | (F.col("valid_to") >= day)))
 feats = build_customer_features(
-    as_of_date, customers, spark.table(f"{S}.accounts"), spark.table(f"{S}.loans"),
-    spark.table(f"{S}.cards"), spark.table(f"{S}.card_transactions"),
-    spark.table(f"{S}.fx_rates").filter(F.col("rate_date") <= day)
+    as_of_date, customers, spark.table(f"{S}.core_accounts"), spark.table(f"{S}.loan_snapshots"),
+    spark.table(f"{S}.card_master"), spark.table(f"{S}.card_transactions_hist"),
+    spark.table(f"{S}.ref_fx_rates").filter(F.col("rate_date") <= day)
     .groupBy("currencycd").agg(F.max_by("rate_to_vnd", "rate_date").alias("rate_to_vnd")))
-overwrite_date(feats, f"{G}.feature_customer_insurance", "as_of_date", as_of_date)
-feats = spark.table(f"{G}.feature_customer_insurance").filter(F.col("as_of_date") == day)
+overwrite_date(feats, f"{G}.ins_feature_customer", "as_of_date", as_of_date)
+feats = spark.table(f"{G}.ins_feature_customer").filter(F.col("as_of_date") == day)
 
 # COMMAND ----------
 
 # 2) Train + MLflow
-policies = spark.table(f"{S}.insurance_policies")
+policies = spark.table(f"{S}.ins_policies")
 labels = build_labels(policies, as_of_date, label_mode, horizon)
 pdf = training_set(feats, labels, policies, as_of_date, label_mode).toPandas()
 print(f"{len(pdf):,} KH, tỷ lệ nhãn 1 = {pdf['label'].mean():.3%}")
@@ -94,7 +94,7 @@ with mlflow.start_run(run_name=f"hgb_{label_mode}_{as_of_date}") as run:
     sample = pdf[NUMERIC_FEATURES].astype(float).head(5)
     mlflow.sklearn.log_model(
         model, "model", input_example=sample,
-        registered_model_name=f"{G}.insurance_propensity" if register else None)
+        registered_model_name=f"{G}.ins_propensity_model" if register else None)
 print(metrics)
 
 # COMMAND ----------
@@ -107,6 +107,6 @@ scores = spark.createDataFrame(cand[["customer_id", "segment", "province", "scor
     .withColumn("as_of_date", day) \
     .withColumn("score_decile", F.ntile(10).over(Window.orderBy(F.desc("score")))) \
     .withColumn("model_run_id", F.lit(run.info.run_id))
-overwrite_date(scores, f"{G}.insurance_propensity_scores", "as_of_date", as_of_date)
-display(spark.table(f"{G}.insurance_propensity_scores")
+overwrite_date(scores, f"{G}.ins_propensity_scores", "as_of_date", as_of_date)
+display(spark.table(f"{G}.ins_propensity_scores")
         .filter(F.col("as_of_date") == day).orderBy(F.desc("score")).limit(20))
