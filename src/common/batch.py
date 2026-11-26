@@ -274,3 +274,33 @@ def record_versions(spark, catalog: str, run_id: str, as_of_date: str, layer: st
      .withColumn("as_of_date", F.col("as_of_date").cast("date"))
      .withColumn("captured_at", F.current_timestamp())
      .write.format("delta").mode("append").saveAsTable(fq(catalog, "ops", "publish_versions")))
+
+
+def rollback_statements(versions: list[tuple[str, int | None, int | None]]) -> list[str]:
+    """SQL đưa các bảng về trạng thái TRƯỚC publish. versions: (bảng, version_before, hiện tại).
+
+    - version_before NULL + bảng đang tồn tại: bảng được tạo trong lần publish lỗi -> DROP
+    - hiện tại == version_before: bảng chưa bị ghi -> bỏ qua
+    - còn lại: RESTORE về version_before
+    """
+    out = []
+    for table, before, current in versions:
+        if before is None:
+            if current is not None:
+                out.append(f"DROP TABLE IF EXISTS {table}")
+        elif current != before:
+            out.append(f"RESTORE TABLE {table} TO VERSION AS OF {int(before)}")
+    return out
+
+
+def rollback_publish(spark, catalog: str, run_id: str) -> list[str]:
+    """Publish Gold lỗi giữa chừng (vd: bảng thứ 3/17): đưa MỌI bảng đã ghi về version trước
+    publish -> Gold toàn vẹn ở batch cũ, không trộn bảng mới / cũ. Trả về các lệnh đã chạy."""
+    t = fq(catalog, "ops", "publish_versions")
+    rows = spark.sql(f"SELECT table_name, version_before FROM {t} "
+                     f"WHERE run_id = '{run_id}'").collect()
+    stmts = rollback_statements([(r.table_name, r.version_before,
+                                  table_version(spark, r.table_name)) for r in rows])
+    for sql in stmts:
+        spark.sql(sql)
+    return stmts

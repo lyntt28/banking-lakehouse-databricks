@@ -9,6 +9,7 @@ Kịch bản sự cố (chạy tuần tự, mỗi test dựa trên trạng thái
     3b. lỗi giữa chừng (bảng thứ N) -> Silver không bị ghi dở; sửa xong chạy lại hội tụ
     4. file trùng (gửi lại)        -> không nhân đôi dữ liệu, manifest báo MULTIPLE_FILES
     5. đối soát lệch               -> GateFailed, Gold đang phục vụ KHÔNG đổi, không publish
+    5b. lỗi GIỮA bước publish Gold -> tự rollback mọi bảng đã ghi, không publish batch
     6. backfill ngày cũ hơn SCD2   -> bị từ chối, dữ liệu hiện tại không đổi
 """
 
@@ -237,6 +238,36 @@ def test_5_reconciliation_failure_keeps_serving_gold(spark, env):
     gate = spark.sql("SELECT status, error FROM ops.task_runs WHERE layer = 'gold' "
                      "AND step = 'gold:gate' ORDER BY logged_at DESC LIMIT 1").first()
     assert gate.status == "FAILED" and "Gate" in gate.error
+
+
+def test_5b_failure_midway_through_gold_publish_is_rolled_back(spark, env, monkeypatch):
+    """Lỗi hạ tầng khi đang ghi bảng Gold thứ N/17: mọi bảng đã ghi phải được RESTORE,
+    published_batches không có dòng mới -> dashboard vẫn ở batch cũ, không trộn mới / cũ."""
+    import pipelines.gold as pg
+    from pipelines.gold import GoldConfig
+    from pipelines.gold import run as gold_run
+
+    n_pub = spark.table("ops.published_batches").count()
+    real = pg.overwrite_date
+
+    def boom(df, target, *a, **k):
+        if target.endswith("card_mart_kpi_daily"):   # ~ bảng thứ 11: 10 bảng trước đã ghi
+            raise OSError("storage timeout (giả lập)")
+        return real(df, target, *a, **k)
+
+    monkeypatch.setattr(pg, "overwrite_date", boom)
+    with pytest.raises(OSError):
+        gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
+    assert _gold_fingerprint(spark) == env["gold_ok"]
+    assert spark.table("ops.published_batches").count() == n_pub
+    last = spark.sql("SELECT status, message FROM ops.pipeline_runs WHERE layer = 'gold' "
+                     "ORDER BY started_at DESC, status LIMIT 1").first()
+    assert last.status == "FAILED" and "rollback" in last.message
+
+    monkeypatch.setattr(pg, "overwrite_date", real)
+    gold_run(spark, GoldConfig(catalog="", as_of_date=D2))      # hạ tầng ổn -> chạy lại
+    assert _gold_fingerprint(spark) == env["gold_ok"]
+    _assert_integrity(spark)
 
 
 def test_6_out_of_order_rerun_rejected_without_damage(spark, env):

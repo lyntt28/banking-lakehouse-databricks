@@ -2,7 +2,9 @@
 (docs/gold_dashboards.md). Dashboard (Databricks SQL / Power BI) chỉ cần SELECT * từ view.
 
 Màu sắc / bố cục / loại biểu đồ KHÔNG nằm ở đây - sẽ dựng theo ảnh chụp dashboard gốc.
-Template dùng {catalog}; ngày báo cáo = ngày mới nhất có dữ liệu trong mart.
+Template dùng {catalog}; ngày báo cáo = batch mới nhất ĐÃ PUBLISH (ops.published_batches), không
+phải max(as_of_date) của từng mart: publish đang chạy dở / bị rollback thì dashboard vẫn đọc
+batch hợp lệ trước đó, mọi visual cùng một ngày.
 """
 
 from __future__ import annotations
@@ -16,6 +18,8 @@ def _v(dash: str, order: int, name: str, desc: str, sql: str) -> None:
 
 
 G = "{catalog}.gold"
+# ngày Gold đang phục vụ: chỉ đổi khi publish đủ 17 bảng (pipelines/gold.py)
+PUB = "(SELECT max(as_of_date) FROM {catalog}.ops.published_batches)"
 
 # ============================================================ 1. CARD BUSINESS
 _CARD_MONTH = f"""
@@ -70,7 +74,7 @@ _v("card", 2, "v_card_new_by_channel_7m",
 SELECT date_format(as_of_date, 'yyyy-MM') AS year_month, acquisition_channel,
        sum(new_members) AS new_cards
 FROM {G}.card_mart_kpi_daily
-WHERE as_of_date > add_months((SELECT max(as_of_date) FROM {G}.card_mart_kpi_daily), -7)
+WHERE as_of_date > add_months({PUB}, -7) AND as_of_date <= {PUB}
 GROUP BY 1, 2
 """)
 
@@ -97,13 +101,13 @@ _v("card", 5, "v_card_spend_distribution",
    f"""
 SELECT 'sector' AS donut, txn_type AS slice, sum(amount) AS amount
 FROM {G}.card_mart_spend_mix
-WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.card_mart_spend_mix) GROUP BY txn_type
+WHERE as_of_date = {PUB} GROUP BY txn_type
 UNION ALL
 SELECT 'location', location, sum(amount) FROM {G}.card_mart_spend_mix
-WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.card_mart_spend_mix) GROUP BY location
+WHERE as_of_date = {PUB} GROUP BY location
 UNION ALL
 SELECT 'channel', channel, sum(amount) FROM {G}.card_mart_spend_mix
-WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.card_mart_spend_mix) GROUP BY channel
+WHERE as_of_date = {PUB} GROUP BY channel
 """)
 
 _v("card", 6, "v_card_delinquency",
@@ -115,12 +119,12 @@ SELECT as_of_date,
   sum(dpd_30p_balance) / nullif(sum(balance), 0) * 100 AS dpd_30p_ratio,
   sum(npl_90p_balance) / nullif(sum(balance), 0) * 100 AS npl_90p_ratio
 FROM {G}.card_mart_kpi_daily
-WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.card_mart_kpi_daily)
+WHERE as_of_date = {PUB}
 GROUP BY as_of_date
 """)
 
 # ============================================================ 2. OVERDUE (RAMC)
-_LAST_LOAN = f"(SELECT max(as_of_date) FROM {G}.loan_mart_overdue_daily)"
+_LAST_LOAN = PUB
 
 _v("overdue", 1, "v_overdue_tickers",
    "3 tickers: overdue amount, overdue ratio, vs D-1 / M-1 / Y-1",
@@ -131,7 +135,7 @@ SELECT as_of_date, overdue_balance, portfolio_balance, overdue_ratio * 100 AS ov
   (overdue_ratio - overdue_ratio_y1) * 100 AS ratio_vs_y1_pp,
   npl_ratio * 100 AS npl_ratio_pct
 FROM {G}.loan_mart_npl_daily
-WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.loan_mart_npl_daily)
+WHERE as_of_date = {PUB}
 """)
 
 _v("overdue", 2, "v_overdue_daily_trend",
@@ -139,7 +143,7 @@ _v("overdue", 2, "v_overdue_daily_trend",
    f"""
 SELECT as_of_date, overdue_balance, overdue_ratio * 100 AS overdue_ratio_pct
 FROM {G}.loan_mart_npl_daily
-WHERE as_of_date > (SELECT max(as_of_date) FROM {G}.loan_mart_npl_daily) - INTERVAL 30 DAYS
+WHERE as_of_date > {PUB} - INTERVAL 30 DAYS AND as_of_date <= {PUB}
 """)
 
 _v("overdue", 3, "v_overdue_monthly_trend",
@@ -190,7 +194,7 @@ WHERE o.as_of_date = {_LAST_LOAN} GROUP BY o.branchnbr, b.br_name, b.region
 """)
 
 # ============================================================ 3. RETAIL DEPOSIT (RCD)
-_LAST_DEP = f"(SELECT max(as_of_date) FROM {G}.dep_mart_trend)"
+_LAST_DEP = PUB
 
 _v("deposit", 1, "v_deposit_gauges",
    "3 gauges: % target All products, CASA, TDA/ISA (targets: total only, class split "
@@ -260,7 +264,7 @@ SELECT tenor_months, group_class, sum(balance_vnd) AS balance, min(min_rate) AS 
        max(max_rate) AS max_rate,
        sum(weighted_rate * balance_vnd) / nullif(sum(balance_vnd), 0) AS avg_rate
 FROM {G}.dep_mart_by_tenor
-WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.dep_mart_by_tenor) GROUP BY 1, 2
+WHERE as_of_date = {PUB} GROUP BY 1, 2
 """)
 
 _v("deposit", 7, "v_casa_customer_distribution",
@@ -269,7 +273,7 @@ _v("deposit", 7, "v_casa_customer_distribution",
 SELECT c.branchnbr, b.br_name, b.region, c.retail_customers, c.casa_customers,
        c.casa_active_customers, c.casa_dormant_customers, c.casa_penetration_pct
 FROM {G}.dep_mart_casa_customer c LEFT JOIN {G}.dim_branch b ON c.branchnbr = b.branchnbr
-WHERE c.as_of_date = (SELECT max(as_of_date) FROM {G}.dep_mart_casa_customer)
+WHERE c.as_of_date = {PUB}
 """)
 
 _v("deposit", 8, "v_edusave_new_accounts",
