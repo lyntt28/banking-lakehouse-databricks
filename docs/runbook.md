@@ -50,12 +50,13 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
 - **NẾU LỖI:** `PATH_NOT_FOUND` → bước 2 chưa chạy; schema lạ → xem cột `_rescued_data`.
 
 ## 4. `src/00_setup/05_backfill` (Silver + Gold cho mọi ngày, cũ → mới)
-- **MỤC ĐÍCH:** chạy `02_silver/01_silver_transform` rồi `03_gold/01_gold_build` cho từng ngày
-  theo thứ tự thời gian (SCD2 và so sánh D-1/M-1/Y-1 cần đúng thứ tự).
-- **Widget:** `catalog = bank_dev`, `from_date` để trống
+- **MỤC ĐÍCH:** gọi `02_silver/01_silver_transform` rồi `03_gold/01_gold_build` không truyền ngày;
+  2 notebook tự xử lý mọi ngày sau watermark trong `ops.pipeline_runs`, tăng dần.
+- **Widget:** `catalog = bank_dev`, `reset = false`
+- **`reset = true`:** chỉ dev/test (bị chặn khi catalog là `*_prod`). Drop Silver, Gold, gold_stage
+  và trạng thái batch rồi dựng lại; sau đó chạy lại governance.
 - **Lưu ý SCD2:** `silver.core_customers` từ chối nạp ngày cũ hơn bản hiện hành (báo lỗi
-  "thứ tự ngày"). Muốn chạy lại backfill từ ngày cũ: `DROP TABLE <catalog>.silver.core_customers`
-  (và `gold.dim_customer`) trước, rồi chạy lại từ đầu.
+  "thứ tự ngày"). Xem mục *Ngữ nghĩa chạy lại* bên dưới.
 - **KIỂM TRA:**
   ```sql
   -- DQ từng rule, ngày mới nhất
@@ -125,12 +126,54 @@ databricks bundle run banking_lakehouse_daily -t dev
 
 ---
 
+## Batch control & ngữ nghĩa chạy lại
+
+**Bảng trạng thái**
+- `ops.pipeline_runs`: mỗi ngày dữ liệu × layer (silver/gold) × lần chạy: RUNNING → SUCCESS/FAILED.
+  Watermark = ngày SUCCESS lớn nhất. Lần đầu nâng cấp (chưa có bảng) → suy từ dữ liệu sẵn có.
+- `ops.published_batches`: ngày Gold đã qua gate đối soát (kèm số liệu kiểm tra dạng JSON).
+  Consumer (ML) chỉ dùng ngày trong bảng này và dừng nếu batch mới nhất cũ hơn `max_gold_age_days`.
+
+**Luồng 1 ngày**
+1. Silver: thiếu file của bảng bắt buộc (mọi bảng trừ `ref_branches`, `ref_products`,
+   `ref_targets`) → FAILED, dừng; các ngày sau **không** chạy (SCD2 cần đúng thứ tự).
+2. Gold: tính mart dùng để đối soát → ghi `gold_stage` → đối soát (dư nợ Silver–Gold, KPI thẻ,
+   tiền gửi bang1247) → lệch thì dừng, **bảng Gold mà dashboard đọc không bị đụng tới**;
+   đạt thì mới publish vào `gold` và ghi `ops.published_batches`.
+   Lưu ý: publish ghi nhiều bảng lần lượt (Delta atomic theo từng bảng). Nếu lỗi giữa chừng
+   (hạ tầng), chạy lại ngày đó: mọi bước publish idempotent (replaceWhere / MERGE / overwrite).
+
+| Tình huống | Làm gì | Cơ chế |
+|---|---|---|
+| **Retry** (task lỗi tạm thời) | Job tự retry / chạy lại job | Idempotent: MERGE theo khóa, replaceWhere theo ngày, SCD2 so hash |
+| **Gián đoạn nhiều ngày** | Chạy job như thường, `as_of_date` trống | Xử lý mọi ngày sau watermark |
+| **File về trễ** | Chờ file, chạy lại job | Ngày thiếu file FAILED, watermark đứng yên |
+| **Rerun 1 ngày** (cùng dữ liệu) | Job với `as_of_date=<ngày>` | Không đổi kết quả |
+| **Correction** (nguồn gửi lại file sửa của ngày D) | Đặt file mới (tên khác) vào landing → Bronze nạp; chạy `as_of_date=D` | Snapshot (loan fact, mart): ghi đè cả ngày → dòng bị rút cũng biến mất. SCD2 cùng ngày: sửa tại chỗ phiên bản ngày D. Giao dịch (`core_transactions`, insert-only): **không** cập nhật bản đã có – cần quy trình sửa riêng (reversal/adjustment từ nguồn) |
+| **Backfill ngày cũ hơn bản SCD2 hiện hành** | dev/test: `05_backfill reset=true`. prod: dựng catalog/schema song song từ Bronze, kiểm tra, rồi chuyển consumer | SCD2 không cho chèn vào quá khứ (tránh lịch sử sai) |
+
+**SCD2 (`silver.core_customers`)**: ngữ nghĩa *daily snapshot* – tối đa 1 phiên bản / khách hàng /
+ngày, khoảng `[valid_from, valid_to]` không chồng lấn → as-of join ra đúng 1 dòng, `customer_sk`
+(hash `customer_id`, `valid_from`) duy nhất.
+
+## Identity & quyền
+- **Deploy identity**: service principal dùng trong CI/CD qua GitHub OIDC (không PAT); federation
+  policy riêng cho `environment:ci` (chỉ validate), `environment:test`, `environment:prod`.
+- **Runtime identity**: service principal khác (`run_as` trong `databricks.yml`, biến `run_as_sp`),
+  thuộc `data_engineers` để thấy PII khi ghi (xem `assert_pipeline_identity`).
+- Governance: prod chạy `dry_run=false`. Nhóm đọc giới hạn được cấp SELECT **theo bảng**
+  (`TABLE_GRANTS`), không theo schema; `ops.dq_quarantine` (record_json chứa PII gốc) chỉ
+  `data_engineers`/`bank_admins` đọc được. Trên Free Edition đây là **governance simulation**
+  (không có account group) – chưa được enforce thật.
+
 ## Trạng thái kiểm chứng
 | Phần | Unit test (CI) | Chạy trên Databricks |
 |---|---|---|
 | Generator, Bronze, Silver, Gold, views, governance SQL, ML features | ✅ | ⬜ |
 | MERGE / SCD2 / replaceWhere trên Delta (local) | ✅ (PR #13) | ⬜ |
-| Bundle validate / deploy, CD | ⬜ (chưa có secret) | ⬜ |
+| Batch control, SCD2 cùng ngày, governance grants (unit test) | ✅ | ⬜ |
+| Gate đối soát trước publish Gold | ⬜ (chỉ chạy được trên Databricks) | ⬜ |
+| Bundle validate / deploy, CD | ⬜ (`CD_ENABLED` chưa bật) | ⬜ |
 
 ## Quy ước tên bảng (tiền tố theo nghiệp vụ)
 
