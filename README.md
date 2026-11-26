@@ -56,7 +56,10 @@ Deployment   : Declarative Automation Bundles (DAB) + GitHub Actions
 ## CI/CD
 - **CI** (`.github/workflows/ci.yml`, every PR): ruff, pytest on local Spark, `bundle validate`.
 - **CD** (`.github/workflows/cd.yml`, push to `main`): tests → deploy bundle to `test` and run the daily job there (DQ gate and reconciliation failures stop the pipeline) → wait for approval → deploy to `prod`. Only `prod` has a schedule (06:30 Asia/Ho_Chi_Minh).
-- One-time setup in GitHub → Settings → Environments: create `test` and `prod`, add secret `DATABRICKS_HOST` and either `DATABRICKS_CLIENT_ID` (OIDC, preferred: federation policy for `repo:<owner>/<repo>:environment:<env>`) or `DATABRICKS_TOKEN`; add *Required reviewers* to `prod`. Without secrets the deploy jobs only print a warning.
+- One-time setup in GitHub → Settings → Environments: create `ci`, `test` and `prod`; add secrets `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID` (deploy service principal, **OIDC only**, federation policy for `repo:<owner>/<repo>:environment:<env>`) and, for `test`/`prod`, `DATABRICKS_RUN_AS_SP` (separate runtime service principal used as `run_as`); add *Required reviewers* to `prod`. Then set repo variable `CD_ENABLED=true`.
+- `CD_ENABLED` unset → deploy jobs show as **skipped** (demo mode, nothing deployed). Set → missing config **fails** the run; prod only deploys after the smoke test on `test` succeeded.
+- Batch control, the Gold reconciliation gate and rerun/correction/backfill semantics: see `docs/runbook.md`; incidents: `docs/incident_runbook.md`; grain & lineage: `docs/data_dictionary.md`; coding standards: `CONTRIBUTING.md`.
+- Tests: `pytest -m "not integration" --cov` (unit) and `pytest -m integration` (Bronze → Silver → Gold end-to-end on local Delta with failure scenarios: missing/late/duplicate files, reruns, reconciliation failure, out-of-order runs).
 
 ## Repository layout
 ```

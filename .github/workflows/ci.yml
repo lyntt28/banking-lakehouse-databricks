@@ -26,39 +26,42 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
-      - name: Unit tests (pytest)
-        run: pytest -q
+      - name: Unit tests + coverage
+        run: pytest -q -m "not integration" --cov --cov-report=term --cov-report=xml
 
+      - name: Integration tests (Bronze -> Silver -> Gold on local Delta, failure scenarios)
+        run: pytest -q -m integration
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+
+  # Chỉ chạy khi repo variable CD_ENABLED = 'true' (Settings -> Variables). Khi đã bật mà
+  # thiếu secret -> FAIL (không còn "xanh mà thật ra bị bỏ qua").
+  # Chưa bật -> job hiện "skipped" trên PR, đúng với thực tế là bundle CHƯA được validate.
   bundle-validate:
     runs-on: ubuntu-latest
     needs: lint-and-test
+    if: vars.CD_ENABLED == 'true'
+    # environment riêng -> OIDC subject = repo:<owner>/<repo>:environment:ci
+    # (tạo federation policy riêng cho CI, quyền chỉ đủ để validate)
+    environment: ci
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
     permissions:
       contents: read
-      id-token: write   # OIDC (giống CD)
+      id-token: write   # OIDC, chỉ job này
     steps:
       - uses: actions/checkout@v4
-
       - uses: databricks/setup-cli@v1.28.0
-
-      - name: Auth mode
-        if: env.DATABRICKS_HOST != ''
+      - name: Require OIDC config
         run: |
-          if [ -n "$DATABRICKS_CLIENT_ID" ]; then
-            echo "DATABRICKS_AUTH_TYPE=github-oidc" >> "$GITHUB_ENV"
+          if [ -z "$DATABRICKS_HOST" ] || [ -z "$DATABRICKS_CLIENT_ID" ]; then
+            echo "::error::CD_ENABLED=true nhưng environment 'ci' thiếu DATABRICKS_HOST / DATABRICKS_CLIENT_ID"
+            exit 1
           fi
-
+          echo "DATABRICKS_AUTH_TYPE=github-oidc" >> "$GITHUB_ENV"
       - name: Validate bundle (dev)
-        if: env.DATABRICKS_HOST != ''
         run: databricks bundle validate -t dev
-
-      # Chưa có secret -> KHÔNG kiểm tra bundle. Ghi warning để hiện rõ trên PR
-      # (tránh hiểu nhầm dấu ✓ là bundle đã được validate).
-      - name: Bundle NOT validated (secrets missing)
-        if: env.DATABRICKS_HOST == ''
-        run: |
-          echo "::warning title=Bundle not validated::Add DATABRICKS_HOST and DATABRICKS_CLIENT_ID (OIDC) or DATABRICKS_TOKEN repo secrets to validate the bundle."
-          echo "## ⚠️ Bundle validation skipped: Databricks secrets not configured" >> "$GITHUB_STEP_SUMMARY"
