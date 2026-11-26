@@ -59,6 +59,10 @@ def tables(spark, results):
     }
     for name, schema in ops.items():
         m[f"ops_{name}"] = spark.createDataFrame([], schema)
+    # batch Gold đang phục vụ: dataset chỉ đọc tới ngày đã publish
+    m["ops_published_batches"] = spark.sql(
+        f"SELECT DATE'{AS_OF}' AS as_of_date, 'r1' AS run_id, "
+        "current_timestamp() AS published_at, '{}' AS checks")
     for name, df in m.items():
         df.createOrReplaceTempView(name)
     return m
