@@ -23,7 +23,7 @@ from pyspark.sql import functions as F
 from common import gold as g
 from common import gold_cards as gc
 from common import gold_deposit as gd
-from common.batch import ensure_ops_tables, record_run, watermark
+from common.batch import ensure_ops_tables, record_run, record_versions, watermark
 from common.dates import check_date
 from common.delta_io import merge_upsert, overwrite, overwrite_date
 from common.names import fq
@@ -37,6 +37,14 @@ class GoldConfig:
 
     def t(self, schema: str, table: str) -> str:
         return fq(self.catalog, schema, table)
+
+
+# Bảng Gold ghi ở bước publish (lưu version trước khi ghi để RESTORE nếu lỗi giữa chừng)
+PUBLISHED_TABLES = ["dim_date", "dim_branch", "dim_product", "dim_customer", "loan_fact_daily",
+                    "core_fact_transaction", "loan_mart_overdue_daily", "loan_mart_npl_daily",
+                    "dep_mart_daily", "cust_mart_360", "card_mart_kpi_daily",
+                    "card_mart_spend_mix", "card_mart_kpi_monthly", "dep_mart_trend",
+                    "dep_mart_by_tenor", "dep_mart_casa_customer", "dep_mart_new_accounts"]
 
 
 class GateFailed(RuntimeError):
@@ -148,6 +156,8 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
 
     # ---------- 3) publish
     with rec.step("gold:publish") as s:
+        record_versions(spark, cfg.catalog, rec.run_id, day_s, "gold",
+                        [G(t) for t in PUBLISHED_TABLES])
         overwrite(dim_date, G("dim_date"))
         overwrite(dim_branch, G("dim_branch"))
         overwrite(dim_product, G("dim_product"))

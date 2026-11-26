@@ -5,7 +5,8 @@ import và test được trên Spark + Delta local (tests/integration).
 
 Mỗi ngày dữ liệu:
     1. file manifest  - bảng bắt buộc thiếu file -> FAILED, dừng (ops.file_manifest)
-    2. từng bảng theo ORDER: DQ -> quarantine -> DQ gate -> ghi silver -> đối soát số dòng
+    2. từng bảng theo ORDER: DQ -> quarantine -> DQ gate -> đối soát số dòng -> silver_stage
+    3. chỉ khi MỌI bảng đạt: publish từ silver_stage vào silver (lưu version để RESTORE)
     3. ghi ops.pipeline_runs (RUNNING/SUCCESS/FAILED) + ops.task_runs (từng bước)
 """
 
@@ -23,10 +24,11 @@ from common.batch import (
     missing_tables,
     pending_dates,
     record_run,
+    record_versions,
     required_tables,
     watermark,
 )
-from common.delta_io import merge_upsert, overwrite_date, scd2_upsert
+from common.delta_io import merge_upsert, overwrite, overwrite_date, scd2_upsert
 from common.dq import dq_summary, should_stop
 from common.names import fq
 from common.ops_log import StepRecorder, log
@@ -61,7 +63,8 @@ class ReconciliationFailed(RuntimeError):
 
 def ensure_tables(spark: SparkSession, cfg: SilverConfig) -> None:
     ensure_ops_tables(spark, cfg.catalog)
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {fq(cfg.catalog, 'silver')}")
+    for schema in ("silver", "silver_stage"):
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS {fq(cfg.catalog, schema)}")
     spark.sql(f"""CREATE TABLE IF NOT EXISTS {cfg.t('ops', 'dq_results')} (
         run_id STRING, run_ts TIMESTAMP, table_name STRING, rule_name STRING, severity STRING,
         total_rows BIGINT, failed_rows BIGINT, fail_pct DOUBLE, status STRING) USING DELTA""")
@@ -117,7 +120,9 @@ def process_day(spark: SparkSession, cfg: SilverConfig, day: str, rec: StepRecor
         if missing:
             raise SourceFilesMissing(f"{day}: thiếu file nguồn {missing} (chờ file về)")
 
-    report, known = [], {}
+    # ---------- Phase 1: kiểm tra TẤT CẢ bảng, ghi bản ứng viên vào silver_stage.
+    # Bảng silver thật chưa bị đụng tới -> bảng thứ 5 lỗi DQ thì 4 bảng trước vẫn nguyên bản cũ.
+    report, known, staged = [], {}, []
     for name in ORDER:
         spec = TABLES[name]
         df = bronze[name]
@@ -149,13 +154,9 @@ def process_day(spark: SparkSession, cfg: SilverConfig, day: str, rec: StepRecor
                 raise DQGateFailed(f"DQ gate: {name} có rule FAIL > {cfg.max_fail_pct}% "
                                    f"(run_id={run_id}, xem ops.dq_results)")
 
-            target = cfg.t("silver", name)
-            if spec.write_mode == "scd2":
-                scd2_upsert(res.valid, target, spec.key[0], CUSTOMER_TRACKED, day)
-            else:
-                merge_upsert(res.valid, target, spec.key, insert_only=spec.write_mode == "append")
-
-            n_valid, n_quar = res.valid.count(), res.quarantine.count()
+            stage = cfg.t("silver_stage", name)
+            overwrite(res.valid, stage)             # đóng băng bản ứng viên
+            n_valid, n_quar = spark.table(stage).count(), res.quarantine.count()
             s.rows_out = n_valid
             ok = n_bronze == n_valid + n_quar + res.exact_dupes
             report.append((name, n_bronze, n_valid, n_quar, res.exact_dupes, ok))
@@ -163,6 +164,21 @@ def process_day(spark: SparkSession, cfg: SilverConfig, day: str, rec: StepRecor
                 raise ReconciliationFailed(
                     f"Đối soát lệch {name}: bronze={n_bronze} silver={n_valid} "
                     f"quarantine={n_quar} dupes={res.exact_dupes}")
+            staged.append(name)
+
+    # ---------- Phase 2: mọi bảng đã đạt -> publish. Lưu version Delta trước khi ghi để
+    # RESTORE được nếu lỗi hạ tầng giữa chừng (ops.publish_versions, incident runbook).
+    with rec.step("silver:publish") as s:
+        targets = [cfg.t("silver", n) for n in staged]
+        record_versions(spark, cfg.catalog, run_id, day, "silver", targets)
+        for name in staged:
+            spec, target = TABLES[name], cfg.t("silver", name)
+            valid = spark.table(cfg.t("silver_stage", name))
+            if spec.write_mode == "scd2":
+                scd2_upsert(valid, target, spec.key[0], CUSTOMER_TRACKED, day)
+            else:
+                merge_upsert(valid, target, spec.key, insert_only=spec.write_mode == "append")
+        s.rows_out = len(staged)
     return report
 
 
