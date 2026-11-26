@@ -87,9 +87,12 @@ overwrite_date(overdue_day, f"{G}.mart_loan_overdue_daily", "as_of_date", as_of_
 overwrite(g.build_mart_npl_daily(spark.table(f"{G}.mart_loan_overdue_daily")),
           f"{G}.mart_npl_daily")
 
-overwrite_date(g.build_mart_deposit_daily(spark.table(f"{S}.accounts"), as_of_date),
+# Snapshot TK đúng ngày: TK bị cách ly (DQ lỗi) hôm nay vẫn còn dòng cũ trong silver.accounts
+# -> phải lọc theo _as_of_date, không thì Gold cộng thừa so với file bang1247.
+acc_day = spark.table(f"{S}.accounts").filter(F.col("_as_of_date") == day)
+overwrite_date(g.build_mart_deposit_daily(acc_day, as_of_date),
                f"{G}.mart_deposit_daily", "as_of_date", as_of_date)
-overwrite(g.build_mart_customer_360(dim_customer, fact_loan, spark.table(f"{S}.accounts"),
+overwrite(g.build_mart_customer_360(dim_customer, fact_loan, acc_day,
                                     spark.table(f"{G}.fact_transaction"), as_of_date),
           f"{G}.mart_customer_360")
 
@@ -110,7 +113,7 @@ overwrite(gc.build_mart_card_kpi_monthly(spark.table(f"{G}.mart_card_kpi_daily")
 # COMMAND ----------
 
 # Tiền gửi
-acc = spark.table(f"{S}.accounts")
+acc = acc_day
 fx_day = spark.table(f"{S}.fx_rates").filter(F.col("rate_date") == day)
 trend_hist = (spark.table(f"{G}.mart_deposit_trend")
               if spark.catalog.tableExists(f"{G}.mart_deposit_trend") else None)
@@ -122,7 +125,7 @@ overwrite_date(gd.build_mart_deposit_by_tenor(acc, dim_product, fx_day, as_of_da
 overwrite_date(gd.build_mart_casa_customer(acc, dim_product, dim_customer.filter("is_current"),
                                            as_of_date),
                f"{G}.mart_casa_customer", "as_of_date", as_of_date)
-overwrite(gd.build_mart_deposit_new_accounts(acc), f"{G}.mart_deposit_new_accounts")
+overwrite(gd.build_mart_deposit_new_accounts(spark.table(f"{S}.accounts")), f"{G}.mart_deposit_new_accounts")
 
 # COMMAND ----------
 
