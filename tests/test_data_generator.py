@@ -129,3 +129,12 @@ def test_insurance_label_has_signal_for_ml(out):
         return sum(c["customer_id"] in buyers for c in xs) / len(xs)
 
     assert rich and poor and rate(rich) > rate(poor) * 1.5  # thu nhập cao mua nhiều hơn
+
+
+def test_new_accounts_open_after_first_day(out):
+    """Ngày 2 có TK mở mới (open_date = ngày 2) -> biểu đồ TK mới / Edu-Save có dữ liệu."""
+    d1 = {r["account_id"] for r in _t(out, "accounts", D1)}
+    new = [r for r in _t(out, "accounts", D2) if r["account_id"] not in d1 and r["account_id"]]
+    assert new, "không có TK mở mới ở ngày 2"
+    assert all(r["account_id"].startswith("25") for r in new)
+    assert all(r["product_type"] != "LOAN" for r in new)
