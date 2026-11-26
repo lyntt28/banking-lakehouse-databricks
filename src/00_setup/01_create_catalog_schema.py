@@ -17,7 +17,7 @@ print(f"Setting up catalog: {catalog}")
 # (Catalog > + > Create catalog) rồi chạy lại notebook này.
 spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
 
-for schema in ["landing", "bronze", "silver", "gold", "gold_stage", "ops"]:
+for schema in ["landing", "bronze", "silver", "silver_stage", "gold", "gold_stage", "ops"]:
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
 
 # Volume chứa file nguồn (CSV/JSON) đổ vào hằng ngày

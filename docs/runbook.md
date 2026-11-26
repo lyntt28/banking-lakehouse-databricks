@@ -142,7 +142,8 @@ chỉ giữ trạng thái mới nhất: Gold ngày D phải dựng trước khi 
 - Gold ngày D fail gate → lần chạy sau dựng lại Gold ngày D trước khi xử lý ngày mới.
 
 **Từng ngày**
-1. Silver: thiếu file của bảng bắt buộc (mọi bảng trừ `ref_branches`, `ref_products`,
+1. Silver: mọi bảng chạy DQ + đối soát số dòng và ghi vào `silver_stage` trước; chỉ khi TẤT CẢ
+   đạt mới publish vào `silver` (bảng thứ 5 lỗi thì 4 bảng trước vẫn nguyên). Thiếu file của bảng bắt buộc (mọi bảng trừ `ref_branches`, `ref_products`,
    `ref_targets`) → FAILED, dừng; các ngày sau **không** chạy (SCD2 cần đúng thứ tự).
 2. Gold: tính mart dùng để đối soát → ghi `gold_stage` → đối soát (dư nợ Silver–Gold, KPI thẻ,
    tiền gửi bang1247) → lệch thì dừng, **bảng Gold mà dashboard đọc không bị đụng tới**;

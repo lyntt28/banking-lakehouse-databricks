@@ -36,11 +36,17 @@ Gold chỉ ghi sau gate. Nếu lỗi ở `gold:publish` (hạ tầng giữa ch�
 - Có người chạy lại ngày cũ hơn watermark. Không làm gì với dữ liệu: lệnh đã bị chặn trước khi ghi.
 - Cần sửa ngày cũ thật sự → mục 6.
 
-## 5. Lỗi giữa `gold:publish`
-- Một số bảng Gold đã có ngày mới, một số chưa. Chạy lại `03_gold/01_gold_build` với
-  `as_of_date = <ngày>`: mọi bước publish idempotent, kết quả hội tụ.
-- Cần quay lại ngay (trong lúc sửa): Delta time travel
-  `RESTORE TABLE <c>.gold.<t> TO TIMESTAMP AS OF '<trước run>'` cho từng bảng bị ghi.
+## 5. Lỗi giữa `silver:publish` / `gold:publish` (lỗi hạ tầng sau khi đã qua mọi gate)
+Silver và Gold đều **stage → kiểm tra tất cả → publish**: lỗi DQ / đối soát không bao giờ để lại
+bảng ghi dở. Chỉ lỗi hạ tầng trong chính bước publish mới có thể làm một số bảng đã ghi, số khác chưa.
+- Cách 1 (thường dùng): chạy lại job. Publish idempotent (MERGE / replaceWhere / overwrite từ
+  bản stage đã đạt) nên kết quả hội tụ.
+- Cách 2 (cần quay lại ngay): version trước publish được lưu ở `ops.publish_versions`:
+  ```sql
+  SELECT table_name, version_before FROM <c>.ops.publish_versions WHERE run_id = '<run_id>';
+  RESTORE TABLE <table_name> TO VERSION AS OF <version_before>;   -- từng bảng
+  ```
+  `version_before` NULL = bảng được tạo trong lần chạy đó → DROP nếu cần.
 
 ## 6. Correction / backfill ngày cũ (prod)
 1. Dựng catalog song song (vd `bank_prod_rebuild`) với `05_backfill reset=true` từ Bronze.
