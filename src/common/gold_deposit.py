@@ -1,8 +1,9 @@
 """Gold cho dashboard Tiền gửi bán lẻ (RCD) - xem docs/gold_dashboards.md mục 3.
 
-    dep_mart_trend          ngày x nhóm TK x lớp (CASA/TD/ISA) x tiền tệ x vùng: số dư VND,
+    dep_mart_trend          ngày x nhóm TK x lớp (CASA/TD/ISA) x tiền tệ x vùng x chi nhánh
+                                x quốc tịch (VIETNAMESE/KOREAN/OTHER): số dư VND,
                                 so với D-1, cuối tháng trước (M-1), cuối năm trước (Y-1)
-    dep_mart_by_tenor       TD / ISA theo kỳ hạn: số dư, số TK, lãi suất min/max/bình quân
+    dep_mart_by_tenor       TD / ISA theo kỳ hạn x chi nhánh: số dư, số TK, lãi suất min/max/bq
     dep_mart_casa_customer          chi nhánh: KH cá nhân, KH có CASA, CASA hoạt động / ngủ đông
     dep_mart_new_accounts   tháng mở x chi nhánh x sản phẩm: TK mở mới + luỹ kế trong năm
                                 (dashboard lọc product_type = 'EDUSAVE')
@@ -52,13 +53,30 @@ def compare_with_history(df: DataFrame, keys: list[str], values: list[str],
     return out
 
 
+def nation_group(col: str = "nationality") -> F.Column:
+    """Mã quốc gia KH -> nhóm như cột NATION của bang1247 (bộ lọc Nationality)."""
+    c = F.upper(F.col(col))
+    return (F.when(c.isin("VN", "VIETNAMESE"), "VIETNAMESE")
+            .when(c.isin("KR", "KOREAN"), "KOREAN").otherwise("OTHER"))
+
+
 def build_mart_deposit_trend(accounts: DataFrame, products: DataFrame, fx: DataFrame,
                              branches: DataFrame, as_of_date: str,
-                             history: DataFrame | None = None) -> DataFrame:
-    """Mart ngày as_of; `history` = các ngày trước của chính mart (để tính D-1/M-1/Y-1)."""
-    dims = ["account_group", "group_class", "currencycd", "region"]
+                             history: DataFrame | None = None,
+                             customers: DataFrame | None = None) -> DataFrame:
+    """Mart ngày as_of; `history` = các ngày trước của chính mart (để tính D-1/M-1/Y-1);
+    `customers` (customer_id, nationality) cho cột nationality - thiếu thì 'OTHER'."""
+    dims = ["account_group", "group_class", "currencycd", "region", "branchnbr", "nationality"]
     b = branches.select("branchnbr", "region")
-    day = (_deposits_vnd(accounts, products, fx).join(b, "branchnbr", "left")
+    dep = _deposits_vnd(accounts, products, fx).join(b, "branchnbr", "left")
+    if customers is not None and "nationality" in customers.columns:
+        nat = customers.select("customer_id", nation_group().alias("nationality")) \
+            .dropDuplicates(["customer_id"])
+        dep = dep.join(nat, "customer_id", "left") \
+            .withColumn("nationality", F.coalesce("nationality", F.lit("OTHER")))
+    else:
+        dep = dep.withColumn("nationality", F.lit("OTHER"))
+    day = (dep
            .groupBy(*dims)
            .agg(F.sum("balance_vnd").alias("balance_vnd"),
                 F.sum(_open().cast("int")).alias("open_accounts"))
@@ -69,6 +87,11 @@ def build_mart_deposit_trend(accounts: DataFrame, products: DataFrame, fx: DataF
     base = ["as_of_date", *dims, "balance_vnd", "open_accounts", "share_pct"]
     allrows = day.select(*base)
     if history is not None:
+        # bảng cũ (trước khi có branchnbr / nationality): cột thiếu = NULL, D-1/M-1/Y-1 của
+        # ngày đầu sau nâng cấp sẽ NULL cho tới khi chạy lại backfill
+        for c, t in (("branchnbr", "string"), ("nationality", "string")):
+            if c not in history.columns:
+                history = history.withColumn(c, F.lit(None).cast(t))
         allrows = history.select(*base).filter(F.col("as_of_date") != F.lit(as_of_date)
                                                .cast("date")).unionByName(allrows)
     cmp = compare_with_history(allrows, dims, ["balance_vnd"])
@@ -81,7 +104,7 @@ def build_mart_deposit_trend(accounts: DataFrame, products: DataFrame, fx: DataF
 def build_mart_deposit_by_tenor(accounts: DataFrame, products: DataFrame, fx: DataFrame,
                                 as_of_date: str) -> DataFrame:
     d = _deposits_vnd(accounts, products, fx).filter(_open() & (F.col("tenor_months") > 0))
-    return (d.groupBy("group_class", "product_type", "tenor_months", "currencycd")
+    return (d.groupBy("group_class", "product_type", "tenor_months", "currencycd", "branchnbr")
             .agg(F.count("*").alias("accounts"),
                  F.sum("balance_vnd").alias("balance_vnd"),
                  F.min("int_rate").alias("min_rate"), F.max("int_rate").alias("max_rate"),
