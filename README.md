@@ -25,7 +25,7 @@ SILVER  typed, standardised (MM/DD/YYYY, "1,234", "12.34%"), deduplicated
         MERGE (idempotent), SCD2 for dim_customer
         ▼
 GOLD ─┬─ BI : Kimball star schema
-      │      fact_loan_daily, fact_transaction, fact_card_txn
+      │      loan_fact_daily, core_fact_transaction, fact_card_txn
       │      dim_customer (SCD2), dim_account, dim_card, dim_branch, dim_product, dim_date
       │      marts: loan overdue × branch × debt group + NPL, card KPIs, deposit balance,
       │             customer_360  → Databricks SQL dashboards + alerts

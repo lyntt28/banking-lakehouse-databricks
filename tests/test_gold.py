@@ -22,14 +22,14 @@ AS_OF = "2026-11-01"
 
 @pytest.fixture(scope="module")
 def gold(results):
-    # silver.customers sau lần SCD2 đầu tiên: mọi bản ghi là bản hiện hành
-    cust = results["customers"].valid.withColumn("valid_from", F.lit(AS_OF).cast("date")) \
+    # silver.core_customers sau lần SCD2 đầu tiên: mọi bản ghi là bản hiện hành
+    cust = results["core_customers"].valid.withColumn("valid_from", F.lit(AS_OF).cast("date")) \
         .withColumn("valid_to", F.lit(None).cast("date")).withColumn("is_current", F.lit(True))
     g = {"dim_customer": build_dim_customer(cust)}
-    g["dim_product"] = build_dim_product(results["products"].valid)
-    g["fact_loan"] = build_fact_loan_daily(results["loans"].valid, g["dim_customer"])
-    g["fact_txn"] = build_fact_transaction(results["transactions"].valid,
-                                           results["accounts"].valid, g["dim_customer"])
+    g["dim_product"] = build_dim_product(results["ref_products"].valid)
+    g["fact_loan"] = build_fact_loan_daily(results["loan_snapshots"].valid, g["dim_customer"])
+    g["fact_txn"] = build_fact_transaction(results["core_transactions"].valid,
+                                           results["core_accounts"].valid, g["dim_customer"])
     g["overdue"] = build_mart_loan_overdue_daily(g["fact_loan"], g["dim_product"])
     return g
 
@@ -43,7 +43,7 @@ def test_dim_date(spark):
 
 def test_fact_loan_grain_and_balance(results, gold):
     f = gold["fact_loan"]
-    assert f.count() == results["loans"].valid.count()
+    assert f.count() == results["loan_snapshots"].valid.count()
     assert f.groupBy("as_of_date", "acctnbr").count().filter("count > 1").count() == 0
     assert f.filter("date_key <> 20261101").count() == 0
 
@@ -56,7 +56,7 @@ def test_fact_loan_links_customer_version(gold):
 
 def test_fact_transaction_signed_amount(results, gold):
     f = gold["fact_txn"]
-    assert f.count() == results["transactions"].valid.count()
+    assert f.count() == results["core_transactions"].valid.count()
     assert f.filter("(dr_cr = 'D' AND signed_amount >= 0) OR "
                     "(dr_cr = 'C' AND signed_amount <= 0)").count() == 0
 
@@ -84,15 +84,15 @@ def test_mart_npl_daily_comparisons(spark):
 
 
 def test_mart_deposit_excludes_loans(results):
-    m = build_mart_deposit_daily(results["accounts"].valid, AS_OF)
+    m = build_mart_deposit_daily(results["core_accounts"].valid, AS_OF)
     assert m.filter("product_type = 'LOAN'").count() == 0
-    src = results["accounts"].valid.filter("product_type <> 'LOAN'")
+    src = results["core_accounts"].valid.filter("product_type <> 'LOAN'")
     assert m.agg(F.sum("account_count")).first()[0] == src.count()
 
 
 def test_customer_360(results, gold):
     m = build_mart_customer_360(gold["dim_customer"], gold["fact_loan"],
-                                results["accounts"].valid, gold["fact_txn"], AS_OF)
+                                results["core_accounts"].valid, gold["fact_txn"], AS_OF)
     assert m.count() == gold["dim_customer"].count()
     assert m.groupBy("customer_id").count().filter("count > 1").count() == 0
     assert m.filter("loan_count > 0").count() > 0
