@@ -32,7 +32,7 @@ WITH m AS (
          sum(target_new_month) AS target_new_month, sum(target_sales_month) AS target_sales_month,
          sum(target_new_year) AS target_new_year, sum(target_sales_year) AS target_sales_year,
          sum(new_members_ytd) AS new_ytd, sum(spend_amt_ytd) AS sales_ytd
-  FROM {G}.card_mart_kpi_monthly GROUP BY year_month)
+  FROM {G}.card_mart_kpi_monthly WHERE as_of_date = {PUB} GROUP BY year_month)
 """
 
 _v("card", 1, "v_card_kpi_cards",
@@ -280,7 +280,8 @@ _v("deposit", 8, "v_edusave_new_accounts",
    "Edu-Save new open accounts, cumulative by month",
    f"""
 SELECT open_month, sum(new_accounts) AS new_accounts, sum(new_accounts_ytd) AS cumulative_ytd
-FROM {G}.dep_mart_new_accounts WHERE product_type = 'EDUSAVE' GROUP BY open_month
+FROM {G}.dep_mart_new_accounts WHERE product_type = 'EDUSAVE' AND as_of_date = {PUB}
+GROUP BY open_month
 """)
 
 

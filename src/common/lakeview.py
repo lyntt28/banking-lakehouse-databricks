@@ -730,7 +730,8 @@ WITH p AS (SELECT {_report_day(f'{G}.dep_mart_trend')} AS d)
 SELECT n.open_month AS month, sum(n.new_accounts_ytd) AS cumulative_accounts
 FROM {G}.dep_mart_new_accounts n CROSS JOIN p
 LEFT JOIN {G}.dim_branch b ON b.branchnbr = n.branchnbr
-WHERE n.product_type = 'EDUSAVE' AND n.open_month <= date_format(p.d, 'yyyy-MM')
+WHERE n.product_type = 'EDUSAVE' AND n.as_of_date = p.d
+  AND n.open_month <= date_format(p.d, 'yyyy-MM')
   AND n.open_month > date_format(add_months(p.d, -12), 'yyyy-MM')
   AND (:region = 'all' OR b.region = :region)
 GROUP BY 1
