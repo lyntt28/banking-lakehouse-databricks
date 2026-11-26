@@ -70,7 +70,20 @@ CREATE TABLE IF NOT EXISTS {table} (
 ) USING DELTA
 """
 
-OPS_DDL = {"pipeline_runs": PIPELINE_RUNS_DDL, "published_batches": PUBLISHED_BATCHES_DDL,
+# Version Delta của từng bảng NGAY TRƯỚC khi publish -> RESTORE TABLE ... TO VERSION AS OF
+PUBLISH_VERSIONS_DDL = """
+CREATE TABLE IF NOT EXISTS {table} (
+  run_id STRING,
+  as_of_date DATE,
+  layer STRING,
+  table_name STRING,
+  version_before BIGINT,
+  captured_at TIMESTAMP
+) USING DELTA
+"""
+
+OPS_DDL = {"publish_versions": PUBLISH_VERSIONS_DDL,
+           "pipeline_runs": PIPELINE_RUNS_DDL, "published_batches": PUBLISHED_BATCHES_DDL,
            "task_runs": TASK_RUNS_DDL, "file_manifest": FILE_MANIFEST_DDL}
 
 
@@ -175,3 +188,24 @@ def assert_fresh(latest_published, today: str, max_age_days: int) -> None:
     if age > max_age_days:
         raise RuntimeError(f"Gold cũ {age} ngày (batch mới nhất {latest_published}) > "
                            f"{max_age_days}: job daily lỗi/trễ? Dừng để không dùng dữ liệu cũ")
+
+
+def table_version(spark, table: str) -> int | None:
+    """Version Delta hiện tại; None nếu bảng chưa tồn tại (publish lần đầu)."""
+    if not spark.catalog.tableExists(table):
+        return None
+    return spark.sql(f"DESCRIBE HISTORY {table} LIMIT 1").first()["version"]
+
+
+def record_versions(spark, catalog: str, run_id: str, as_of_date: str, layer: str,
+                    tables: list[str]) -> None:
+    from pyspark.sql import functions as F
+
+    rows = [(run_id, check_date(as_of_date), layer, t, table_version(spark, t)) for t in tables]
+    if not rows:
+        return
+    (spark.createDataFrame(rows, "run_id string, as_of_date string, layer string, "
+                                 "table_name string, version_before long")
+     .withColumn("as_of_date", F.col("as_of_date").cast("date"))
+     .withColumn("captured_at", F.current_timestamp())
+     .write.format("delta").mode("append").saveAsTable(fq(catalog, "ops", "publish_versions")))

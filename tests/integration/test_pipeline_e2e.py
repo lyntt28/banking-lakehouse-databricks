@@ -4,7 +4,9 @@
 Kịch bản sự cố (chạy tuần tự, mỗi test dựa trên trạng thái test trước):
     1. thiếu file ngày 2           -> ngày 1 SUCCESS, ngày 2 FAILED, watermark đứng ở ngày 1
     2. file về trễ                 -> chạy lại tự xử lý ngày 2; Gold publish đủ 2 ngày
-    3. chạy lại nhiều lần          -> kết quả nghiệp vụ không đổi
+    3. chạy lại nhiều lần          -> checksum nội dung Silver/Gold không đổi, không trùng khóa,
+                                      SCD2 nhất quán
+    3b. lỗi giữa chừng (bảng thứ N) -> Silver không bị ghi dở; sửa xong chạy lại hội tụ
     4. file trùng (gửi lại)        -> không nhân đôi dữ liệu, manifest báo MULTIPLE_FILES
     5. đối soát lệch               -> GateFailed, Gold đang phục vụ KHÔNG đổi, không publish
     6. backfill ngày cũ hơn SCD2   -> bị từ chối, dữ liệu hiện tại không đổi
@@ -17,7 +19,7 @@ import pytest
 pytestmark = pytest.mark.integration
 
 D1, D2 = "2026-11-01", "2026-11-02"
-SCHEMAS = ["bronze", "silver", "gold", "gold_stage", "ops"]
+SCHEMAS = ["bronze", "silver", "silver_stage", "gold", "gold_stage", "ops"]
 
 
 def _drop_all(spark):
@@ -58,16 +60,57 @@ def _runs(spark, layer):
         "ORDER BY started_at, status").collect()]
 
 
+def _checksum(spark, table):
+    """(số dòng, tổng hash nội dung từng dòng) - không phụ thuộc thứ tự, đổi 1 giá trị là lệch."""
+    from pyspark.sql import functions as F
+
+    df = spark.table(table)
+    # bỏ cột lineage kỹ thuật (thời điểm nạp, tên file); so nội dung nghiệp vụ
+    cols = sorted(c for c in df.columns if c not in ("_load_ts", "_source_file", "_rescued_data"))
+    r = df.select(F.count("*").alias("n"),
+                  F.sum(F.xxhash64(*cols).cast("decimal(38,0)")).alias("h")).first()
+    return (r.n, r.h)
+
+
 def _gold_fingerprint(spark):
-    return {
-        "fact_loan": spark.sql("SELECT count(*), sum(balance_vnd) FROM gold.loan_fact_daily")
-        .first(),
-        "dep": spark.sql("SELECT count(*), sum(balance) FROM gold.dep_mart_daily").first(),
-        "card": spark.sql("SELECT count(*) FROM gold.card_mart_kpi_daily").first(),
-        "txn": spark.sql("SELECT count(*) FROM gold.core_fact_transaction").first(),
-        "cust": spark.sql("SELECT count(*), count(DISTINCT customer_sk) FROM gold.dim_customer")
-        .first(),
-    }
+    from pipelines.gold import PUBLISHED_TABLES
+
+    return {t: _checksum(spark, f"gold.{t}") for t in PUBLISHED_TABLES}
+
+
+def _silver_fingerprint(spark):
+    from common.silver import ORDER
+
+    return {t: _checksum(spark, f"silver.{t}") for t in ORDER}
+
+
+def _assert_integrity(spark):
+    """Khóa nghiệp vụ không trùng + SCD2 nhất quán (sau mọi lần chạy / chạy lại)."""
+    from common.gold import GOLD_KEYS
+    from common.silver import ORDER, TABLES
+
+    for t, key in GOLD_KEYS.items():
+        k = ", ".join(key)
+        dup = spark.sql(f"SELECT {k} FROM gold.{t} GROUP BY {k} HAVING count(*) > 1").count()
+        assert dup == 0, f"gold.{t} trùng khóa {key}"
+    for t in ORDER:
+        spec = TABLES[t]
+        if spec.write_mode == "scd2":
+            continue
+        k = ", ".join(spec.key)
+        dup = spark.sql(f"SELECT {k} FROM silver.{t} GROUP BY {k} HAVING count(*) > 1").count()
+        assert dup == 0, f"silver.{t} trùng khóa {spec.key}"
+    # SCD2: đúng 1 bản hiện hành / KH, khoảng hiệu lực không chồng lấn, valid_to >= valid_from
+    assert spark.sql("SELECT customer_id FROM silver.core_customers GROUP BY customer_id "
+                     "HAVING sum(CAST(is_current AS INT)) <> 1").count() == 0
+    assert spark.sql("SELECT 1 FROM silver.core_customers "
+                     "WHERE valid_to IS NOT NULL AND valid_to < valid_from").count() == 0
+    assert spark.sql("""
+        SELECT 1 FROM silver.core_customers a JOIN silver.core_customers b
+          ON a.customer_id = b.customer_id AND a.valid_from < b.valid_from
+         AND (a.valid_to IS NULL OR a.valid_to >= b.valid_from)""").count() == 0
+    assert spark.sql("SELECT customer_sk FROM gold.dim_customer GROUP BY customer_sk "
+                     "HAVING count(*) > 1").count() == 0
 
 
 def test_1_missing_file_stops_at_that_day(spark, env):
@@ -103,9 +146,9 @@ def test_2_late_file_is_picked_up_and_gold_published(spark, env):
     pub = [str(r[0]) for r in spark.sql(
         "SELECT as_of_date FROM ops.published_batches ORDER BY 1").collect()]
     assert pub == [D1, D2]
-    fp = _gold_fingerprint(spark)
-    assert fp["cust"][0] == fp["cust"][1]                         # customer_sk duy nhất
-    env["gold_ok"] = fp
+    _assert_integrity(spark)
+    env["gold_ok"] = _gold_fingerprint(spark)
+    env["silver_ok"] = _silver_fingerprint(spark)
 
 
 def test_3_rerun_is_idempotent(spark, env):
@@ -117,7 +160,30 @@ def test_3_rerun_is_idempotent(spark, env):
     run(spark, SilverConfig(catalog="", as_of_date=D2))
     run(spark, SilverConfig(catalog="", as_of_date=D2))
     gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
+    # nội dung (checksum từng dòng), không chỉ số dòng
+    assert _silver_fingerprint(spark) == env["silver_ok"]
     assert _gold_fingerprint(spark) == env["gold_ok"]
+    _assert_integrity(spark)
+
+
+def test_3b_failure_midway_leaves_silver_untouched_then_rerun_recovers(spark, env,
+                                                                       monkeypatch):
+    """Bảng thứ N lỗi DQ: các bảng trước KHÔNG được ghi (stage rồi mới publish)."""
+    import pipelines.silver as ps
+    from pipelines.silver import DQGateFailed, SilverConfig, run
+
+    real = ps.should_stop
+    monkeypatch.setattr(ps, "should_stop", lambda summary, pct: (
+        summary.first()["table_name"] == "card_transactions_hist" or real(summary, pct)))
+    with pytest.raises(DQGateFailed, match="card_transactions_hist"):
+        run(spark, SilverConfig(catalog="", as_of_date=D2))
+    assert _silver_fingerprint(spark) == env["silver_ok"]
+    assert _runs(spark, "silver")[-1] == (D2, "FAILED")
+
+    monkeypatch.setattr(ps, "should_stop", real)
+    run(spark, SilverConfig(catalog="", as_of_date=D2))          # sửa xong -> chạy lại
+    assert _silver_fingerprint(spark) == env["silver_ok"]
+    assert _runs(spark, "silver")[-1] == (D2, "SUCCESS")
 
 
 def test_4_duplicate_file_does_not_double_count(spark, env):
@@ -132,7 +198,9 @@ def test_4_duplicate_file_does_not_double_count(spark, env):
     dup.write.format("delta").mode("append").saveAsTable("bronze.loans")
     run(spark, SilverConfig(catalog="", as_of_date=D2))
     gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
+    assert _silver_fingerprint(spark) == env["silver_ok"]
     assert _gold_fingerprint(spark) == env["gold_ok"]
+    _assert_integrity(spark)
     st = spark.sql(f"SELECT status FROM ops.file_manifest WHERE as_of_date = '{D2}' "
                    "AND table_name = 'loan_snapshots'").first()[0]
     assert st == "MULTIPLE_FILES"
@@ -162,6 +230,9 @@ def test_5_reconciliation_failure_keeps_serving_gold(spark, env):
         spark.sql("ALTER TABLE silver.dep_summary_source_ok RENAME TO silver.dep_summary_source")
     assert _gold_fingerprint(spark) == env["gold_ok"]
     assert spark.table("ops.published_batches").count() == n_pub
+    # có version trước publish của mọi bảng Gold (để RESTORE)
+    assert spark.sql("SELECT count(DISTINCT table_name) FROM ops.publish_versions "
+                     "WHERE layer = 'gold'").first()[0] == 17
     assert _runs(spark, "gold")[-1] == (D2, "FAILED")
     gate = spark.sql("SELECT status, error FROM ops.task_runs WHERE layer = 'gold' "
                      "AND step = 'gold:gate' ORDER BY logged_at DESC LIMIT 1").first()
@@ -186,9 +257,12 @@ def test_7_daily_runner_catches_up_silver_and_gold_per_day(spark, env):
     from pipelines import daily
     from pipelines.silver import SilverConfig
 
-    for s in ["silver", "gold", "gold_stage", "ops"]:
+    for s in ["silver", "silver_stage", "gold", "gold_stage", "ops"]:
         spark.sql(f"DROP SCHEMA IF EXISTS {s} CASCADE")
     assert daily.run(spark, SilverConfig(catalog="")) == [D1, D2]
     assert _runs(spark, "gold") == [(D1, "RUNNING"), (D1, "SUCCESS"),
                                     (D2, "RUNNING"), (D2, "SUCCESS")]
+    # chạy bù nhiều ngày một lần = chạy từng ngày (cùng nội dung)
+    assert _silver_fingerprint(spark) == env["silver_ok"]
     assert _gold_fingerprint(spark) == env["gold_ok"]
+    _assert_integrity(spark)
