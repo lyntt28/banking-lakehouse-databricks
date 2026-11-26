@@ -4,6 +4,7 @@ from common.batch import (
     assert_fresh,
     assert_reset_allowed,
     business_dates,
+    corrected_days,
     missing_tables,
     pending_dates,
     required_tables,
@@ -65,3 +66,12 @@ def test_freshness_gate():
         assert_fresh("2026-11-20", "2026-11-26", 2)
     with pytest.raises(RuntimeError):
         assert_fresh(None, "2026-11-26", 2)
+
+
+def test_corrected_days_detects_files_loaded_after_silver_success():
+    done = {"2026-11-24": "2026-11-25 01:00", "2026-11-25": "2026-11-26 01:00"}
+    loaded = {"2026-11-24": "2026-11-25 00:30",     # nạp trước Silver -> bình thường
+              "2026-11-25": "2026-11-26 09:00",     # file sửa nạp sau Silver -> correction
+              "2026-11-26": "2026-11-27 00:30"}     # chưa có Silver -> ngày mới, không phải sửa
+    assert corrected_days(loaded, done) == ["2026-11-25"]
+    assert corrected_days(loaded, {}) == []

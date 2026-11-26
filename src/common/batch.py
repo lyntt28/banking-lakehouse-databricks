@@ -180,6 +180,17 @@ def pending_dates(bronze_dates: list[str], watermark: str | None,
     return business_dates(start, received[-1], holidays) if start <= received[-1] else []
 
 
+def corrected_days(last_loaded: dict[str, object], silver_done_at: dict[str, object]) -> list[str]:
+    """Ngày đã Silver SUCCESS nhưng Bronze lại nhận file SAU lần SUCCESS đó (nguồn gửi file
+    sửa / correction) -> Silver của ngày đó đã cũ, phải xử lý lại Silver trước khi dựng Gold.
+
+    last_loaded:    ngày -> _load_ts lớn nhất trong Bronze (mọi bảng nguồn)
+    silver_done_at: ngày -> finished_at của lần Silver SUCCESS gần nhất
+    """
+    return sorted(d for d, done in silver_done_at.items()
+                  if d in last_loaded and last_loaded[d] > done)
+
+
 def run_row(as_of_date: str, layer: str, run_id: str, status: str,
             message: str = "") -> tuple:
     return (check_date(as_of_date), layer, run_id, status, message)

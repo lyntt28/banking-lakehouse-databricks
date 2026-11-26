@@ -838,7 +838,8 @@ GROUP BY 1, 2
     ds_files = d.dataset("ops_files", "Source files not normal", f"""
 SELECT as_of_date, table_name, status, file_count, rows, first_loaded_at
 FROM {OPS}.file_manifest
-WHERE status IN ('MISSING', 'INCOMPLETE', 'MULTIPLE_FILES') AND as_of_date >= date_sub(current_date(), 14)
+WHERE status IN ('MISSING', 'INCOMPLETE', 'MULTIPLE_FILES')
+  AND as_of_date >= date_sub(current_date(), 14)
 ORDER BY as_of_date DESC, table_name
 """, [])
     ds_dq = d.dataset("ops_dq", "DQ failed rows per day", f"""

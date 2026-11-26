@@ -50,6 +50,10 @@ bảng ghi dở. Chỉ lỗi hạ tầng trong chính bước publish mới có 
   `version_before` NULL = bảng được tạo trong lần chạy đó → DROP nếu cần.
 
 ## 6. Correction / backfill ngày cũ (prod)
+Job daily tự nhận diện file sửa: Bronze có file nạp SAU lần Silver SUCCESS của ngày đó.
+- Ngày sửa = watermark Silver: job tự chạy lại Silver rồi Gold ngày đó (log `daily_correction`),
+  không dựng Gold từ Silver cũ. Không cần thao tác.
+- Ngày sửa < watermark: job dừng với `CorrectionNeedsReplay`, làm thủ công như dưới:
 1. Dựng catalog song song (vd `bank_prod_rebuild`) với `05_backfill reset=true` từ Bronze.
 2. So sánh với prod (đối soát, số dòng, tổng số dư).
 3. Chuyển consumer (view / dashboard `dataset_catalog`) hoặc `DEEP CLONE` từng bảng vào prod
