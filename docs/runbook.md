@@ -211,3 +211,20 @@ nguồn); Silver map qua `SilverTable.source`. Dimension dùng chung giữ `dim_
 
 Sau khi đổi tên: deploy lại bundle, chạy lại `05_backfill` (Silver/Gold tạo bảng mới), chạy
 `02_dashboard_views` và import lại dashboard. Bảng tên cũ không còn dùng, xoá bằng `DROP TABLE` khi đã kiểm tra.
+
+## Test end-to-end nhiều ngày (`tests/test_pipeline_e2e.py`)
+
+Chạy **chính notebook** `02_silver/01_silver_transform` và `03_gold/01_gold_build` qua 3 ngày
+(cuối tháng + 2 ngày liên tiếp) trên Spark + Delta local, giống vòng lặp `05_backfill`; chỉ giả
+lập `dbutils` / `display`. Bronze nạp thẳng từ file (Auto Loader không chạy local).
+Kiểm tra: mọi ngày qua được assert đối soát trong Gold, `ops.recon_*` toàn MATCH, chạy lại
+ngày cuối không đổi số dòng. Lỗi kiểu "ngày đầu chạy được, ngày 2 lỗi" phải đỏ ở đây (CI) trước
+khi lên Databricks.
+
+```bash
+pytest -q tests/test_pipeline_e2e.py
+```
+
+Quy tắc file nguồn bang1247 (generator): cộng mọi TK tiền gửi, trừ TK có `customer_id` chưa
+từng xuất hiện hợp lệ trong file khách hàng (hôm nay hoặc các ngày trước) — đúng bằng tập TK
+mà Silver đưa vào quarantine theo FK.
