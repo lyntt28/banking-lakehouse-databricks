@@ -44,14 +44,14 @@ def test_injected_errors_are_quarantined(results):
                 for r in row}
 
     expected = {"balance_not_negative", "start_before_maturity", "debt_group_in_range"}
-    assert expected <= rules("loans")
-    assert {"customer_exists"} <= rules("accounts")
-    assert {"amount_positive", "account_exists"} <= rules("transactions")
-    assert "customer_id_not_null" in rules("customers")
+    assert expected <= rules("loan_snapshots")
+    assert {"customer_exists"} <= rules("core_accounts")
+    assert {"amount_positive", "account_exists"} <= rules("core_transactions")
+    assert "customer_id_not_null" in rules("core_customers")
 
 
 def test_loans_valid_business_rules(results):
-    v = results["loans"].valid
+    v = results["loan_snapshots"].valid
     assert v.filter("ducuoi < 0 OR datestart > datemat OR nhom_no NOT BETWEEN 1 AND 5").count() == 0
     # debt_group tính lại từ DPD, is_npl = nhóm 3-5
     assert v.filter("is_npl <> (debt_group >= 3)").count() == 0
@@ -87,7 +87,7 @@ def test_dup_key_count_ignores_null_keys(spark):
 
 
 def test_quarantine_records_shape(results):
-    q = quarantine_records(results["loans"].quarantine, "loans", "run-1")
+    q = quarantine_records(results["loan_snapshots"].quarantine, "loans", "run-1")
     assert q.columns == ["run_id", "table_name", "failed_rules", "record_json", "_source_file",
                          "quarantined_at"]
     assert q.filter("record_json LIKE '%acctnbr%'").count() == q.count() > 0
