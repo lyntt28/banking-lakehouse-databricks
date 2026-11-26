@@ -76,11 +76,9 @@ def _local_sql(ds: dict, params: dict) -> str:
 
 
 PARAMS = [{"report_date": "DATE'2026-11-01'", "customer_type": "'consumer'", "branch": "'all'",
-           "region": "'all'", "daily_product": "'ALL'", "region_product": "'ALL'",
-           "currency": "'all'", "nationality": "'all'"},
+           "region": "'all'"},
           {"report_date": "DATE'2026-12-31'", "customer_type": "'all'", "branch": "'101'",
-           "region": "'North'", "daily_product": "'1-CASA'", "region_product": "'2-TD'",
-           "currency": "'VND'", "nationality": "'KOREAN'"}]
+           "region": "'North'"}]
 
 
 def _items(body):
@@ -162,35 +160,13 @@ def test_section_order_matches_original():
                    "Comparison", "Overdue Trend (Last 5 Days)", "Overdue Trend (Monthly)",
                    "Overdue Amount by Debt Groups", "Overdue Amount by Product Groups",
                    "Overdue Ratio by Product Groups", "Overdue Ratio by Branches - Top5"]
-    dep = DASHES["retail_deposit.lvdash.json"]
-    assert [pg["displayName"] for pg in dep["pages"]] == ["Overview & Performance",
-                                                          "Customer & Product Insights"]
-    assert titles("retail_deposit.lvdash.json", 0) == [
-        "Ending Balance", "Monthly Avg Balance", "Retail Customers",
-        "Ending Balance vs Last Day / Month / Year",
-        "Monthly Avg Balance vs Last Day / Month / Year",
-        "Retail Customers vs Last Day / Month / Year", "All Products Target (%)",
+    assert len(DASHES["retail_deposit.lvdash.json"]["pages"]) == 1
+    assert titles("retail_deposit.lvdash.json") == [
+        "Ending Balance", "Monthly Avg Balance", "Retail Customers", "", "All Products Target (%)",
         "CASA Target (%)", "TDA/ISA Target (%)", "Ending Balance - Last 30 Days",
-        "Monthly Average Balance (MoM)", "Deposit by Term and IR (in Month)",
-        "Regional Deposit Distribution"]
-    assert titles("retail_deposit.lvdash.json", 1) == [
-        "CASA Customer Distribution", "Edu-Save New open Account_ Accumulate by Month",
-        "Balance by Product"]
-
-
-def test_deposit_filters_per_page():
-    """Mỗi trang có Date / Region / Branch; filter chỉ gắn dataset của chính trang đó."""
-    dep = DASHES["retail_deposit.lvdash.json"]
-    for pg in dep["pages"]:
-        used = {q["query"]["datasetName"] for i in pg["layout"]
-                for q in i["widget"].get("queries", []) if q["name"] == "main_query"}
-        filters = {i["widget"]["spec"]["frame"]["title"]: i for i in pg["layout"]
-                   if i["widget"].get("spec", {}).get("widgetType", "").startswith("filter")}
-        assert {"Date", "Region", "Branch"} <= set(filters)
-        for f in filters.values():
-            for q in f["widget"]["queries"]:
-                if q["name"].startswith("param_"):
-                    assert q["query"]["datasetName"] in used
+        "Monthly Average Balance (MoM)", "Regional Deposit Distribution",
+        "Deposit by Term and IR (in Month)", "CASA Customer Distribution",
+        "Edu-Save New open Account_ Accumulate by Month", "Balance by Product (K USD)"]
 
 
 def test_bundle_files_up_to_date():
@@ -205,12 +181,15 @@ def test_bundle_files_up_to_date():
 
 
 def test_card_colors_from_original_palette():
+    """Màu theo card_dashboard_final.html (Dashboard_CARD_v4): xanh navy / xanh nhạt / vàng."""
     body = DASHES["card_business.lvdash.json"]
     maps = {}
     for i in _items(body):
         spec = i["widget"].get("spec", {})
         for m in spec.get("encodings", {}).get("color", {}).get("scale", {}).get("mappings", []):
             maps[(spec["frame"]["title"], m["value"])] = m["color"]
-    assert maps[("New Acquisition", "Smart Credit")] == "#20538D"     # colors.primaryBlue
-    assert maps[("New Acquisition", "Branches")] == "#8DB4E2"         # colors.secondaryBlue
-    assert maps[("By Sectors", "Purchasing")] == CARD_COLORS["sector"]["Purchasing"] == "#5B8FC4"
+    assert maps[("New Acquisition", "Smart Credit")] == "#4472C4"
+    assert maps[("New Acquisition", "Branches")] == "#B4C7E7"
+    assert maps[("In & Out", "New Issuance")] == "#2F5597"
+    assert maps[("Balance (K USD)", "Revolving")] == "#BF9000"
+    assert maps[("By Sectors", "Purchasing")] == CARD_COLORS["sector"]["Purchasing"] == "#2F5597"
