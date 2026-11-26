@@ -24,6 +24,8 @@ def test_fq_local_and_unity_catalog():
     ("ref_branches", 0, "NOT_SENT"),
     ("loan_snapshots", 1, "ARRIVED"),
     ("loan_snapshots", 2, "MULTIPLE_FILES"),
+    ("card_kpi_source", 9, "ARRIVED"),          # 9 nhóm KPI = 9 file / ngày theo thiết kế
+    ("card_kpi_source", 18, "MULTIPLE_FILES"),
 ])
 def test_manifest_status(table, files, expected):
     assert manifest_status(table, files, ORDER) == expected
@@ -59,3 +61,10 @@ def test_step_recorder_keeps_failed_step():
     assert [(r[3], r[4]) for r in rows] == [("ok", "SUCCESS"), ("boom", "FAILED")]
     assert rows[0][5:7] == (5, 4)
     assert "ValueError: bad file" in rows[1][8]
+
+
+def test_expected_card_kpi_files_match_generator():
+    from common.batch import EXPECTED_FILES
+    from data_generator.summaries import KPI_FILES
+
+    assert EXPECTED_FILES["card_kpi_source"] == len(KPI_FILES)
