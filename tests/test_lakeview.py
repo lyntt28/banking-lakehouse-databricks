@@ -175,14 +175,16 @@ def test_section_order_matches_original():
 
 
 def test_bundle_files_up_to_date():
-    """dashboards/*.lvdash.json phải khớp với generator (chạy lại: python -m common.lakeview)."""
+    """dashboards/*.lvdash.json phải khớp với generator.
+    Sinh lại: PYTHONPATH=src python -m common.lakeview dashboards"""
     import json
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "dashboards"
     for name, body in build_all("").items():
         on_disk = json.loads((root / name).read_text(encoding="utf-8"))
-        assert on_disk == body, f"{name} cũ - chạy: python src/common/lakeview.py dashboards"
+        assert on_disk == body, (f"{name} cũ - chạy: "
+                                 "PYTHONPATH=src python -m common.lakeview dashboards")
 
 
 def test_card_colors_from_original_palette():
