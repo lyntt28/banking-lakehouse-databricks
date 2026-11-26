@@ -196,7 +196,8 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
                       if spark.catalog.tableExists(G("dep_mart_trend")) else None)
         overwrite_date(gd.build_mart_deposit_trend(acc_day, dim_product, fx_day,
                                                    spark.table(S("ref_branches")), day_s,
-                                                   history=trend_hist),
+                                                   history=trend_hist,
+                                                   customers=dim_customer_g.filter("is_current")),
                        G("dep_mart_trend"), "as_of_date", day_s)
         overwrite_date(gd.build_mart_deposit_by_tenor(acc_day, dim_product, fx_day, day_s),
                        G("dep_mart_by_tenor"), "as_of_date", day_s)
