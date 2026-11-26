@@ -39,6 +39,7 @@ def overwrite_date(df: DataFrame, target: str, date_col: str, as_of_date: str) -
         return
     (df.write.format("delta").mode("overwrite")
      .option("replaceWhere", f"{date_col} = DATE'{as_of_date}'")
+     .option("mergeSchema", "true")   # mart thêm cột mới không làm hỏng bảng đã có
      .saveAsTable(target))
 
 
