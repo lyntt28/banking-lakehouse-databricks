@@ -18,24 +18,24 @@ DASHES = build_all("")
 @pytest.fixture(scope="module")
 def tables(spark, results):
     r = {t: x.valid for t, x in results.items()}
-    cust = r["customers"].withColumn("valid_from", F.lit(AS_OF).cast("date")) \
+    cust = r["core_customers"].withColumn("valid_from", F.lit(AS_OF).cast("date")) \
         .withColumn("valid_to", F.lit(None).cast("date")).withColumn("is_current", F.lit(True))
     dim_customer = g.build_dim_customer(cust)
-    dim_product = g.build_dim_product(r["products"])
-    fact_loan = g.build_fact_loan_daily(r["loans"], dim_customer)
+    dim_product = g.build_dim_product(r["ref_products"])
+    fact_loan = g.build_fact_loan_daily(r["loan_snapshots"], dim_customer)
     m = {
-        "gold_dim_branch": g.build_dim_branch(r["branches"]),
+        "gold_dim_branch": g.build_dim_branch(r["ref_branches"]),
         "gold_mart_loan_overdue_daily": g.build_mart_loan_overdue_daily(fact_loan, dim_product),
         "gold_mart_card_kpi_daily": gc.build_mart_card_kpi_daily(
-            r["cards"], r["card_transactions"], r["card_statements"], AS_OF),
+            r["card_master"], r["card_transactions_hist"], r["card_statements_hist"], AS_OF),
         "gold_mart_deposit_trend": gd.build_mart_deposit_trend(
-            r["accounts"], dim_product, r["fx_rates"], r["branches"], AS_OF),
+            r["core_accounts"], dim_product, r["ref_fx_rates"], r["ref_branches"], AS_OF),
         "gold_mart_deposit_by_tenor": gd.build_mart_deposit_by_tenor(
-            r["accounts"], dim_product, r["fx_rates"], AS_OF),
+            r["core_accounts"], dim_product, r["ref_fx_rates"], AS_OF),
         "gold_mart_casa_customer": gd.build_mart_casa_customer(
-            r["accounts"], dim_product, dim_customer, AS_OF),
-        "gold_mart_deposit_new_accounts": gd.build_mart_deposit_new_accounts(r["accounts"]),
-        "silver_targets": r["targets"], "silver_fx_rates": r["fx_rates"],
+            r["core_accounts"], dim_product, dim_customer, AS_OF),
+        "gold_mart_deposit_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"]),
+        "silver_targets": r["ref_targets"], "silver_fx_rates": r["ref_fx_rates"],
     }
     for name, df in m.items():
         df.createOrReplaceTempView(name)

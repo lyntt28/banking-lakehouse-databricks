@@ -30,4 +30,4 @@ for d in days:
     dbutils.notebook.run("../03_gold/01_gold_build", 3600, args)
     print("xong", d)
 
-display(spark.table(f"{catalog}.gold.mart_npl_daily").orderBy(F.desc("as_of_date")))
+display(spark.table(f"{catalog}.gold.loan_mart_npl_daily").orderBy(F.desc("as_of_date")))

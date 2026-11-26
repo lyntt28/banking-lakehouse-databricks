@@ -57,7 +57,7 @@ def parsed_if_present(c: str) -> str:
 # ---------------------------------------------------------------- cấu hình từng bảng
 @dataclass(frozen=True)
 class SilverTable:
-    name: str
+    name: str                               # tên bảng silver
     key: list[str]
     cast: dict[str, Callable[[], Column]]   # cột đích -> hàm tạo biểu thức
     rules: list[Rule]
@@ -65,6 +65,11 @@ class SilverTable:
     fk: tuple[str, str] | None = None       # (cột, bảng tham chiếu) -> cột _fk_ok
     write_mode: str = "merge"               # merge | scd2 | append
     optional: list[str] = field(default_factory=list)   # cột nguồn mới, file cũ có thể thiếu
+    source: str = ""                        # tên bảng bronze / thư mục landing (rỗng = name)
+
+    @property
+    def bronze(self) -> str:
+        return self.source or self.name
 
 
 D_MDY = "MM/dd/yyyy"
@@ -83,7 +88,7 @@ _num = _lazy(to_num)
 
 
 BRANCHES = SilverTable(
-    name="branches",
+    name="ref_branches", source="branches",
     key=["branchnbr"],
     cast={
         "branchnbr": _str("branchnbr"), "br_area": _str("br_area"), "br_name": _str("br_name"),
@@ -97,7 +102,7 @@ BRANCHES = SilverTable(
 )
 
 PRODUCTS = SilverTable(
-    name="products",
+    name="ref_products", source="products",
     key=["prodcode"],
     cast={
         "prodcode": _str("prodcode"), "product_name": _str("product_name"),
@@ -113,7 +118,7 @@ PRODUCTS = SilverTable(
 )
 
 CUSTOMERS = SilverTable(
-    name="customers",
+    name="core_customers", source="customers",
     key=["customer_id"],
     cast={
         "customer_id": _str("customer_id"), "cust_type": _str("cust_type"),
@@ -142,7 +147,7 @@ CUSTOMER_TRACKED = ["cust_type", "full_name", "id_no", "dob", "gender", "phone",
                     "address", "province", "branchnbr", "segment", "monthly_income"]
 
 ACCOUNTS = SilverTable(
-    name="accounts",
+    name="core_accounts", source="accounts",
     key=["account_id"],
     cast={
         "account_id": _str("account_id"), "customer_id": _str("customer_id"),
@@ -154,7 +159,7 @@ ACCOUNTS = SilverTable(
         "tenor_months": _num("tenor_months", "int"),
     },
     optional=["tenor_months"],
-    fk=("customer_id", "customers"),
+    fk=("customer_id", "core_customers"),
     rules=[
         Rule("account_id_not_null", "account_id IS NOT NULL"),
         Rule("account_key_unique", "_dup_key_count = 1"),
@@ -165,7 +170,7 @@ ACCOUNTS = SilverTable(
 )
 
 LOANS = SilverTable(
-    name="loans",
+    name="loan_snapshots", source="loans",
     key=["as_of_date", "acctnbr"],          # snapshot dư nợ theo ngày
     cast={
         "as_of_date": _date("etl_dt", D_MDY),
@@ -199,7 +204,7 @@ LOANS = SilverTable(
 )
 
 TRANSACTIONS = SilverTable(
-    name="transactions",
+    name="core_transactions", source="transactions",
     key=["txn_id"],
     cast={
         "txn_id": _str("txn_id"), "account_id": _str("account_id"),
@@ -211,7 +216,7 @@ TRANSACTIONS = SilverTable(
         "branchnbr": _str("branchnbr"),
     },
     raw_cols=["txn_ts"],
-    fk=("account_id", "accounts"),
+    fk=("account_id", "core_accounts"),
     rules=[
         Rule("txn_id_not_null", "txn_id IS NOT NULL"),
         Rule("txn_key_unique", "_dup_key_count = 1"),
@@ -226,7 +231,7 @@ TRANSACTIONS = SilverTable(
 
 # ---- tham chiếu: tỷ giá, chỉ tiêu kế hoạch
 FX_RATES = SilverTable(
-    name="fx_rates",
+    name="ref_fx_rates", source="fx_rates",
     key=["rate_date", "currencycd"],
     cast={"rate_date": _date("rate_date", "yyyy-MM-dd"), "currencycd": _str("currencycd"),
           "rate_to_vnd": _num("rate_to_vnd", "decimal(18,4)")},
@@ -238,7 +243,7 @@ FX_RATES = SilverTable(
 )
 
 TARGETS = SilverTable(
-    name="targets",
+    name="ref_targets", source="targets",
     key=["metric_code", "period_type", "period", "branchnbr"],
     cast={"metric_code": _str("metric_code"), "period_type": _str("period_type"),
           "period": _str("period"), "branchnbr": _str("branchnbr"),
@@ -254,7 +259,7 @@ TARGETS = SilverTable(
 
 # ---- thẻ tín dụng
 CARDS = SilverTable(
-    name="cards",
+    name="card_master", source="cards",
     key=["card_no"],
     cast={
         "card_no": _str("card_no"), "customer_id": _str("customer_id"),
@@ -275,7 +280,7 @@ CARDS = SilverTable(
 )
 
 CARD_TRANSACTIONS = SilverTable(
-    name="card_transactions",
+    name="card_transactions_hist", source="card_transactions",
     key=["txn_id"],
     cast={
         "txn_id": _str("txn_id"), "card_no": _str("card_no"),
@@ -284,7 +289,7 @@ CARD_TRANSACTIONS = SilverTable(
         "merchant_name": _str("merchant_name"), "channel": _str("channel"),
         "location": _str("location"),
     },
-    fk=("card_no", "cards"),
+    fk=("card_no", "card_master"),
     rules=[
         Rule("card_txn_id_not_null", "txn_id IS NOT NULL"),
         Rule("card_txn_key_unique", "_dup_key_count = 1"),
@@ -297,7 +302,7 @@ CARD_TRANSACTIONS = SilverTable(
 )
 
 CARD_STATEMENTS = SilverTable(
-    name="card_statements",
+    name="card_statements_hist", source="card_statements",
     key=["stnd_dt", "card_no"],
     cast={
         "stnd_dt": _date("stnd_dt", "yyyy-MM-dd"), "card_no": _str("card_no"),
@@ -306,7 +311,7 @@ CARD_STATEMENTS = SilverTable(
         "min_payment_due": _num("min_payment_due"), "dpd": _num("dpd", "int"),
         "credit_limit": _num("credit_limit"),
     },
-    fk=("card_no", "cards"),
+    fk=("card_no", "card_master"),
     rules=[
         Rule("statement_key_not_null", "stnd_dt IS NOT NULL AND card_no IS NOT NULL"),
         Rule("statement_key_unique", "_dup_key_count = 1"),
@@ -318,7 +323,7 @@ CARD_STATEMENTS = SilverTable(
 
 # ---- file tổng hợp của hệ thống nguồn (để đối soát với Gold)
 CARD_KPI = SilverTable(
-    name="card_kpi",
+    name="card_kpi_source", source="card_kpi",
     key=["trx_date", "metric_code"],
     cast={
         "trx_date": _date("Trx_Date", "yyyy-MM-dd"), "metric_code": _str("Metric_Code"),
@@ -335,7 +340,7 @@ CARD_KPI = SilverTable(
 )
 
 DEPOSIT_SUMMARY = SilverTable(
-    name="deposit_summary",
+    name="dep_summary_source", source="deposit_summary",
     key=["stnd_dt", "account_group", "currencycd", "branchnbr"],
     cast={
         "stnd_dt": _date("STND_DT", "yyyyMMdd"), "account_group": _str("ACCOUNT_GROUP"),
@@ -354,7 +359,7 @@ DEPOSIT_SUMMARY = SilverTable(
 )
 
 INSURANCE_POLICIES = SilverTable(
-    name="insurance_policies",
+    name="ins_policies", source="insurance_policies",
     key=["policy_id"],
     cast={
         "policy_id": _str("policy_id"), "customer_id": _str("customer_id"),
@@ -362,7 +367,7 @@ INSURANCE_POLICIES = SilverTable(
         "annual_premium": _num("annual_premium"), "status": _str("status"),
         "sold_channel": _str("sold_channel"),
     },
-    fk=("customer_id", "customers"),
+    fk=("customer_id", "core_customers"),
     rules=[
         Rule("policy_id_not_null", "policy_id IS NOT NULL"),
         Rule("policy_key_unique", "_dup_key_count = 1"),
@@ -376,9 +381,10 @@ TABLES = {t.name: t for t in [BRANCHES, PRODUCTS, CUSTOMERS, ACCOUNTS, LOANS, TR
                                CARD_KPI, DEPOSIT_SUMMARY, INSURANCE_POLICIES]}
 # Thứ tự chạy: bảng tham chiếu trước (FK: accounts -> customers, transactions -> accounts,
 # card_transactions / card_statements -> cards)
-ORDER = ["branches", "products", "customers", "accounts", "loans", "transactions",
-         "fx_rates", "targets", "cards", "card_transactions", "card_statements",
-         "card_kpi", "deposit_summary", "insurance_policies"]
+ORDER = ["ref_branches", "ref_products", "core_customers", "core_accounts", "loan_snapshots",
+         "core_transactions", "ref_fx_rates", "ref_targets", "card_master",
+         "card_transactions_hist", "card_statements_hist", "card_kpi_source",
+         "dep_summary_source", "ins_policies"]
 
 
 # ---------------------------------------------------------------- các bước
@@ -398,7 +404,7 @@ def cast_columns(df: DataFrame, spec: SilverTable) -> DataFrame:
     sel += [_blank_to_null(c).alias(f"_raw_{c}") for c in spec.raw_cols]
     sel += [F.col(c) for c in ["_source_file", "_as_of_date", "_load_ts"] if c in df.columns]
     out = df.select(*sel)
-    if spec.name == "loans":
+    if spec.name == "loan_snapshots":
         out = out.withColumn("debt_group_calc", debt_group_col(F.col("songay_nqh")))
     return out
 
@@ -460,7 +466,7 @@ def prepare_silver(
         df = add_fk_flag(df, spec.fk[0], ref_keys)
     valid, quarantine = apply_dq(df, spec.rules)
     valid = valid.drop(*helper_cols(valid))
-    if spec.name == "loans":
+    if spec.name == "loan_snapshots":
         # Silver tính lại nhóm nợ từ DPD (nguồn có thể lệch - rule WARN ghi nhận)
         valid = valid.withColumn("debt_group", debt_group_col(F.col("songay_nqh"))) \
             .withColumn("is_npl", F.col("debt_group") >= 3)

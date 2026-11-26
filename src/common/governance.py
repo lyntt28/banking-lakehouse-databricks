@@ -66,19 +66,19 @@ MASKS = {
 
 # bảng -> {cột: loại mask}
 PII_COLUMNS: dict[str, dict[str, str]] = {
-    "silver.customers": {"full_name": "name", "id_no": "id_no", "phone": "phone",
+    "silver.core_customers": {"full_name": "name", "id_no": "id_no", "phone": "phone",
                          "email": "email", "address": "address", "dob": "dob",
                          "monthly_income": "income"},
     "gold.dim_customer": {"full_name": "name", "id_no": "id_no", "phone": "phone",
                           "email": "email", "address": "address", "dob": "dob",
                           "monthly_income": "income"},
-    "gold.mart_customer_360": {"full_name": "name", "monthly_income": "income"},
+    "gold.cust_mart_360": {"full_name": "name", "monthly_income": "income"},
 }
 
 # bảng có cột branchnbr -> lọc dòng theo chi nhánh cho branch_users
-BRANCH_FILTERED = ["gold.fact_loan_daily", "gold.fact_transaction", "gold.dim_customer",
-                   "gold.mart_loan_overdue_daily", "gold.mart_deposit_daily",
-                   "gold.mart_customer_360", "gold.mart_card_kpi_daily"]
+BRANCH_FILTERED = ["gold.loan_fact_daily", "gold.core_fact_transaction", "gold.dim_customer",
+                   "gold.loan_mart_overdue_daily", "gold.dep_mart_daily",
+                   "gold.cust_mart_360", "gold.card_mart_kpi_daily"]
 
 
 def _members(groups: list[str]) -> str:

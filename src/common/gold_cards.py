@@ -1,15 +1,15 @@
 """Gold cho dashboard Thẻ (Card Business) + đối soát với file tổng hợp của hệ thống nguồn.
 
 Mart
-    mart_card_kpi_daily     ngày x chi nhánh x loại KH x kênh phát hành: thẻ hiện hữu, mở mới,
+    card_mart_kpi_daily     ngày x chi nhánh x loại KH x kênh phát hành: thẻ hiện hữu, mở mới,
                             đóng, đang dùng, dư nợ, dư nợ quay vòng, chi tiêu, DPD 1+/10+/30+/90+
-    mart_card_spend_mix     ngày x loại giao dịch x trong nước/nước ngoài x kênh x MCC
-    mart_card_kpi_monthly   tháng x chi nhánh: tồn cuối kỳ + luỹ kế trong kỳ, MoM / YoY,
+    card_mart_spend_mix     ngày x loại giao dịch x trong nước/nước ngoài x kênh x MCC
+    card_mart_kpi_monthly   tháng x chi nhánh: tồn cuối kỳ + luỹ kế trong kỳ, MoM / YoY,
                             % hoàn thành chỉ tiêu tháng / năm (bảng targets)
 Đối soát
     card_kpi_metrics        mart ngày -> mã chỉ tiêu giống file card_kpi nguồn
     reconcile               so sánh Gold vs nguồn theo từng metric, có dung sai riêng
-    deposit_reconciliation  mart_deposit_daily vs deposit_summary (bang1247)
+    deposit_reconciliation  dep_mart_daily vs deposit_summary (bang1247)
 """
 
 from __future__ import annotations
@@ -244,7 +244,7 @@ TXN_BASED = ("Using_", "Usage_", "_Spending_Amt", "Purchasing_Amt", "Cash_Advanc
 
 def reconcile(gold: DataFrame, source: DataFrame, abs_tol: float = 1.0,
               txn_rel_tol_pct: float = 1.0) -> DataFrame:
-    """gold: (as_of_date, metric_code, gold_value); source: silver.card_kpi.
+    """gold: (as_of_date, metric_code, gold_value); source: silver.card_kpi_source.
     Trả về từng metric: giá trị 2 bên, chênh lệch, MATCH / WITHIN_TOLERANCE / MISMATCH /
     MISSING_IN_GOLD / MISSING_IN_SOURCE."""
     src = source.select(F.col("trx_date").alias("as_of_date"), "metric_code",

@@ -28,7 +28,7 @@ WITH m AS (
          sum(target_new_month) AS target_new_month, sum(target_sales_month) AS target_sales_month,
          sum(target_new_year) AS target_new_year, sum(target_sales_year) AS target_sales_year,
          sum(new_members_ytd) AS new_ytd, sum(spend_amt_ytd) AS sales_ytd
-  FROM {G}.mart_card_kpi_monthly GROUP BY year_month)
+  FROM {G}.card_mart_kpi_monthly GROUP BY year_month)
 """
 
 _v("card", 1, "v_card_kpi_cards",
@@ -69,8 +69,8 @@ _v("card", 2, "v_card_new_by_channel_7m",
    f"""
 SELECT date_format(as_of_date, 'yyyy-MM') AS year_month, acquisition_channel,
        sum(new_members) AS new_cards
-FROM {G}.mart_card_kpi_daily
-WHERE as_of_date > add_months((SELECT max(as_of_date) FROM {G}.mart_card_kpi_daily), -7)
+FROM {G}.card_mart_kpi_daily
+WHERE as_of_date > add_months((SELECT max(as_of_date) FROM {G}.card_mart_kpi_daily), -7)
 GROUP BY 1, 2
 """)
 
@@ -96,14 +96,14 @@ _v("card", 5, "v_card_spend_distribution",
    "by location (Domestic / X-Border), by channel (POS / Online)",
    f"""
 SELECT 'sector' AS donut, txn_type AS slice, sum(amount) AS amount
-FROM {G}.mart_card_spend_mix
-WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.mart_card_spend_mix) GROUP BY txn_type
+FROM {G}.card_mart_spend_mix
+WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.card_mart_spend_mix) GROUP BY txn_type
 UNION ALL
-SELECT 'location', location, sum(amount) FROM {G}.mart_card_spend_mix
-WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.mart_card_spend_mix) GROUP BY location
+SELECT 'location', location, sum(amount) FROM {G}.card_mart_spend_mix
+WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.card_mart_spend_mix) GROUP BY location
 UNION ALL
-SELECT 'channel', channel, sum(amount) FROM {G}.mart_card_spend_mix
-WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.mart_card_spend_mix) GROUP BY channel
+SELECT 'channel', channel, sum(amount) FROM {G}.card_mart_spend_mix
+WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.card_mart_spend_mix) GROUP BY channel
 """)
 
 _v("card", 6, "v_card_delinquency",
@@ -114,13 +114,13 @@ SELECT as_of_date,
   sum(dpd_10p_balance) / nullif(sum(balance), 0) * 100 AS dpd_10p_ratio,
   sum(dpd_30p_balance) / nullif(sum(balance), 0) * 100 AS dpd_30p_ratio,
   sum(npl_90p_balance) / nullif(sum(balance), 0) * 100 AS npl_90p_ratio
-FROM {G}.mart_card_kpi_daily
-WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.mart_card_kpi_daily)
+FROM {G}.card_mart_kpi_daily
+WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.card_mart_kpi_daily)
 GROUP BY as_of_date
 """)
 
 # ============================================================ 2. OVERDUE (RAMC)
-_LAST_LOAN = f"(SELECT max(as_of_date) FROM {G}.mart_loan_overdue_daily)"
+_LAST_LOAN = f"(SELECT max(as_of_date) FROM {G}.loan_mart_overdue_daily)"
 
 _v("overdue", 1, "v_overdue_tickers",
    "3 tickers: overdue amount, overdue ratio, vs D-1 / M-1 / Y-1",
@@ -130,15 +130,16 @@ SELECT as_of_date, overdue_balance, portfolio_balance, overdue_ratio * 100 AS ov
   (overdue_ratio - overdue_ratio_m1) * 100 AS ratio_vs_m1_pp,
   (overdue_ratio - overdue_ratio_y1) * 100 AS ratio_vs_y1_pp,
   npl_ratio * 100 AS npl_ratio_pct
-FROM {G}.mart_npl_daily WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.mart_npl_daily)
+FROM {G}.loan_mart_npl_daily
+WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.loan_mart_npl_daily)
 """)
 
 _v("overdue", 2, "v_overdue_daily_trend",
    "Bar + line, last 30 days: overdue amount (bar), overdue ratio % (line)",
    f"""
 SELECT as_of_date, overdue_balance, overdue_ratio * 100 AS overdue_ratio_pct
-FROM {G}.mart_npl_daily
-WHERE as_of_date > (SELECT max(as_of_date) FROM {G}.mart_npl_daily) - INTERVAL 30 DAYS
+FROM {G}.loan_mart_npl_daily
+WHERE as_of_date > (SELECT max(as_of_date) FROM {G}.loan_mart_npl_daily) - INTERVAL 30 DAYS
 """)
 
 _v("overdue", 3, "v_overdue_monthly_trend",
@@ -148,14 +149,14 @@ SELECT date_format(as_of_date, 'yyyy-MM') AS year_month, overdue_balance,
        overdue_ratio * 100 AS overdue_ratio_pct
 FROM (SELECT *, row_number() OVER (PARTITION BY date_format(as_of_date, 'yyyy-MM')
                                    ORDER BY as_of_date DESC) AS rn
-      FROM {G}.mart_npl_daily) WHERE rn = 1
+      FROM {G}.loan_mart_npl_daily) WHERE rn = 1
 """)
 
 _v("overdue", 4, "v_overdue_by_debt_group",
    "Donut: overdue balance by debt group 2-5",
    f"""
 SELECT debt_group, sum(overdue_balance) AS overdue_balance
-FROM {G}.mart_loan_overdue_daily
+FROM {G}.loan_mart_overdue_daily
 WHERE as_of_date = {_LAST_LOAN} AND debt_group BETWEEN 2 AND 5 GROUP BY debt_group
 """)
 
@@ -166,7 +167,7 @@ SELECT date_format(as_of_date, 'yyyy-MM') AS year_month, debt_group,
        sum(overdue_balance) AS overdue_balance
 FROM (SELECT *, dense_rank() OVER (PARTITION BY date_format(as_of_date, 'yyyy-MM')
                                    ORDER BY as_of_date DESC) AS rk
-      FROM {G}.mart_loan_overdue_daily)
+      FROM {G}.loan_mart_overdue_daily)
 WHERE rk = 1 AND debt_group >= 2 GROUP BY 1, 2
 """)
 
@@ -175,7 +176,7 @@ _v("overdue", 6, "v_overdue_by_product_group",
    f"""
 SELECT product_group, sum(overdue_balance) AS overdue_balance,
        sum(overdue_balance) / nullif(sum(portfolio_balance), 0) * 100 AS overdue_ratio_pct
-FROM {G}.mart_loan_overdue_daily WHERE as_of_date = {_LAST_LOAN} GROUP BY product_group
+FROM {G}.loan_mart_overdue_daily WHERE as_of_date = {_LAST_LOAN} GROUP BY product_group
 """)
 
 _v("overdue", 7, "v_overdue_branch_rank",
@@ -184,12 +185,12 @@ _v("overdue", 7, "v_overdue_branch_rank",
 SELECT o.branchnbr, b.br_name, b.region, sum(o.overdue_balance) AS overdue_balance,
        sum(o.overdue_balance) / nullif(sum(o.portfolio_balance), 0) * 100 AS overdue_ratio_pct,
        rank() OVER (ORDER BY sum(o.overdue_balance) DESC) AS rank_by_amount
-FROM {G}.mart_loan_overdue_daily o LEFT JOIN {G}.dim_branch b ON o.branchnbr = b.branchnbr
+FROM {G}.loan_mart_overdue_daily o LEFT JOIN {G}.dim_branch b ON o.branchnbr = b.branchnbr
 WHERE o.as_of_date = {_LAST_LOAN} GROUP BY o.branchnbr, b.br_name, b.region
 """)
 
 # ============================================================ 3. RETAIL DEPOSIT (RCD)
-_LAST_DEP = f"(SELECT max(as_of_date) FROM {G}.mart_deposit_trend)"
+_LAST_DEP = f"(SELECT max(as_of_date) FROM {G}.dep_mart_trend)"
 
 _v("deposit", 1, "v_deposit_gauges",
    "3 gauges: % target All products, CASA, TDA/ISA (targets: total only, class split "
@@ -199,9 +200,9 @@ WITH bal AS (
   SELECT sum(balance_vnd) AS all_bal,
          sum(CASE WHEN group_class = '1-CASA' THEN balance_vnd END) AS casa_bal,
          sum(CASE WHEN group_class IN ('2-TD', '3-ISA') THEN balance_vnd END) AS td_isa_bal
-  FROM {G}.mart_deposit_trend WHERE as_of_date = {_LAST_DEP}),
+  FROM {G}.dep_mart_trend WHERE as_of_date = {_LAST_DEP}),
 t AS (
-  SELECT sum(target_value) AS year_target FROM {{catalog}}.silver.targets
+  SELECT sum(target_value) AS year_target FROM {{catalog}}.silver.ref_targets
   WHERE metric_code = 'DEPOSIT_BALANCE' AND period_type = 'YEAR'
     AND period = CAST(year({_LAST_DEP}) AS STRING))
 SELECT all_bal, casa_bal, td_isa_bal, year_target,
@@ -219,7 +220,7 @@ WITH d AS (
   SELECT as_of_date, account_group, group_class, sum(balance_vnd) AS balance,
          sum(balance_vnd_d1) AS bal_d1, sum(balance_vnd_m1) AS bal_m1,
          sum(balance_vnd_y1) AS bal_y1
-  FROM {G}.mart_deposit_trend GROUP BY 1, 2, 3),
+  FROM {G}.dep_mart_trend GROUP BY 1, 2, 3),
 avg_m AS (
   SELECT account_group, avg(balance) AS month_avg_balance FROM d
   WHERE date_format(as_of_date, 'yyyy-MM') = date_format({_LAST_DEP}, 'yyyy-MM')
@@ -236,20 +237,20 @@ _v("deposit", 3, "v_deposit_by_region_product",
    "Balance by region / by product, stacked bar by group class",
    f"""
 SELECT region, group_class, account_group, sum(balance_vnd) AS balance
-FROM {G}.mart_deposit_trend WHERE as_of_date = {_LAST_DEP} GROUP BY 1, 2, 3
+FROM {G}.dep_mart_trend WHERE as_of_date = {_LAST_DEP} GROUP BY 1, 2, 3
 """)
 
 _v("deposit", 4, "v_deposit_casa_donut", "CASA donut: CASA share by account group",
    f"""
 SELECT account_group, sum(balance_vnd) AS balance
-FROM {G}.mart_deposit_trend WHERE as_of_date = {_LAST_DEP} AND group_class = '1-CASA'
+FROM {G}.dep_mart_trend WHERE as_of_date = {_LAST_DEP} AND group_class = '1-CASA'
 GROUP BY account_group
 """)
 
 _v("deposit", 5, "v_deposit_daily_balance", "Daily balance trend",
    f"""
 SELECT as_of_date, group_class, sum(balance_vnd) AS balance
-FROM {G}.mart_deposit_trend GROUP BY 1, 2
+FROM {G}.dep_mart_trend GROUP BY 1, 2
 """)
 
 _v("deposit", 6, "v_deposit_by_tenor",
@@ -258,8 +259,8 @@ _v("deposit", 6, "v_deposit_by_tenor",
 SELECT tenor_months, group_class, sum(balance_vnd) AS balance, min(min_rate) AS min_rate,
        max(max_rate) AS max_rate,
        sum(weighted_rate * balance_vnd) / nullif(sum(balance_vnd), 0) AS avg_rate
-FROM {G}.mart_deposit_by_tenor
-WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.mart_deposit_by_tenor) GROUP BY 1, 2
+FROM {G}.dep_mart_by_tenor
+WHERE as_of_date = (SELECT max(as_of_date) FROM {G}.dep_mart_by_tenor) GROUP BY 1, 2
 """)
 
 _v("deposit", 7, "v_casa_customer_distribution",
@@ -267,15 +268,15 @@ _v("deposit", 7, "v_casa_customer_distribution",
    f"""
 SELECT c.branchnbr, b.br_name, b.region, c.retail_customers, c.casa_customers,
        c.casa_active_customers, c.casa_dormant_customers, c.casa_penetration_pct
-FROM {G}.mart_casa_customer c LEFT JOIN {G}.dim_branch b ON c.branchnbr = b.branchnbr
-WHERE c.as_of_date = (SELECT max(as_of_date) FROM {G}.mart_casa_customer)
+FROM {G}.dep_mart_casa_customer c LEFT JOIN {G}.dim_branch b ON c.branchnbr = b.branchnbr
+WHERE c.as_of_date = (SELECT max(as_of_date) FROM {G}.dep_mart_casa_customer)
 """)
 
 _v("deposit", 8, "v_kstudy_new_accounts",
    "K-Study new open accounts, cumulative by month",
    f"""
 SELECT open_month, sum(new_accounts) AS new_accounts, sum(new_accounts_ytd) AS cumulative_ytd
-FROM {G}.mart_deposit_new_accounts WHERE product_type = 'KSTUDY' GROUP BY open_month
+FROM {G}.dep_mart_new_accounts WHERE product_type = 'KSTUDY' GROUP BY open_month
 """)
 
 

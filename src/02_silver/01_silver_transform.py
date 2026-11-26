@@ -66,7 +66,7 @@ def ref_keys(table: str):
 report = []
 for name in ORDER:
     spec = TABLES[name]
-    bronze = spark.table(f"{catalog}.bronze.{name}").filter(
+    bronze = spark.table(f"{catalog}.bronze.{spec.bronze}").filter(
         F.col("_as_of_date") == F.lit(as_of_date).cast("date"))
     n_bronze = bronze.count()
     if n_bronze == 0:
