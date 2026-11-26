@@ -37,6 +37,28 @@ def tables(spark, results):
         "gold_dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"]),
         "silver_ref_targets": r["ref_targets"], "silver_ref_fx_rates": r["ref_fx_rates"],
     }
+    ops = {
+        "pipeline_runs": ("as_of_date date, layer string, run_id string, status string, "
+                          "started_at timestamp, finished_at timestamp, message string"),
+        "published_batches": ("as_of_date date, run_id string, published_at timestamp, "
+                              "checks string"),
+        "task_runs": ("run_id string, as_of_date date, layer string, step string, status string, "
+                      "rows_in long, rows_out long, duration_s double, error string, "
+                      "logged_at timestamp"),
+        "file_manifest": ("as_of_date date, table_name string, required boolean, status string, "
+                          "file_count long, rows long, source_files array<string>, "
+                          "first_loaded_at timestamp, checked_at timestamp"),
+        "dq_results": ("run_id string, run_ts timestamp, table_name string, rule_name string, "
+                       "severity string, total_rows long, failed_rows long, fail_pct double, "
+                       "status string"),
+        "recon_card_kpi": ("as_of_date date, metric_code string, gold_value double, "
+                           "source_value double, diff double, diff_pct double, status string"),
+        "recon_deposit": ("as_of_date date, account_group string, currencycd string, "
+                          "branchnbr string, gold_mil_vnd double, source_mil_vnd double, "
+                          "diff double, status string"),
+    }
+    for name, schema in ops.items():
+        m[f"ops_{name}"] = spark.createDataFrame([], schema)
     for name, df in m.items():
         df.createOrReplaceTempView(name)
     return m
@@ -46,6 +68,7 @@ def _local_sql(ds: dict, params: dict) -> str:
     sql = "".join(ds["queryLines"])
     sql = re.sub(r"\bgold\.", "gold_", sql)
     sql = re.sub(r"\bsilver\.", "silver_", sql)
+    sql = re.sub(r"\bops\.", "ops_", sql)
     for k, v in params.items():
         sql = re.sub(r":" + k + r"\b", v, sql)
     return sql

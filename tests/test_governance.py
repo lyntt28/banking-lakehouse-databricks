@@ -88,6 +88,11 @@ def test_least_privilege_grants():
     assert {s.split("ON SCHEMA ")[1].split(" ")[0] for s in bu} == {"bank_test.gold",
                                                                     "bank_test.ops"}
     assert all("MODIFY" not in s for s in SQL if "risk_analysts" in s or "branch_users" in s)
+    # nhóm đọc giới hạn không có SELECT cả schema gold (branch_users) / ops (cả hai)
+    for g, schema in [("branch_users", "gold"), ("branch_users", "ops"),
+                      ("risk_analysts", "ops")]:
+        assert not any(f"ON SCHEMA bank_test.{schema} TO `{g}`" in s and "SELECT" in s
+                       for s in SQL), (g, schema)
     assert all(f"GRANT USE CATALOG ON CATALOG bank_test TO `{g}`" in SQL for g in GROUPS)
 
 
@@ -95,3 +100,26 @@ def test_functions_created_before_use():
     first_mask_use = next(i for i, s in enumerate(SQL) if "SET MASK" in s)
     last_fn = max(i for i, s in enumerate(SQL) if s.startswith("CREATE OR REPLACE FUNCTION"))
     assert last_fn < first_mask_use
+
+
+def test_restricted_tables_never_granted_to_limited_groups():
+    from common.governance import RESTRICTED_TABLES
+
+    for t in RESTRICTED_TABLES:
+        assert not any(f"ON TABLE bank_test.{t} " in s + " " for s in SQL if "GRANT SELECT" in s)
+
+
+def test_branch_users_only_get_row_filtered_or_dimension_tables():
+    from common.governance import BRANCH_FILTERED
+
+    granted = {s.split("ON TABLE bank_test.")[1].split(" ")[0] for s in SQL
+               if s.startswith("GRANT SELECT ON TABLE") and s.endswith("`branch_users`")}
+    assert granted - set(BRANCH_FILTERED) <= {"gold.dim_date", "gold.dim_branch",
+                                              "gold.dim_product"}
+    assert set(BRANCH_FILTERED) <= granted
+
+
+def test_table_grants_after_row_filters():
+    last_filter = max(i for i, s in enumerate(SQL) if "SET ROW FILTER" in s)
+    first_grant = min(i for i, s in enumerate(SQL) if s.startswith("GRANT SELECT ON TABLE"))
+    assert last_filter < first_grant

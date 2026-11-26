@@ -23,8 +23,13 @@ variables:
   governance_dry_run:
     description: >
       true = chỉ in SQL governance (Free Edition không có account groups);
-      false = áp dụng GRANT / column mask / row filter.
+      false = áp dụng GRANT / column mask / row filter. Prod luôn false (xem target prod).
     default: "true"
+  run_as_sp:
+    description: >
+      Application ID của service principal CHẠY job (runtime identity) ở test/prod.
+      Khác với identity deploy (CI/CD). Truyền khi deploy: --var run_as_sp=<application-id>
+    default: ""
 
 targets:
   dev:
@@ -37,6 +42,8 @@ targets:
     mode: production
     variables:
       catalog: bank_test
+    run_as:
+      service_principal_name: ${var.run_as_sp}
     workspace:
       root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
 
@@ -59,6 +66,10 @@ targets:
     mode: production
     variables:
       catalog: bank_prod
+      # Prod enforce governance thật; Free Edition (không có account group) chỉ chạy dev/test.
+      governance_dry_run: "false"
+    run_as:
+      service_principal_name: ${var.run_as_sp}
     workspace:
       root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
 
@@ -82,6 +93,7 @@ targets:
             on_failure:
               - ${var.notification_email}
         banking_ml_cross_sell_weekly:
+          # Notebook ML tự kiểm tra Gold đã publish trong 2 ngày gần nhất, không thì dừng.
           schedule:
             quartz_cron_expression: "0 30 8 ? * MON"   # 08:30 thứ Hai, sau job daily
             timezone_id: Asia/Ho_Chi_Minh

@@ -10,7 +10,7 @@ resources:
       parameters:
         - name: catalog
           default: ${var.catalog}
-        - name: as_of_date        # trống = ngày mới nhất có trong bronze
+        - name: as_of_date        # trống = mọi ngày chưa xử lý sau watermark (ops.pipeline_runs)
           default: ""
 
       tasks:
@@ -29,27 +29,20 @@ resources:
           max_retries: 1
           min_retry_interval_millis: 60000
 
-        # Silver: ép kiểu + DQ gate (dừng nếu rule FAIL > 5%) + MERGE / SCD2
-        - task_key: silver
+        # Silver -> Gold xen kẽ từng ngày chờ xử lý: DQ gate, MERGE / SCD2, rồi Gold
+        # staging -> gate đối soát -> publish. Không retry tự động: lỗi DQ / thiếu file /
+        # đối soát không tự hết; chạy lại job sau khi xử lý (idempotent).
+        - task_key: silver_gold
           depends_on:
             - task_key: bronze
           notebook_task:
-            notebook_path: ../src/02_silver/01_silver_transform.py
-          max_retries: 0          # lỗi DQ không tự hết khi chạy lại -> không retry
-
-        # Gold: star schema + mart cho dashboard
-        - task_key: gold
-          depends_on:
-            - task_key: silver
-          notebook_task:
-            notebook_path: ../src/03_gold/01_gold_build.py
-          max_retries: 1
-          min_retry_interval_millis: 60000
+            notebook_path: ../src/02_silver/00_daily_silver_gold.py
+          max_retries: 0
 
         # View cho dashboard (1 view / visual)
         - task_key: dashboard_views
           depends_on:
-            - task_key: gold
+            - task_key: silver_gold
           notebook_task:
             notebook_path: ../src/03_gold/02_dashboard_views.py
           max_retries: 1
@@ -89,6 +82,8 @@ resources:
           default: ${var.catalog}
         - name: label_mode
           default: holder
+        - name: max_gold_age_days   # Gold publish gần nhất cũ hơn -> dừng, không train dữ liệu cũ
+          default: "2"
       tasks:
         - task_key: train_and_score
           notebook_task:

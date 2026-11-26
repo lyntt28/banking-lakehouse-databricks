@@ -23,11 +23,13 @@ dbutils.widgets.text("as_of_date", "")
 dbutils.widgets.dropdown("label_mode", "holder", ["holder", "future"])
 dbutils.widgets.text("horizon_days", "90")
 dbutils.widgets.dropdown("register", "true", ["true", "false"])
+dbutils.widgets.text("max_gold_age_days", "2")
 catalog = dbutils.widgets.get("catalog")
 as_of_date = dbutils.widgets.get("as_of_date").strip()
 label_mode = dbutils.widgets.get("label_mode")
 horizon = int(dbutils.widgets.get("horizon_days"))
 register = dbutils.widgets.get("register") == "true"
+max_gold_age_days = int(dbutils.widgets.get("max_gold_age_days"))
 
 # COMMAND ----------
 
@@ -43,6 +45,7 @@ import mlflow  # noqa: E402
 from pyspark.sql import Window  # noqa: E402
 from pyspark.sql import functions as F  # noqa: E402
 
+from common.batch import assert_fresh  # noqa: E402
 from common.dates import check_date  # noqa: E402
 from common.delta_io import overwrite_date  # noqa: E402
 from common.governance import assert_pipeline_identity  # noqa: E402
@@ -56,7 +59,10 @@ from common.ml_features import (  # noqa: E402
 
 S, G = f"{catalog}.silver", f"{catalog}.gold"
 if not as_of_date:
-    as_of_date = str(spark.table(f"{S}.loan_snapshots").agg(F.max("as_of_date")).first()[0])
+    # Chỉ dùng ngày đã qua gate Gold; job daily lỗi / trễ -> dừng thay vì train trên dữ liệu cũ
+    latest = spark.sql(f"SELECT max(as_of_date) FROM {catalog}.ops.published_batches").first()[0]
+    assert_fresh(latest, str(spark.sql("SELECT current_date()").first()[0]), max_gold_age_days)
+    as_of_date = str(latest)
 assert_pipeline_identity(spark, catalog)
 as_of_date = check_date(as_of_date)
 day = F.lit(as_of_date).cast("date")

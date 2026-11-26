@@ -3,8 +3,28 @@ name = "banking-lakehouse"
 version = "0.1.0"
 requires-python = ">=3.11,<3.12"
 
+# `pip install -e .` -> import common / pipelines / data_generator không cần sys.path.
+# Notebook trên Databricks vẫn tự thêm src/ vào sys.path (bundle đồng bộ source, không build wheel).
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["common*", "pipelines*", "data_generator*"]
+
+[tool.coverage.run]
+source = ["src/common", "src/pipelines"]
+omit = ["src/common/lakeview.py"]
+
+[tool.coverage.report]
+skip_empty = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: Bronze -> Silver -> Gold end-to-end trên Spark + Delta local (chậm)",
+]
 
 [tool.ruff]
 line-length = 100
