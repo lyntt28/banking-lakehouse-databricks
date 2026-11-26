@@ -31,7 +31,7 @@ def test_vacuum_keeps_at_least_7_days():
 
 def test_branch_filtered_fact_tables_cluster_on_branch_or_key():
     # bảng có row filter theo chi nhánh nên cluster theo branchnbr để filter bỏ được file
-    for t in ("gold.fact_loan_daily", "gold.mart_loan_overdue_daily"):
+    for t in ("gold.loan_fact_daily", "gold.loan_mart_overdue_daily"):
         assert t in BRANCH_FILTERED and "branchnbr" in CLUSTERING[t]
 
 

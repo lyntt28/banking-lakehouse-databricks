@@ -14,29 +14,30 @@ AS_OF = "2026-11-01"
 @pytest.fixture(scope="module")
 def marts(spark, results):
     r = {t: x.valid for t, x in results.items()}
-    cust = r["customers"].withColumn("valid_from", F.lit(AS_OF).cast("date")) \
+    cust = r["core_customers"].withColumn("valid_from", F.lit(AS_OF).cast("date")) \
         .withColumn("valid_to", F.lit(None).cast("date")).withColumn("is_current", F.lit(True))
     dim_customer = g.build_dim_customer(cust)
-    dim_product = g.build_dim_product(r["products"])
-    fact_loan = g.build_fact_loan_daily(r["loans"], dim_customer)
+    dim_product = g.build_dim_product(r["ref_products"])
+    fact_loan = g.build_fact_loan_daily(r["loan_snapshots"], dim_customer)
     overdue = g.build_mart_loan_overdue_daily(fact_loan, dim_product)
-    card_daily = gc.build_mart_card_kpi_daily(r["cards"], r["card_transactions"],
-                                              r["card_statements"], AS_OF)
+    card_daily = gc.build_mart_card_kpi_daily(r["card_master"], r["card_transactions_hist"],
+                                              r["card_statements_hist"], AS_OF)
     m = {
-        "dim_branch": g.build_dim_branch(r["branches"]),
-        "mart_loan_overdue_daily": overdue,
-        "mart_npl_daily": g.build_mart_npl_daily(overdue),
-        "mart_card_kpi_daily": card_daily,
-        "mart_card_spend_mix": gc.build_mart_card_spend_mix(r["card_transactions"], AS_OF),
-        "mart_card_kpi_monthly": gc.build_mart_card_kpi_monthly(card_daily, r["targets"]),
-        "mart_deposit_trend": gd.build_mart_deposit_trend(r["accounts"], dim_product,
-                                                          r["fx_rates"], r["branches"], AS_OF),
-        "mart_deposit_by_tenor": gd.build_mart_deposit_by_tenor(r["accounts"], dim_product,
-                                                                r["fx_rates"], AS_OF),
-        "mart_casa_customer": gd.build_mart_casa_customer(r["accounts"], dim_product,
+        "dim_branch": g.build_dim_branch(r["ref_branches"]),
+        "loan_mart_overdue_daily": overdue,
+        "loan_mart_npl_daily": g.build_mart_npl_daily(overdue),
+        "card_mart_kpi_daily": card_daily,
+        "card_mart_spend_mix": gc.build_mart_card_spend_mix(r["card_transactions_hist"], AS_OF),
+        "card_mart_kpi_monthly": gc.build_mart_card_kpi_monthly(card_daily, r["ref_targets"]),
+        "dep_mart_trend": gd.build_mart_deposit_trend(r["core_accounts"], dim_product,
+                                                          r["ref_fx_rates"],
+                                                          r["ref_branches"], AS_OF),
+        "dep_mart_by_tenor": gd.build_mart_deposit_by_tenor(r["core_accounts"], dim_product,
+                                                                r["ref_fx_rates"], AS_OF),
+        "dep_mart_casa_customer": gd.build_mart_casa_customer(r["core_accounts"], dim_product,
                                                           dim_customer, AS_OF),
-        "mart_deposit_new_accounts": gd.build_mart_deposit_new_accounts(r["accounts"]),
-        "targets": r["targets"],
+        "dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"]),
+        "targets": r["ref_targets"],
     }
     for name, df in m.items():
         df.createOrReplaceTempView(name)
@@ -72,7 +73,7 @@ def test_view_statements_qualified():
 def test_card_kpi_view_values(spark, marts):
     sql = next(v[4] for v in VIEWS if v[2] == "v_card_kpi_cards")
     r = spark.sql(_local(sql)).first()
-    total = marts["mart_card_kpi_daily"].agg(F.sum("eop_members")).first()[0]
+    total = marts["card_mart_kpi_daily"].agg(F.sum("eop_members")).first()[0]
     assert r.customer_base == total
     assert r.new_vs_month_target_pct is not None   # có chỉ tiêu tháng 11/2026
 

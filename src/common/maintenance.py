@@ -9,16 +9,16 @@ Liquid clustering thay cho partition + ZORDER: đổi cột được, không lo 
 from __future__ import annotations
 
 CLUSTERING: dict[str, list[str]] = {
-    "silver.loans": ["as_of_date", "acctnbr"],
-    "silver.transactions": ["value_date", "account_id"],
-    "silver.card_transactions": ["_as_of_date", "card_no"],
-    "silver.card_statements": ["stnd_dt", "card_no"],
-    "silver.customers": ["customer_id"],
-    "gold.fact_loan_daily": ["as_of_date", "branchnbr"],
-    "gold.fact_transaction": ["value_date", "account_id"],
+    "silver.loan_snapshots": ["as_of_date", "acctnbr"],
+    "silver.core_transactions": ["value_date", "account_id"],
+    "silver.card_transactions_hist": ["_as_of_date", "card_no"],
+    "silver.card_statements_hist": ["stnd_dt", "card_no"],
+    "silver.core_customers": ["customer_id"],
+    "gold.loan_fact_daily": ["as_of_date", "branchnbr"],
+    "gold.core_fact_transaction": ["value_date", "account_id"],
     "gold.dim_customer": ["customer_id"],
-    "gold.mart_loan_overdue_daily": ["as_of_date", "branchnbr"],
-    "gold.mart_card_kpi_daily": ["as_of_date", "branchnbr"],
+    "gold.loan_mart_overdue_daily": ["as_of_date", "branchnbr"],
+    "gold.card_mart_kpi_daily": ["as_of_date", "branchnbr"],
     "ops.dq_quarantine": ["table_name", "_source_file"],
 }
 
@@ -26,14 +26,14 @@ CLUSTERING: dict[str, list[str]] = {
 BENCHMARKS: dict[str, str] = {
     "overdue_one_branch_30d": (
         "SELECT as_of_date, sum(overdue_balance) / sum(portfolio_balance) AS ratio "
-        "FROM {catalog}.gold.mart_loan_overdue_daily WHERE branchnbr = '101' "
+        "FROM {catalog}.gold.loan_mart_overdue_daily WHERE branchnbr = '101' "
         "AND as_of_date BETWEEN DATE'{day}' - INTERVAL 30 DAYS AND DATE'{day}' GROUP BY 1"),
     "loan_book_one_day": (
-        "SELECT debt_group, count(*), sum(balance_vnd) FROM {catalog}.gold.fact_loan_daily "
+        "SELECT debt_group, count(*), sum(balance_vnd) FROM {catalog}.gold.loan_fact_daily "
         "WHERE as_of_date = DATE'{day}' GROUP BY 1"),
     "account_history": (
-        "SELECT * FROM {catalog}.gold.fact_transaction WHERE account_id = "
-        "(SELECT min(account_id) FROM {catalog}.gold.fact_transaction "
+        "SELECT * FROM {catalog}.gold.core_fact_transaction WHERE account_id = "
+        "(SELECT min(account_id) FROM {catalog}.gold.core_fact_transaction "
         "WHERE value_date = DATE'{day}')"),
     "customer_lookup": (
         "SELECT * FROM {catalog}.gold.dim_customer WHERE customer_id = '1000042'"),
