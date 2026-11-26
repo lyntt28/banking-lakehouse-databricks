@@ -619,7 +619,8 @@ SELECT DISTINCT mng_br FROM {T} WHERE mng_br IS NOT NULL
 
 # ============================================================ 3. RETAIL DEPOSIT (RCD)
 DEP_COLORS = {   # reference/dashboards/deposit/dashboardv2.js, api_server.py
-    "gauge": {"all": "#22AFFF", "casa": "#10B981", "tda": "#F47B20"},
+    "gauge": {"all": "#223A5E", "casa": "#009688", "tda": "#F4A300"},
+    "kpi": "#223A5E",
     "daily": "#223A5E",
     "mom": {"1-CASA last year": "#FFE082", "1-CASA this year": "#F4A300",
             "2-TD last year": "#80CBC4", "2-TD this year": "#009688",
@@ -637,8 +638,9 @@ def deposit_dashboard(catalog: str) -> dict:
     d = Dash("retail_deposit", "Retail Deposit Performance")
     d.param("report_date", "Report date", "DATE", "now/d")
     d.param("region", "Region", "STRING", "all")
+    usd = USD_RATE.format(silver=_q(catalog, "silver"))
     base = f"""
-WITH p AS (SELECT {_report_day(f'{G}.dep_mart_trend')} AS d),
+WITH p AS (SELECT {_report_day(f'{G}.dep_mart_trend')} AS d, {usd} AS usd),
 f AS (SELECT * FROM {G}.dep_mart_trend WHERE :region = 'all' OR region = :region),
 day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)
 """
@@ -647,9 +649,9 @@ day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)
   SELECT c.as_of_date, sum(c.retail_customers) AS retail
   FROM {G}.dep_mart_casa_customer c LEFT JOIN {G}.dim_branch b ON b.branchnbr = c.branchnbr
   WHERE :region = 'all' OR b.region = :region GROUP BY 1)
-SELECT x.bal AS ending_balance,
+SELECT x.bal / p.usd / 1000 AS ending_balance,
   (SELECT avg(bal) FROM day, p WHERE date_trunc('MM', as_of_date) = date_trunc('MM', p.d)
-     AND as_of_date <= p.d) AS monthly_avg_balance,
+     AND as_of_date <= p.d) / p.usd / 1000 AS monthly_avg_balance,
   (SELECT retail FROM cust, p WHERE cust.as_of_date = (SELECT max(as_of_date) FROM cust
      WHERE as_of_date <= p.d)) AS retail_customers
 FROM day x, p WHERE x.as_of_date = p.d
@@ -663,10 +665,14 @@ FROM day x, p WHERE x.as_of_date = p.d
   UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p
          WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),
 cur AS (SELECT x.bal FROM day x, p WHERE x.as_of_date = p.d)
-SELECT pk.ord, pk.cmp, cur.bal - c.bal AS ending_balance_diff,
-       (cur.bal - c.bal) / nullif(c.bal, 0) * 100 AS ending_balance_pct
-FROM pick pk CROSS JOIN cur LEFT JOIN day c ON c.as_of_date = pk.dd ORDER BY pk.ord
-""", ["report_date", "region"])
+SELECT pk.cmp AS compare,
+       {diff} AS balance_change,
+       {pct} AS change_pct
+FROM pick pk CROSS JOIN cur CROSS JOIN p LEFT JOIN day c ON c.as_of_date = pk.dd
+ORDER BY pk.ord
+""".format(diff=_arrow_pct("(cur.bal - c.bal) / p.usd / 1000", " K USD"),
+           pct=_arrow_pct("(cur.bal - c.bal) / nullif(c.bal, 0) * 100")),
+        ["report_date", "region"])
     ds_gauge = d.dataset("dep_gauges", "Target gauges", base + f"""
 , cur AS (
   SELECT sum(balance_vnd) AS all_bal,
@@ -687,7 +693,7 @@ SELECT cur.all_bal / nullif(t.all_t, 0) * 100 AS all_pct,
 FROM cur CROSS JOIN t
 """, ["report_date", "region"])
     ds_daily = d.dataset("dep_daily30", "Ending Balance - Last 30 Days", base + """
-SELECT date_format(as_of_date, 'dd/MM') AS day, bal AS balance FROM day, p
+SELECT date_format(as_of_date, 'dd/MM') AS day, bal / p.usd / 1000 AS balance FROM day, p
 WHERE as_of_date BETWEEN date_sub(p.d, 29) AND p.d
 """, ["report_date", "region"])
     ds_mom = d.dataset("dep_mom", "Monthly Average Balance (MoM)", base + """
@@ -699,16 +705,17 @@ WHERE as_of_date BETWEEN date_sub(p.d, 29) AND p.d
 SELECT date_format(make_date(2000, m.mn, 1), 'MMM') AS month,
        concat(m.group_class, CASE WHEN m.yr = year(p.d) THEN ' this year'
                                     ELSE ' last year' END) AS series,
-       m.avg_bal
+       m.avg_bal / p.usd / 1000 AS avg_bal
 FROM m, p WHERE m.yr IN (year(p.d), year(p.d) - 1) AND make_date(m.yr, m.mn, 1) <= p.d
 """, ["report_date", "region"])
     ds_reg = d.dataset("dep_region", "Regional Deposit Distribution", base + """
-SELECT region, sum(balance_vnd) AS balance FROM f, p WHERE f.as_of_date = p.d GROUP BY 1
+SELECT region, sum(balance_vnd) / max(p.usd) / 1000 AS balance FROM f, p
+WHERE f.as_of_date = p.d GROUP BY 1
 """, ["report_date", "region"])
     ds_term = d.dataset("dep_term", "Deposit by Term and IR (in Month)", f"""
-WITH p AS (SELECT {_report_day(f'{G}.dep_mart_by_tenor')} AS d)
+WITH p AS (SELECT {_report_day(f'{G}.dep_mart_by_tenor')} AS d, {usd} AS usd)
 SELECT concat(t.tenor_months, 'M') AS tenor, t.tenor_months,
-       sum(t.balance_vnd) AS balance,
+       sum(t.balance_vnd) / max(p.usd) / 1000 AS balance,
        sum(t.weighted_rate * t.balance_vnd) / nullif(sum(t.balance_vnd), 0) * 100 AS avg_interest
 FROM {G}.dep_mart_by_tenor t, p WHERE t.as_of_date = p.d GROUP BY 1, 2
 ORDER BY t.tenor_months
@@ -743,57 +750,65 @@ pk AS (
          (SELECT max(as_of_date) FROM day, p
           WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) AS y1),
 cur AS (SELECT g.* FROM g, p WHERE g.as_of_date = p.d)
-SELECT cur.account_group AS product, cur.bal AS ending_balance,
-       CAST(cur.bal AS DOUBLE) / sum(CAST(cur.bal AS DOUBLE)) OVER () * 100 AS portion,
-       cur.bal - d1.bal AS diff_last_day, cur.bal - m1.bal AS diff_last_month,
-       cur.bal - y1.bal AS diff_last_year
-FROM cur CROSS JOIN pk
+SELECT cur.account_group AS product,
+       format_number(cur.bal / p.usd / 1000, 0) AS ending_balance,
+       concat(format_number(CAST(cur.bal AS DOUBLE)
+              / sum(CAST(cur.bal AS DOUBLE)) OVER () * 100, 1), '%') AS portion,
+       {dd} AS diff_last_day, {dm} AS diff_last_month, {dy} AS diff_last_year
+FROM cur CROSS JOIN pk CROSS JOIN p
 LEFT JOIN g d1 ON d1.account_group = cur.account_group AND d1.as_of_date = pk.d1
 LEFT JOIN g m1 ON m1.account_group = cur.account_group AND m1.as_of_date = pk.m1
 LEFT JOIN g y1 ON y1.account_group = cur.account_group AND y1.as_of_date = pk.y1
-ORDER BY ending_balance DESC
-""", ["report_date", "region"])
+ORDER BY cur.bal DESC
+""".format(dd=_arrow_pct("(cur.bal - d1.bal) / p.usd / 1000", ""),
+           dm=_arrow_pct("(cur.bal - m1.bal) / p.usd / 1000", ""),
+           dy=_arrow_pct("(cur.bal - y1.bal) / p.usd / 1000", "")), ["report_date", "region"])
     ds_rg = d.dataset("dep_region_options", "Region options", f"""
 SELECT 'all' AS region UNION ALL SELECT DISTINCT region FROM {G}.dim_branch
 """, [])
 
     c = DEP_COLORS
-    d.text("# Retail Deposit Performance", 0, 0, 4, 2)
-    # ticker-row: 3 ô
-    for i, (col, title, fmt) in enumerate([
-            ("ending_balance", "Ending Balance", "compact"),
-            ("monthly_avg_balance", "Monthly Avg Balance", "compact"),
-            ("retail_customers", "Retail Customers", "int")]):
-        d.counter(ds_tick, col, title, 2 * i, 2, w=2, fmt=fmt)
-    d.table(ds_cmp, "Ending Balance vs Last Day / Month / Year", [
-        ("cmp", "Compare", "text"), ("ending_balance_diff", "+/- Balance", "num"),
-        ("ending_balance_pct", "+/- %", "pct")], 0, 5, 6, 3)
-    # gauge-row: 3 đồng hồ -> counter % (Lakeview không có gauge)
+    # 1 trang, đọc từ trên xuống: KPI -> so sánh -> chỉ tiêu -> xu hướng -> cơ cấu -> sản phẩm
+    d.text("# RETAIL DEPOSIT PERFORMANCE\nUnit: **K USD** (quy đổi theo tỷ giá USD ngày báo cáo)",
+           0, 0, 4, 2)
+    for i, (col, title) in enumerate([("ending_balance", "Ending Balance (K USD)"),
+                                      ("monthly_avg_balance", "Monthly Avg Balance (K USD)"),
+                                      ("retail_customers", "Retail Customers")]):
+        d.counter(ds_tick, col, title, 2 * i, 2, w=2, color=c["kpi"], fmt="int")
+    d.table(ds_cmp, "", [
+        ("compare", "", "text"), ("balance_change", "Ending Balance change", "text"),
+        ("change_pct", "Change (%)", "text")], 0, 5, 6, 3)
+
+    d.text("### 🎯 Target Achievement (Year)", 0, 8)
     for i, (col, title, key) in enumerate([("all_pct", "All Products Target (%)", "all"),
                                            ("casa_pct", "CASA Target (%)", "casa"),
                                            ("tda_pct", "TDA/ISA Target (%)", "tda")]):
-        d.counter(ds_gauge, col, title, 2 * i, 8, w=2, color=c["gauge"][key], fmt="pct")
-    # chart-section: 2 biểu đồ toàn chiều rộng
-    d.chart("bar", ds_daily, "Ending Balance - Last 30 Days", 0, 11, 6, 7, cat="day",
+        d.counter(ds_gauge, col, title, 2 * i, 9, w=2, color=c["gauge"][key], fmt="pct")
+
+    d.text("### 📈 Balance Trend", 0, 12)
+    d.chart("bar", ds_daily, "Ending Balance - Last 30 Days (K USD)", 0, 13, 6, 7, cat="day",
             val="balance", single_color=c["daily"], labels=False)
-    d.chart("bar", ds_mom, "Monthly Average Balance (MoM)", 0, 18, 6, 7, cat="month",
-            series="series", val="avg_bal", layout="group", colors=c["mom"], labels=False)
-    # triple-table-row 1fr 2fr -> 2 + 4
-    d.chart("pie", ds_reg, "Regional Deposit Distribution", 0, 25, 2, 7, cat="region",
+    d.chart("bar", ds_mom, "Monthly Average Balance - This Year vs Last Year (K USD)", 0, 20, 6,
+            7, cat="month", series="series", val="avg_bal", layout="group", colors=c["mom"],
+            labels=False)
+
+    d.text("### 🧭 Portfolio Mix", 0, 27)
+    d.chart("pie", ds_reg, "Regional Deposit Distribution", 0, 28, 2, 7, cat="region",
             val="balance", colors=c["region"])
-    d.combo(ds_term, "Deposit by Term and IR (in Month)", 2, 25, 4, 7, cat="tenor",
-            bar="balance", line="avg_interest", bar_title="Balance",
-            line_title="Avg Interest", bar_color=c["term_bar"], line_color=c["term_line"])
-    d.chart("pie", ds_casa, "CASA Customer Distribution", 0, 32, 2, 7, cat="segment",
+    d.combo(ds_term, "Deposit by Term (K USD) and Avg Interest (%)", 2, 28, 4, 7, cat="tenor",
+            bar="balance", line="avg_interest", bar_title="Balance (K USD)",
+            line_title="Avg Interest (%)", bar_color=c["term_bar"], line_color=c["term_line"])
+    d.chart("pie", ds_casa, "CASA Customer Distribution", 0, 35, 2, 7, cat="segment",
             val="customers", colors=c["casa"])
-    d.chart("bar", ds_ks, "Edu-Save New open Account_ Accumulate by Month", 2, 32, 4, 7,
+    d.chart("bar", ds_ks, "Edu-Save New Accounts - Accumulated by Month", 2, 35, 4, 7,
             cat="month", val="cumulative_accounts", single_color=c["edusave"])
-    # Balance by Product: bảng cuối trang
-    d.table(ds_prod, "Balance by Product", [
-        ("product", "Balance by Product", "text"), ("ending_balance", "Ending Balance", "num"),
-        ("portion", "Portion", "pct"), ("diff_last_day", "+/- Last Day", "num"),
-        ("diff_last_month", "+/- Last Month", "num"),
-        ("diff_last_year", "+/- Last Year", "num")], 0, 39, 6, 6)
+
+    d.text("### 📋 Balance by Product", 0, 42)
+    d.table(ds_prod, "", [
+        ("product", "Product", "text"), ("ending_balance", "Ending Balance (K USD)", "text"),
+        ("portion", "Portion", "text"), ("diff_last_day", "+/- Last Day", "text"),
+        ("diff_last_month", "+/- Last Month", "text"),
+        ("diff_last_year", "+/- Last Year", "text")], 0, 43, 6, 6)
     d.param_filter("report_date", "Report date", "filter-date-picker", 4, 0)
     d.param_filter("region", "Region", "filter-single-select", 5, 0,
                    options_ds=ds_rg, options_col="region")
