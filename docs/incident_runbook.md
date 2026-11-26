@@ -17,7 +17,8 @@ SELECT max(as_of_date) FROM <c>.ops.published_batches;
 Gold chỉ ghi sau gate. Nếu lỗi ở `gold:publish` (hạ tầng giữa chừng) → mục 5.
 
 ## 1. `SourceFilesMissing` (bước `file_manifest`)
-- Xem `ops.file_manifest` ngày đó, `status = 'MISSING'`.
+- Xem `ops.file_manifest` ngày đó, `status IN ('MISSING', 'INCOMPLETE')`. `INCOMPLETE` = đã
+  nhận một phần (vd: 5/9 file KPI thẻ); thông báo lỗi liệt kê nhóm file còn thiếu.
 - Liên hệ hệ thống nguồn; khi file về landing: chạy lại job (as_of_date trống). Bronze nạp file
   mới, pipeline tiếp tục từ ngày lỗi. Không cần thao tác dữ liệu.
 

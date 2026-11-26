@@ -93,16 +93,37 @@ def ensure_ops_tables(spark, catalog: str) -> None:
         spark.sql(ddl.format(table=fq(catalog, "ops", name)))
 
 
-# Số file nguồn gửi mỗi ngày theo hợp đồng dữ liệu (mặc định 1). card_kpi: 1 file / nhóm KPI.
-EXPECTED_FILES = {"card_kpi_source": 9}
+# Data contract: bảng gửi NHIỀU file / ngày, mỗi file 1 nhóm (tên file bắt đầu bằng mã nhóm).
+# card_kpi_source: 1 file / nhóm KPI. Phải khớp data_generator.summaries.KPI_FILES.
+REQUIRED_FILE_GROUPS = {
+    "card_kpi_source": ("01_member_eop", "02_member_usage", "03_new_consumer",
+                        "04_member_closed", "05_balance_eop", "06_spend_sector",
+                        "07_spend_location", "08_spend_channel", "09_risk_dpd"),
+}
+# Số file nguồn gửi mỗi ngày theo hợp đồng dữ liệu (mặc định 1).
+EXPECTED_FILES = {t: len(g) for t, g in REQUIRED_FILE_GROUPS.items()}
 
 
-def manifest_status(table: str, file_count: int, order: list[str]) -> str:
+def _basename(path: str) -> str:
+    return path.rstrip("/").rsplit("/", 1)[-1]
+
+
+def missing_file_groups(table: str, files: list[str]) -> list[str]:
+    """Nhóm file theo data contract mà ngày đó chưa nhận (vd: 5/9 file KPI thẻ)."""
+    names = [_basename(f) for f in files]
+    return [g for g in REQUIRED_FILE_GROUPS.get(table, ())
+            if not any(n.startswith(g) for n in names)]
+
+
+def manifest_status(table: str, files: list[str], order: list[str]) -> str:
     """ARRIVED | MISSING (bảng bắt buộc chưa có file) | NOT_SENT (bảng tham chiếu không gửi)
-    | MULTIPLE_FILES (nhiều file hơn hợp đồng: nguồn gửi lại / sửa file - cần kiểm tra)."""
-    if file_count == 0:
+    | INCOMPLETE (mới nhận 1 phần: thiếu nhóm file theo data contract)
+    | MULTIPLE_FILES (đủ nhóm nhưng nhiều file hơn hợp đồng: nguồn gửi lại / sửa file)."""
+    if not files:
         return "MISSING" if table in required_tables(order) else "NOT_SENT"
-    return "MULTIPLE_FILES" if file_count > EXPECTED_FILES.get(table, 1) else "ARRIVED"
+    if missing_file_groups(table, files):
+        return "INCOMPLETE"
+    return "MULTIPLE_FILES" if len(files) > EXPECTED_FILES.get(table, 1) else "ARRIVED"
 
 
 def required_tables(order: list[str]) -> list[str]:
@@ -112,6 +133,11 @@ def required_tables(order: list[str]) -> list[str]:
 def missing_tables(row_counts: dict[str, int], order: list[str]) -> list[str]:
     """Bảng bắt buộc nhưng ngày đó không có dòng nào trong bronze (file chưa về)."""
     return [t for t in required_tables(order) if row_counts.get(t, 0) == 0]
+
+
+def incomplete_tables(statuses: dict[str, str]) -> list[str]:
+    """Bảng đã có file nhưng chưa đủ theo data contract -> chưa được xử lý ngày đó."""
+    return sorted(t for t, st in statuses.items() if st == "INCOMPLETE")
 
 
 def pending_dates(bronze_dates: list[str], watermark: str | None,
