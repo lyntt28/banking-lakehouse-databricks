@@ -137,19 +137,16 @@ class Dash:
 
     def table(self, ds: str, title: str, cols: list[tuple[str, str, str]], x: int, y: int,
               w: int, h: int) -> None:
-        """cols: (cột, tiêu đề, định dạng: text | int | num | pct)."""
-        enc = []
-        for i, (c, t, f) in enumerate(cols):
-            e = {"fieldName": c, "displayName": t, "title": t, "order": 100000 + i,
-                 "type": "string" if f == "text" else "float",
-                 "displayAs": "string" if f == "text" else "number", "alignContent":
-                 "left" if f == "text" else "right", "visible": True}
-            if f != "text":
-                e["numberFormat"] = {"int": "#,##0", "num": "#,##0.00", "pct": "0.00"}[f]
-            enc.append(e)
+        """cols: (cột, tiêu đề, định dạng: text | int | num | pct).
+
+        Spec bảng version 2 (định dạng Databricks hiện tại): mỗi cột chỉ cần fieldName +
+        displayName. Spec version 1 cũ đòi nhiều trường bắt buộc -> "Invalid widget definition".
+        Định dạng số làm ở SQL (round) thay vì trong spec.
+        """
+        enc = [{"fieldName": c, "displayName": t or c} for c, t, _ in cols]
         self.place({"name": self._wid("table"),
                     "queries": self._query(ds, [(c, f"`{c}`") for c, _, _ in cols], agg=False),
-                    "spec": {"version": 1, "widgetType": "table",
+                    "spec": {"version": 2, "widgetType": "table",
                              "encodings": {"columns": enc},
                              "frame": {"showTitle": True, "title": title}}}, x, y, w, h)
 

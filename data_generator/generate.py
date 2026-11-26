@@ -120,6 +120,9 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
             core.evolve_customers(rnd, customers)
             cd.evolve_cards(rnd, cards, customers, as_of)
             cd.evolve_insurance(rnd, policies, customers, cards, as_of)
+            # TK mở mới trong kỳ (rnd riêng: không làm đổi chuỗi ngẫu nhiên của dữ liệu cũ)
+            core.open_new_accounts(random.Random(f"{seed}-{as_of}"), accounts, customers,
+                                   as_of, max(1, sizes.accounts // 100))
 
         add("fx_rates", write_csv(path("fx_rates", "fx_rates.csv"), ref.FX_HEADER,
                                   ref.fx_rows(as_of)))
