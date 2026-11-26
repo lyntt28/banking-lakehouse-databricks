@@ -304,59 +304,29 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "as_of_date",
-                    "displayName": "Data date",
-                    "title": "Data date",
-                    "order": 100000,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Data date"
                   },
                   {
                     "fieldName": "layer",
-                    "displayName": "Layer",
-                    "title": "Layer",
-                    "order": 100001,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Layer"
                   },
                   {
                     "fieldName": "status",
-                    "displayName": "Status",
-                    "title": "Status",
-                    "order": 100002,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Status"
                   },
                   {
                     "fieldName": "message",
-                    "displayName": "Message",
-                    "title": "Message",
-                    "order": 100003,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Message"
                   },
                   {
                     "fieldName": "run_id",
-                    "displayName": "Run ID",
-                    "title": "Run ID",
-                    "order": 100004,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Run ID"
                   }
                 ]
               },
@@ -412,70 +382,33 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "as_of_date",
-                    "displayName": "Data date",
-                    "title": "Data date",
-                    "order": 100000,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Data date"
                   },
                   {
                     "fieldName": "layer",
-                    "displayName": "Layer",
-                    "title": "Layer",
-                    "order": 100001,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Layer"
                   },
                   {
                     "fieldName": "step",
-                    "displayName": "Step",
-                    "title": "Step",
-                    "order": 100002,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Step"
                   },
                   {
                     "fieldName": "error",
-                    "displayName": "Error",
-                    "title": "Error",
-                    "order": 100003,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Error"
                   },
                   {
                     "fieldName": "duration_s",
-                    "displayName": "Duration (s)",
-                    "title": "Duration (s)",
-                    "order": 100004,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "#,##0.00"
+                    "displayName": "Duration (s)"
                   },
                   {
                     "fieldName": "run_id",
-                    "displayName": "Run ID",
-                    "title": "Run ID",
-                    "order": 100005,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Run ID"
                   }
                 ]
               },
@@ -669,61 +602,29 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "as_of_date",
-                    "displayName": "Data date",
-                    "title": "Data date",
-                    "order": 100000,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Data date"
                   },
                   {
                     "fieldName": "table_name",
-                    "displayName": "Table",
-                    "title": "Table",
-                    "order": 100001,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Table"
                   },
                   {
                     "fieldName": "status",
-                    "displayName": "Status",
-                    "title": "Status",
-                    "order": 100002,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Status"
                   },
                   {
                     "fieldName": "file_count",
-                    "displayName": "Files",
-                    "title": "Files",
-                    "order": 100003,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "#,##0"
+                    "displayName": "Files"
                   },
                   {
                     "fieldName": "rows",
-                    "displayName": "Rows",
-                    "title": "Rows",
-                    "order": 100004,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "#,##0"
+                    "displayName": "Rows"
                   }
                 ]
               },
@@ -775,60 +676,29 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "as_of_date",
-                    "displayName": "Data date",
-                    "title": "Data date",
-                    "order": 100000,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Data date"
                   },
                   {
                     "fieldName": "check",
-                    "displayName": "Check",
-                    "title": "Check",
-                    "order": 100001,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Check"
                   },
                   {
                     "fieldName": "item",
-                    "displayName": "Item",
-                    "title": "Item",
-                    "order": 100002,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Item"
                   },
                   {
                     "fieldName": "status",
-                    "displayName": "Status",
-                    "title": "Status",
-                    "order": 100003,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Status"
                   },
                   {
                     "fieldName": "diff",
-                    "displayName": "Diff",
-                    "title": "Diff",
-                    "order": 100004,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "#,##0.00"
+                    "displayName": "Diff"
                   }
                 ]
               },

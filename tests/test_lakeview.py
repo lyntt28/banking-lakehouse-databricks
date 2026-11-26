@@ -26,6 +26,8 @@ def tables(spark, results):
     m = {
         "gold_dim_branch": g.build_dim_branch(r["ref_branches"]),
         "gold_loan_mart_overdue_daily": g.build_mart_loan_overdue_daily(fact_loan, dim_product),
+        "gold_card_mart_overdue_daily": gc.build_mart_card_overdue_daily(
+            r["card_overdue_source"]),
         "gold_card_mart_kpi_daily": gc.build_mart_card_kpi_daily(
             r["card_master"], r["card_transactions_hist"], r["card_statements_hist"], AS_OF),
         "gold_dep_mart_trend": gd.build_mart_deposit_trend(
@@ -149,7 +151,7 @@ def test_section_order_matches_original():
              "By Channels", "DPD 1+ (%)", "DPD 10+ (%)", "DPD 30+ (%)", "NPL (%)"]
     assert [t for t in card[6:] if t in order] == order
     ovd = titles("loan_overdue.lvdash.json")
-    assert ovd == ["Overdue Ratio", "Overdue Balance (USD)", "Ending Balance (USD)",
+    assert ovd == ["FX (VND/USD)", "Overdue Ratio", "Overdue Balance (USD)", "Ending Balance (USD)",
                    "Comparison", "Overdue Trend (Last 5 Days)", "Overdue Trend (Monthly)",
                    "Overdue Amount by Debt Groups", "Overdue Amount by Product Groups",
                    "Overdue Ratio by Product Groups", "Overdue Ratio by Branches - Top5"]
