@@ -59,10 +59,10 @@ from pathlib import Path  # noqa: E402
 src_dir = str(Path(os.getcwd()).parents[0])
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
-from common.batch import PIPELINE_RUNS_DDL, PUBLISHED_BATCHES_DDL  # noqa: E402
+from common.batch import ensure_ops_tables  # noqa: E402
 
-spark.sql(PIPELINE_RUNS_DDL.format(catalog=catalog))
-spark.sql(PUBLISHED_BATCHES_DDL.format(catalog=catalog))
+# pipeline_runs, published_batches, task_runs, file_manifest
+ensure_ops_tables(spark, catalog)
 
 # COMMAND ----------
 

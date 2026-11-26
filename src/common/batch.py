@@ -12,13 +12,14 @@ nên job bị gián đoạn 2 ngày thì lần chạy sau tự bù đủ 3 ngày
 from __future__ import annotations
 
 from common.dates import check_date
+from common.names import fq
 
 # Bảng phải có file MỖI ngày. ref_branches / ref_products / ref_targets chỉ gửi ngày đầu
 # (hoặc khi thay đổi) nên không bắt buộc.
 OPTIONAL_DAILY = {"ref_branches", "ref_products", "ref_targets"}
 
 PIPELINE_RUNS_DDL = """
-CREATE TABLE IF NOT EXISTS {catalog}.ops.pipeline_runs (
+CREATE TABLE IF NOT EXISTS {table} (
   as_of_date DATE,
   layer STRING,
   run_id STRING,
@@ -26,17 +27,65 @@ CREATE TABLE IF NOT EXISTS {catalog}.ops.pipeline_runs (
   started_at TIMESTAMP,
   finished_at TIMESTAMP,
   message STRING
-)
+) USING DELTA
 """
 
 PUBLISHED_BATCHES_DDL = """
-CREATE TABLE IF NOT EXISTS {catalog}.ops.published_batches (
+CREATE TABLE IF NOT EXISTS {table} (
   as_of_date DATE,
   run_id STRING,
   published_at TIMESTAMP,
   checks STRING
-)
+) USING DELTA
 """
+
+# Mỗi lần chạy 1 bước (task) của 1 ngày: thời gian, số dòng vào/ra, lỗi -> dashboard vận hành
+TASK_RUNS_DDL = """
+CREATE TABLE IF NOT EXISTS {table} (
+  run_id STRING,
+  as_of_date DATE,
+  layer STRING,
+  step STRING,
+  status STRING,
+  rows_in BIGINT,
+  rows_out BIGINT,
+  duration_s DOUBLE,
+  error STRING,
+  logged_at TIMESTAMP
+) USING DELTA
+"""
+
+# File nguồn theo ngày: có về chưa, mấy file, bao nhiêu dòng, nạp lúc nào
+FILE_MANIFEST_DDL = """
+CREATE TABLE IF NOT EXISTS {table} (
+  as_of_date DATE,
+  table_name STRING,
+  required BOOLEAN,
+  status STRING,
+  file_count BIGINT,
+  rows BIGINT,
+  source_files ARRAY<STRING>,
+  first_loaded_at TIMESTAMP,
+  checked_at TIMESTAMP
+) USING DELTA
+"""
+
+OPS_DDL = {"pipeline_runs": PIPELINE_RUNS_DDL, "published_batches": PUBLISHED_BATCHES_DDL,
+           "task_runs": TASK_RUNS_DDL, "file_manifest": FILE_MANIFEST_DDL}
+
+
+def ensure_ops_tables(spark, catalog: str) -> None:
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {fq(catalog, 'ops')}")
+    for name, ddl in OPS_DDL.items():
+        spark.sql(ddl.format(table=fq(catalog, "ops", name)))
+
+
+def manifest_status(table: str, file_count: int, order: list[str]) -> str:
+    """ARRIVED | MISSING (bảng bắt buộc chưa có file) | NOT_SENT (bảng tham chiếu không gửi)
+    | MULTIPLE_FILES (nhiều file cùng ngày: nguồn gửi lại / sửa file - cần kiểm tra)."""
+    if file_count == 0:
+        return "MISSING" if table in required_tables(order) else "NOT_SENT"
+    return "MULTIPLE_FILES" if file_count > 1 else "ARRIVED"
 
 
 def required_tables(order: list[str]) -> list[str]:
@@ -83,7 +132,7 @@ def record_run(spark, catalog: str, as_of_date: str, layer: str, run_id: str,
                F.when(F.col("status") != "RUNNING", F.current_timestamp())
                .cast("timestamp").alias("finished_at"),
                "message")
-     .write.mode("append").saveAsTable(f"{catalog}.ops.pipeline_runs"))
+     .write.format("delta").mode("append").saveAsTable(fq(catalog, "ops", "pipeline_runs")))
 
 
 # Bảng dùng để suy ra watermark lần đầu nâng cấp (đã có dữ liệu nhưng chưa có pipeline_runs)
@@ -94,15 +143,16 @@ BOOTSTRAP = {"silver": ("silver.loan_snapshots", "as_of_date"),
 def watermark(spark, catalog: str, layer: str) -> str | None:
     if layer not in BOOTSTRAP:
         raise ValueError(f"layer không hợp lệ: {layer}")
-    t = f"{catalog}.ops.pipeline_runs"
+    t = fq(catalog, "ops", "pipeline_runs")
     if spark.catalog.tableExists(t):
         v = spark.sql(f"SELECT max(as_of_date) FROM {t} WHERE layer = '{layer}' "
                       "AND status = 'SUCCESS'").first()[0]
         if v:
             return str(v)
     table, col = BOOTSTRAP[layer]
-    if spark.catalog.tableExists(f"{catalog}.{table}"):
-        v = spark.sql(f"SELECT max({col}) FROM {catalog}.{table}").first()[0]
+    full = fq(catalog, *table.split("."))
+    if spark.catalog.tableExists(full):
+        v = spark.sql(f"SELECT max({col}) FROM {full}").first()[0]
         return str(v) if v else None
     return None
 
