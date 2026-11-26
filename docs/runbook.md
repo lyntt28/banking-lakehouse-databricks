@@ -155,7 +155,7 @@ chỉ giữ trạng thái mới nhất: Gold ngày D phải dựng trước khi 
 |---|---|---|
 | **Retry** (task lỗi tạm thời) | Job tự retry / chạy lại job | Idempotent: MERGE theo khóa, replaceWhere theo ngày, SCD2 so hash |
 | **Gián đoạn nhiều ngày** | Chạy job như thường, `as_of_date` trống | Xử lý mọi ngày sau watermark |
-| **File về trễ** | Chờ file, chạy lại job | Ngày thiếu file FAILED, watermark đứng yên |
+| **File về trễ** | Chờ file, chạy lại job | Ngày thiếu file FAILED, watermark đứng yên. Ngày KHÔNG có file nào (kể cả loans) cũng được tính theo lịch nghiệp vụ nên không bị nhảy qua |
 | **Rerun 1 ngày** (cùng dữ liệu) | Job với `as_of_date=<ngày>` | Không đổi kết quả |
 | **Correction** (nguồn gửi lại file sửa của ngày D = ngày mới nhất đã xử lý) | Đặt file mới (tên khác) vào landing → Bronze nạp; chạy `as_of_date=D` | Snapshot (loan fact, mart): ghi đè cả ngày → dòng bị rút cũng biến mất. SCD2 cùng ngày: sửa tại chỗ phiên bản ngày D. Giao dịch (`core_transactions`, insert-only): **không** cập nhật bản đã có – cần quy trình sửa riêng (reversal/adjustment từ nguồn) |
 | **Correction / backfill ngày cũ hơn watermark** | dev/test: `05_backfill reset=true`. prod: dựng catalog song song từ Bronze, kiểm tra, rồi chuyển consumer (`docs/incident_runbook.md`) | Bị chặn (`OutOfOrder`): snapshot MERGE + SCD2 không cho ghi vào quá khứ |

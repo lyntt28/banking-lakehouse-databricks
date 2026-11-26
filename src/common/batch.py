@@ -5,8 +5,9 @@ Bảng `ops.pipeline_runs` (1 dòng / ngày dữ liệu / layer / lần chạy):
     started_at, finished_at, message
 
 Watermark = ngày lớn nhất có status SUCCESS của 1 layer. Job hằng ngày không còn lấy
-"ngày mới nhất trong bronze" nữa mà xử lý MỌI ngày bronze > watermark, theo thứ tự tăng dần,
-nên job bị gián đoạn 2 ngày thì lần chạy sau tự bù đủ 3 ngày.
+"ngày mới nhất trong bronze" nữa mà xử lý MỌI ngày theo lịch nghiệp vụ > watermark (kể cả ngày
+chưa có file: dừng ở đó, không nhảy qua), theo thứ tự tăng dần, nên job bị gián đoạn 2 ngày thì
+lần chạy sau tự bù đủ 3 ngày.
 """
 
 from __future__ import annotations
@@ -140,20 +141,43 @@ def incomplete_tables(statuses: dict[str, str]) -> list[str]:
     return sorted(t for t, st in statuses.items() if st == "INCOMPLETE")
 
 
+def business_dates(start: str, end: str, holidays: frozenset[str] = frozenset()) -> list[str]:
+    """Lịch ngày nghiệp vụ dự kiến [start, end]: nguồn phải gửi file MỖI ngày (kể cả cuối tuần,
+    hệ thống core chốt số hằng ngày), trừ ngày trong `holidays`."""
+    from datetime import date, timedelta
+
+    d, last = date.fromisoformat(check_date(start)), date.fromisoformat(check_date(end))
+    out = []
+    while d <= last:
+        if d.isoformat() not in holidays:
+            out.append(d.isoformat())
+        d += timedelta(days=1)
+    return out
+
+
 def pending_dates(bronze_dates: list[str], watermark: str | None,
-                  requested: str | None = None) -> list[str]:
+                  requested: str | None = None,
+                  holidays: frozenset[str] = frozenset()) -> list[str]:
     """Danh sách ngày cần xử lý (tăng dần).
 
     - requested: chạy đúng 1 ngày (rerun / backfill thủ công).
-    - không requested: mọi ngày trong bronze > watermark; chưa có watermark = mọi ngày.
+    - không requested: MỌI ngày theo lịch nghiệp vụ từ sau watermark (chưa có watermark: từ ngày
+      bronze đầu tiên) tới ngày bronze mới nhất. Ngày không có file vẫn nằm trong danh sách ->
+      Silver dừng ở đó với SourceFilesMissing thay vì nhảy qua (watermark không vượt ngày thiếu,
+      file gửi trễ của ngày đó vẫn được xử lý khi về).
     """
     if requested:
         return [check_date(requested)]
-    days = sorted({check_date(str(d)) for d in bronze_dates})
+    received = sorted({check_date(str(d)) for d in bronze_dates})
+    if not received:
+        return []
     if watermark:
-        wm = check_date(str(watermark))
-        days = [d for d in days if d > wm]
-    return days
+        from datetime import date, timedelta
+
+        start = (date.fromisoformat(check_date(str(watermark))) + timedelta(days=1)).isoformat()
+    else:
+        start = received[0]
+    return business_dates(start, received[-1], holidays) if start <= received[-1] else []
 
 
 def run_row(as_of_date: str, layer: str, run_id: str, status: str,
