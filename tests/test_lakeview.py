@@ -25,17 +25,17 @@ def tables(spark, results):
     fact_loan = g.build_fact_loan_daily(r["loan_snapshots"], dim_customer)
     m = {
         "gold_dim_branch": g.build_dim_branch(r["ref_branches"]),
-        "gold_mart_loan_overdue_daily": g.build_mart_loan_overdue_daily(fact_loan, dim_product),
-        "gold_mart_card_kpi_daily": gc.build_mart_card_kpi_daily(
+        "gold_loan_mart_overdue_daily": g.build_mart_loan_overdue_daily(fact_loan, dim_product),
+        "gold_card_mart_kpi_daily": gc.build_mart_card_kpi_daily(
             r["card_master"], r["card_transactions_hist"], r["card_statements_hist"], AS_OF),
-        "gold_mart_deposit_trend": gd.build_mart_deposit_trend(
+        "gold_dep_mart_trend": gd.build_mart_deposit_trend(
             r["core_accounts"], dim_product, r["ref_fx_rates"], r["ref_branches"], AS_OF),
-        "gold_mart_deposit_by_tenor": gd.build_mart_deposit_by_tenor(
+        "gold_dep_mart_by_tenor": gd.build_mart_deposit_by_tenor(
             r["core_accounts"], dim_product, r["ref_fx_rates"], AS_OF),
-        "gold_mart_casa_customer": gd.build_mart_casa_customer(
+        "gold_dep_mart_casa_customer": gd.build_mart_casa_customer(
             r["core_accounts"], dim_product, dim_customer, AS_OF),
-        "gold_mart_deposit_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"]),
-        "silver_targets": r["ref_targets"], "silver_fx_rates": r["ref_fx_rates"],
+        "gold_dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"]),
+        "silver_ref_targets": r["ref_targets"], "silver_ref_fx_rates": r["ref_fx_rates"],
     }
     for name, df in m.items():
         df.createOrReplaceTempView(name)
