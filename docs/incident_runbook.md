@@ -40,6 +40,10 @@ Gold chỉ ghi sau gate. Nếu lỗi ở `gold:publish` (hạ tầng giữa ch�
 ## 5. Lỗi giữa `silver:publish` / `gold:publish` (lỗi hạ tầng sau khi đã qua mọi gate)
 Silver và Gold đều **stage → kiểm tra tất cả → publish**: lỗi DQ / đối soát không bao giờ để lại
 bảng ghi dở. Chỉ lỗi hạ tầng trong chính bước publish mới có thể làm một số bảng đã ghi, số khác chưa.
+- Job TỰ rollback: mọi bảng Gold đã ghi trong lần publish lỗi được `RESTORE` về version trước
+  publish (log `gold_rolled_back`, `pipeline_runs.message` có "rollback N bảng"). Dashboard chỉ đọc
+  tới ngày trong `ops.published_batches` nên không thấy dữ liệu dở dang.
+- `message` có "ROLLBACK FAILED": rollback tự động cũng lỗi -> làm tay theo Cách 2.
 - Cách 1 (thường dùng): chạy lại job. Publish idempotent (MERGE / replaceWhere / overwrite từ
   bản stage đã đạt) nên kết quả hội tụ.
 - Cách 2 (cần quay lại ngay): version trước publish được lưu ở `ops.publish_versions`:

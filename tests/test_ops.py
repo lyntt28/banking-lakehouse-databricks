@@ -87,3 +87,15 @@ def test_expected_card_kpi_files_match_generator():
 
     assert EXPECTED_FILES["card_kpi_source"] == len(KPI_FILES)
     assert list(REQUIRED_FILE_GROUPS["card_kpi_source"]) == KPI_FILES
+
+
+def test_rollback_restores_written_tables_and_drops_new_ones():
+    from common.batch import rollback_statements
+
+    assert rollback_statements([
+        ("gold.dim_date", 4, 5),          # đã ghi trong publish lỗi -> RESTORE
+        ("gold.loan_fact_daily", 7, 7),   # chưa tới lượt ghi -> giữ nguyên
+        ("gold.dep_mart_trend", None, 0),  # tạo mới trong publish lỗi -> DROP
+        ("gold.card_mart_spend_mix", None, None),  # chưa từng tồn tại -> bỏ qua
+    ]) == ["RESTORE TABLE gold.dim_date TO VERSION AS OF 4",
+           "DROP TABLE IF EXISTS gold.dep_mart_trend"]

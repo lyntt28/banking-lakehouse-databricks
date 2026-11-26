@@ -205,8 +205,11 @@ def _q(catalog: str, schema: str) -> str:
 
 
 def _report_day(table: str, col: str = "as_of_date") -> str:
-    """Ngày có dữ liệu gần nhất <= :report_date."""
-    return f"(SELECT max({col}) FROM {table} WHERE {col} <= :report_date)"
+    """Ngày có dữ liệu gần nhất <= :report_date VÀ <= batch Gold đã publish: publish đang chạy dở /
+    bị rollback thì dashboard vẫn ở batch hợp lệ trước đó (cùng schema cha với `ops`)."""
+    ops = table.rsplit(".", 2)[0] + ".ops" if table.count(".") >= 2 else "ops"
+    return (f"(SELECT max({col}) FROM {table} WHERE {col} <= :report_date "
+            f"AND {col} <= (SELECT max(as_of_date) FROM {ops}.published_batches))")
 
 
 USD_RATE = ("(SELECT max_by(rate_to_vnd, rate_date) FROM {silver}.ref_fx_rates "

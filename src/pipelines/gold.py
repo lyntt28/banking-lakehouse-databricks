@@ -6,7 +6,9 @@ Mỗi ngày dữ liệu:
                 tiền gửi vs bang1247. Lệch -> GateFailed, bảng `gold` KHÔNG bị ghi
                 (dashboard vẫn thấy batch hợp lệ gần nhất)
     3. publish - ghi vào `gold` (idempotent: replaceWhere / MERGE / overwrite) rồi thêm dòng
-                vào `ops.published_batches`
+                vào `ops.published_batches`. Lỗi giữa chừng (bảng thứ N/17) -> tự RESTORE mọi bảng
+                về version trước publish (rollback) -> Gold không bị trộn bảng mới / cũ.
+                Dashboard chỉ đọc tới ngày trong `published_batches` (dòng cuối cùng được ghi).
 
 Ngày cần dựng = ngày Silver SUCCESS mà Gold chưa SUCCESS (hoặc đúng `as_of_date`).
 """
@@ -23,7 +25,13 @@ from pyspark.sql import functions as F
 from common import gold as g
 from common import gold_cards as gc
 from common import gold_deposit as gd
-from common.batch import ensure_ops_tables, record_run, record_versions, watermark
+from common.batch import (
+    ensure_ops_tables,
+    record_run,
+    record_versions,
+    rollback_publish,
+    watermark,
+)
 from common.dates import check_date
 from common.delta_io import merge_upsert, overwrite, overwrite_date
 from common.names import fq
@@ -226,9 +234,18 @@ def run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
         try:
             build_and_publish(spark, cfg, day, rec)
         except Exception as e:
+            msg = f"{type(e).__name__}: {e}"
+            # lỗi trong bước publish: đã có version trước publish của run này -> rollback
+            try:
+                undone = rollback_publish(spark, cfg.catalog, rec.run_id)
+                if undone:
+                    log("gold_rolled_back", as_of_date=day, run_id=rec.run_id, statements=undone)
+                    msg += f" | rollback {len(undone)} bảng về version trước publish"
+            except Exception as rb:  # rollback cũng lỗi: phải xử lý tay (runbook mục 5)
+                msg += f" | ROLLBACK FAILED {type(rb).__name__}: {rb}"
+                log("gold_rollback_failed", as_of_date=day, run_id=rec.run_id, error=str(rb))
             rec.flush(spark, cfg.t("ops", "task_runs"))
-            record_run(spark, cfg.catalog, day, "gold", rec.run_id, "FAILED",
-                       f"{type(e).__name__}: {e}")
+            record_run(spark, cfg.catalog, day, "gold", rec.run_id, "FAILED", msg)
             log("gold_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
             raise
         rec.flush(spark, cfg.t("ops", "task_runs"))

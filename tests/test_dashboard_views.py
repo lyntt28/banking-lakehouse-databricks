@@ -38,6 +38,9 @@ def marts(spark, results):
                                                           dim_customer, AS_OF),
         "dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"]),
         "ref_targets": r["ref_targets"],
+        # batch Gold đang phục vụ (view đọc ngày từ đây, không lấy max ngày của từng mart)
+        "published_batches": spark.createDataFrame([(AS_OF,)], "d string")
+        .select(F.col("d").cast("date").alias("as_of_date")),
     }
     for name, df in m.items():
         df.createOrReplaceTempView(name)
@@ -45,7 +48,9 @@ def marts(spark, results):
 
 
 def _local(sql: str) -> str:
-    return sql.replace("{catalog}.gold.", "").replace("{catalog}.silver.", "")
+    for schema in ("gold", "silver", "ops"):
+        sql = sql.replace("{catalog}." + schema + ".", "")
+    return sql
 
 
 @pytest.mark.parametrize("view", VIEWS, ids=[v[2] for v in VIEWS])
@@ -53,6 +58,15 @@ def test_view_runs_and_returns_rows(spark, marts, view):
     dash, order, name, desc, sql = view
     rows = spark.sql(_local(sql)).collect()
     assert rows, f"{name} ({desc}) trả về 0 dòng"
+
+
+def test_views_read_published_batch_not_latest_mart_date():
+    """Publish lỗi giữa chừng / chưa publish: mart có thể đã có ngày mới hơn batch đã publish.
+    View không được tự lấy max(as_of_date) của mart (sẽ trộn ngày cũ / mới giữa các visual)."""
+    import re
+
+    for _, _, name, _, sql in VIEWS:
+        assert not re.search(r"max\(as_of_date\) FROM \{catalog\}\.gold\.", sql), name
 
 
 def test_three_dashboards_in_order():

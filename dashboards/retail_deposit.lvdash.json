@@ -4,7 +4,7 @@
       "name": "dep_tickers",
       "displayName": "Tickers",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -56,7 +56,7 @@
       "name": "dep_compare",
       "displayName": "Tickers vs last day / month / year",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -109,7 +109,7 @@
       "name": "dep_gauges",
       "displayName": "Target gauges",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -168,7 +168,7 @@
       "name": "dep_daily30",
       "displayName": "Ending Balance - Last 30 Days",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -212,7 +212,7 @@
       "name": "dep_mom",
       "displayName": "Monthly Average Balance (MoM)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -264,7 +264,7 @@
       "name": "dep_region",
       "displayName": "Regional Deposit Distribution",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -307,7 +307,7 @@
       "name": "dep_term",
       "displayName": "Deposit by Term and IR (in Month)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_by_tenor WHERE as_of_date <= :report_date) AS d)\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_by_tenor WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d)\n",
         "SELECT concat(t.tenor_months, 'M') AS tenor, t.tenor_months,\n",
         "       sum(t.balance_vnd) AS balance,\n",
         "       sum(t.weighted_rate * t.balance_vnd) / nullif(sum(t.balance_vnd), 0) * 100 AS avg_interest\n",
@@ -336,7 +336,7 @@
       "name": "dep_casa_customer",
       "displayName": "CASA Customer Distribution",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_casa_customer WHERE as_of_date <= :report_date) AS d),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_casa_customer WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d),\n",
         "c AS (SELECT sum(c.retail_customers) retail, sum(c.casa_active_customers) active,\n",
         "             sum(c.casa_dormant_customers) dormant\n",
         "      FROM gold.dep_mart_casa_customer c CROSS JOIN p\n",
@@ -383,7 +383,7 @@
       "name": "dep_edusave",
       "displayName": "Edu-Save New open Account_ Accumulate by Month",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d)\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d)\n",
         "SELECT n.open_month AS month, sum(n.new_accounts_ytd) AS cumulative_accounts\n",
         "FROM gold.dep_mart_new_accounts n CROSS JOIN p\n",
         "LEFT JOIN gold.dim_branch b ON b.branchnbr = n.branchnbr\n",
@@ -429,7 +429,7 @@
       "name": "dep_by_product",
       "displayName": "Balance by Product",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
         "\n",
