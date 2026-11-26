@@ -104,7 +104,9 @@ def test_card_kpi_reconciles_with_valid_transactions(out):
 
 
 def test_deposit_summary_reconciles_with_accounts(out):
-    cust = {r["customer_id"] for r in _t(out, "customers", D2) if r["customer_id"]}
+    # FK ở Silver = KH đã có từ các ngày trước + KH trong lô hôm nay
+    cust = {r["customer_id"] for d in (D1, D2) for r in _t(out, "customers", d)
+            if r["customer_id"]}
     seen, total = set(), 0.0
     for r in _t(out, "accounts", D2):
         if r["product_type"] == "LOAN" or r["account_id"] in seen or r["customer_id"] not in cust:
