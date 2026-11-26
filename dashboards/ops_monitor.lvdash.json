@@ -56,7 +56,8 @@
       "queryLines": [
         "SELECT as_of_date, table_name, status, file_count, rows, first_loaded_at\n",
         "FROM ops.file_manifest\n",
-        "WHERE status IN ('MISSING', 'INCOMPLETE', 'MULTIPLE_FILES') AND as_of_date >= date_sub(current_date(), 14)\n",
+        "WHERE status IN ('MISSING', 'INCOMPLETE', 'MULTIPLE_FILES')\n",
+        "  AND as_of_date >= date_sub(current_date(), 14)\n",
         "ORDER BY as_of_date DESC, table_name\n"
       ],
       "parameters": []
