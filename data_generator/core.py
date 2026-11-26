@@ -156,6 +156,43 @@ def base_deposit_accounts(rnd: random.Random, n: int, customers: list[dict],
     return out
 
 
+NEW_ACCOUNT_ID_BASE = 250_000_000   # TK mở mới sau ngày đầu (khác dải 200M gốc, 299M lỗi FK)
+NEW_ACCOUNT_MIX = [("CASA", 35), ("PAYROLL", 15), ("SAVING", 15), ("TD", 15), ("KSTUDY", 10),
+                   ("ISA", 10)]
+
+
+def open_new_accounts(rnd: random.Random, accounts: list[dict], customers: list[dict],
+                      as_of: date, n: int) -> list[dict]:
+    """Mở thêm n TK tiền gửi trong ngày as_of (ngân hàng thật mở TK mới mỗi ngày).
+
+    Không có hàm này thì mọi TK đều mở TRƯỚC ngày đầu tiên -> biểu đồ "TK mở mới" (K-Study,
+    new accounts) không có dữ liệu trong 12 tháng gần nhất. Dùng rnd riêng để dữ liệu ngày cũ
+    không đổi.
+    """
+    start = sum(1 for a in accounts if a["account_id"].startswith("25"))
+    out = []
+    for k in range(n):
+        i = start + k
+        c = rnd.choice(customers)
+        prod = rnd.choices([p for p, _ in NEW_ACCOUNT_MIX], [w for _, w in NEW_ACCOUNT_MIX])[0]
+        cur = rnd.choices(["VND", "USD"], [95, 5])[0]
+        bal = round(rnd.lognormvariate(16, 1.5), -3)
+        if cur == "USD":
+            bal = round(bal / USD_RATE, 2)
+        a = {"account_id": str(NEW_ACCOUNT_ID_BASE + i), "customer_id": c["customer_id"],
+             "branchnbr": c["branchnbr"], "product_type": prod, "currencycd": cur,
+             "status": "ACTIVE", "open_date": as_of,
+             "close_date": None, "balance": bal, "int_rate": rnd.uniform(0.001, 0.075)}
+        if prod in ("TD", "ISA"):
+            t = TENORS[i % len(TENORS)]
+            a["tenor_months"], a["int_rate"] = t, TENOR_RATE[t]
+        else:
+            a["tenor_months"] = 0
+        out.append(a)
+    accounts.extend(out)
+    return out
+
+
 def _derive_deposit_terms(a: dict, i: int) -> None:
     """ISA / K-Study, kỳ hạn và lãi suất theo kỳ hạn - suy từ số thứ tự, không dùng rnd."""
     if a["product_type"] == "SAVING" and i % 4 == 0:

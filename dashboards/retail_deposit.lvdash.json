@@ -684,41 +684,21 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "cmp",
-                    "displayName": "",
-                    "title": "",
-                    "order": 100000,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "cmp"
                   },
                   {
                     "fieldName": "ending_balance_diff",
-                    "displayName": "+/- Balance",
-                    "title": "+/- Balance",
-                    "order": 100001,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "#,##0.00"
+                    "displayName": "+/- Balance"
                   },
                   {
                     "fieldName": "ending_balance_pct",
-                    "displayName": "+/- %",
-                    "title": "+/- %",
-                    "order": 100002,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "0.00"
+                    "displayName": "+/- %"
                   }
                 ]
               },
@@ -1378,74 +1358,33 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "product",
-                    "displayName": "Balance by Product",
-                    "title": "Balance by Product",
-                    "order": 100000,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "Balance by Product"
                   },
                   {
                     "fieldName": "ending_balance",
-                    "displayName": "Ending Balance",
-                    "title": "Ending Balance",
-                    "order": 100001,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "#,##0.00"
+                    "displayName": "Ending Balance"
                   },
                   {
                     "fieldName": "portion",
-                    "displayName": "Portion",
-                    "title": "Portion",
-                    "order": 100002,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "0.00"
+                    "displayName": "Portion"
                   },
                   {
                     "fieldName": "diff_last_day",
-                    "displayName": "+/- Last Day",
-                    "title": "+/- Last Day",
-                    "order": 100003,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "#,##0.00"
+                    "displayName": "+/- Last Day"
                   },
                   {
                     "fieldName": "diff_last_month",
-                    "displayName": "+/- Last Month",
-                    "title": "+/- Last Month",
-                    "order": 100004,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "#,##0.00"
+                    "displayName": "+/- Last Month"
                   },
                   {
                     "fieldName": "diff_last_year",
-                    "displayName": "+/- Last Year",
-                    "title": "+/- Last Year",
-                    "order": 100005,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "#,##0.00"
+                    "displayName": "+/- Last Year"
                   }
                 ]
               },
