@@ -174,12 +174,15 @@ def test_bundle_files_up_to_date():
 
 
 def test_card_colors_from_original_palette():
+    """Màu theo card_dashboard_final.html (Dashboard_CARD_v4): xanh navy / xanh nhạt / vàng."""
     body = DASHES["card_business.lvdash.json"]
     maps = {}
     for i in body["pages"][0]["layout"]:
         spec = i["widget"].get("spec", {})
         for m in spec.get("encodings", {}).get("color", {}).get("scale", {}).get("mappings", []):
             maps[(spec["frame"]["title"], m["value"])] = m["color"]
-    assert maps[("New Acquisition", "Smart Credit")] == "#20538D"     # colors.primaryBlue
-    assert maps[("New Acquisition", "Branches")] == "#8DB4E2"         # colors.secondaryBlue
-    assert maps[("By Sectors", "Purchasing")] == CARD_COLORS["sector"]["Purchasing"] == "#5B8FC4"
+    assert maps[("New Acquisition", "Smart Credit")] == "#4472C4"
+    assert maps[("New Acquisition", "Branches")] == "#B4C7E7"
+    assert maps[("In & Out", "New Issuance")] == "#2F5597"
+    assert maps[("Balance (K USD)", "Revolving")] == "#BF9000"
+    assert maps[("By Sectors", "Purchasing")] == CARD_COLORS["sector"]["Purchasing"] == "#2F5597"
