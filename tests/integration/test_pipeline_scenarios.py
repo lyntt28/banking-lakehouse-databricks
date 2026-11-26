@@ -1,16 +1,24 @@
 """End-to-end Bronze -> Silver -> Gold trên Spark + Delta LOCAL, cùng code chạy trên Databricks
 (pipelines.silver.run / pipelines.gold.run, catalog rỗng -> bảng `schema.table`).
 
-Kịch bản sự cố (chạy tuần tự, mỗi test dựa trên trạng thái test trước):
+Mỗi kịch bản ĐỘC LẬP: tự dựng trạng thái nó cần, không dựa vào test chạy trước -> chạy riêng
+1 test (`pytest -k test_5b`), đổi thứ tự, hay debug đều cho cùng kết quả.
+    - fixture `baseline` (1 lần / module): Bronze 2 ngày, chạy Silver + Gold TỪNG ngày, lưu
+      checksum "đúng" và chụp mọi bảng sang schema snap_* .
+    - fixture `published`: khôi phục toàn bộ trạng thái đã publish D1, D2 từ snap_* (mỗi test).
+    - fixture `fresh_bronze`: chỉ có Bronze, chưa có Silver / Gold / ops (mỗi test).
+
+Kịch bản sự cố:
     1. thiếu file ngày 2           -> ngày 1 SUCCESS, ngày 2 FAILED, watermark đứng ở ngày 1
     2. file về trễ                 -> chạy lại tự xử lý ngày 2; Gold publish đủ 2 ngày
-    3. chạy lại nhiều lần          -> checksum nội dung Silver/Gold không đổi, không trùng khóa,
-                                      SCD2 nhất quán
+    3. chạy lại nhiều lần          -> checksum nội dung Silver/Gold không đổi, không trùng khóa
     3b. lỗi giữa chừng (bảng thứ N) -> Silver không bị ghi dở; sửa xong chạy lại hội tụ
     4. file trùng (gửi lại)        -> không nhân đôi dữ liệu, manifest báo MULTIPLE_FILES
     5. đối soát lệch               -> GateFailed, Gold đang phục vụ KHÔNG đổi, không publish
     5b. lỗi GIỮA bước publish Gold -> tự rollback mọi bảng đã ghi, không publish batch
     6. backfill ngày cũ hơn SCD2   -> bị từ chối, dữ liệu hiện tại không đổi
+    6b. file sửa (correction)      -> ngày mới nhất: chạy lại Silver rồi Gold; ngày cũ: dừng
+    7. gián đoạn nhiều ngày        -> daily chạy bù xen kẽ Silver/Gold = chạy từng ngày
 """
 
 from datetime import date
@@ -23,36 +31,81 @@ D1, D2 = "2026-11-01", "2026-11-02"
 SCHEMAS = ["bronze", "silver", "silver_stage", "gold", "gold_stage", "ops"]
 
 
-def _drop_all(spark):
-    for s in SCHEMAS:
+def _drop_all(spark, schemas=SCHEMAS):
+    for s in schemas:
         spark.sql(f"DROP SCHEMA IF EXISTS {s} CASCADE")
 
 
+def _write_bronze(spark, frames, skip_d2_transactions=False):
+    from pyspark.sql import functions as F
+
+    _drop_all(spark)
+    spark.sql("CREATE SCHEMA bronze")
+    for t, df in frames.items():
+        if skip_d2_transactions and t == "transactions":   # file transactions ngày 2 CHƯA về
+            df = df.filter(F.col("_as_of_date") != F.lit(D2).cast("date"))
+        df.write.format("delta").saveAsTable(f"bronze.{t}")
+
+
+def _tables(spark, schema):
+    return [r.tableName for r in spark.sql(f"SHOW TABLES IN {schema}").collect()
+            if not r.isTemporary]
+
+
 @pytest.fixture(scope="module")
-def env(spark, tmp_path_factory):
+def baseline(spark, tmp_path_factory):
     from pyspark.sql import functions as F
 
     from common.bronze import SOURCES, add_bronze_metadata
     from data_generator.generate import Sizes, generate
+    from pipelines.gold import GoldConfig
+    from pipelines.gold import run as gold_run
+    from pipelines.silver import SilverConfig
+    from pipelines.silver import run as silver_run
     from tests.conftest import SMALL_SIZES
 
-    _drop_all(spark)
     out = tmp_path_factory.mktemp("landing_e2e")
     generate(out, date(2026, 11, 1), 2, seed=11, sizes=Sizes(**SMALL_SIZES))
-    spark.sql("CREATE SCHEMA bronze")
     frames = {}
     for s in SOURCES:
         path = str(out / s.table)
         df = (spark.read.option("primitivesAsString", "true").json(path) if s.fmt == "json"
               else spark.read.options(**s.options).csv(path))
-        frames[s.table] = add_bronze_metadata(df, F.input_file_name())
-    # Giả lập: file transactions ngày 2 CHƯA về
-    for t, df in frames.items():
-        first = df.filter(F.col("_as_of_date") != F.lit(D2).cast("date")) \
-            if t == "transactions" else df
-        first.write.format("delta").saveAsTable(f"bronze.{t}")
-    yield {"frames": frames}
+        # đóng băng (_load_ts, _source_file) 1 lần: mọi kịch bản dùng cùng Bronze
+        frames[s.table] = add_bronze_metadata(df, F.input_file_name()) \
+            .withColumn("_load_ts", F.lit("2026-11-03 00:00:00").cast("timestamp"))
+    _write_bronze(spark, frames)
+    for d in (D1, D2):                       # trạng thái "đúng": từng ngày Silver rồi Gold
+        silver_run(spark, SilverConfig(catalog="", as_of_date=d))
+        gold_run(spark, GoldConfig(catalog="", as_of_date=d))
+    _assert_integrity(spark)
+    base = {"frames": frames, "gold_ok": _gold_fingerprint(spark),
+            "silver_ok": _silver_fingerprint(spark), "tables": {}}
+    for schema in SCHEMAS:                   # chụp trạng thái đã publish
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS snap_{schema}")
+        base["tables"][schema] = _tables(spark, schema)
+        for t in base["tables"][schema]:
+            spark.sql(f"CREATE TABLE snap_{schema}.{t} USING DELTA AS SELECT * FROM {schema}.{t}")
+    yield base
+    _drop_all(spark, SCHEMAS + [f"snap_{s}" for s in SCHEMAS])
+
+
+@pytest.fixture
+def published(spark, baseline):
+    """Trạng thái sau khi D1, D2 đã Silver + Gold SUCCESS (khôi phục từ snap_*)."""
     _drop_all(spark)
+    for schema, tables in baseline["tables"].items():
+        spark.sql(f"CREATE SCHEMA {schema}")
+        for t in tables:
+            spark.sql(f"CREATE TABLE {schema}.{t} USING DELTA AS SELECT * FROM snap_{schema}.{t}")
+    return baseline
+
+
+@pytest.fixture
+def fresh_bronze(spark, baseline):
+    """Chỉ có Bronze đủ 2 ngày; chưa chạy Silver / Gold (chưa có ops.*)."""
+    _write_bronze(spark, baseline["frames"])
+    return baseline
 
 
 def _runs(spark, layer):
@@ -114,9 +167,11 @@ def _assert_integrity(spark):
                      "HAVING count(*) > 1").count() == 0
 
 
-def test_1_missing_file_stops_at_that_day(spark, env):
+def test_1_missing_file_stops_at_that_day(spark, baseline):
     from pipelines import daily
     from pipelines.silver import SilverConfig, SourceFilesMissing
+
+    _write_bronze(spark, baseline["frames"], skip_d2_transactions=True)
 
     with pytest.raises(SourceFilesMissing):
         daily.run(spark, SilverConfig(catalog=""))
@@ -135,24 +190,27 @@ def test_1_missing_file_stops_at_that_day(spark, env):
     assert ("file_manifest", "FAILED") in [(r.step, r.status) for r in steps]
 
 
-def test_2_late_file_is_picked_up_and_gold_published(spark, env):
+def test_2_late_file_is_picked_up_and_gold_published(spark, baseline):
     from pyspark.sql import functions as F
 
     from pipelines import daily
-    from pipelines.silver import SilverConfig
+    from pipelines.silver import SilverConfig, SourceFilesMissing
 
-    env["frames"]["transactions"].filter(F.col("_as_of_date") == F.lit(D2).cast("date")) \
+    _write_bronze(spark, baseline["frames"], skip_d2_transactions=True)
+    with pytest.raises(SourceFilesMissing):
+        daily.run(spark, SilverConfig(catalog=""))               # D1 xong, D2 chờ file
+    baseline["frames"]["transactions"].filter(F.col("_as_of_date") == F.lit(D2).cast("date")) \
         .write.format("delta").mode("append").saveAsTable("bronze.transactions")
     assert daily.run(spark, SilverConfig(catalog="")) == [D2]     # chỉ ngày còn thiếu
     pub = [str(r[0]) for r in spark.sql(
         "SELECT as_of_date FROM ops.published_batches ORDER BY 1").collect()]
     assert pub == [D1, D2]
     _assert_integrity(spark)
-    env["gold_ok"] = _gold_fingerprint(spark)
-    env["silver_ok"] = _silver_fingerprint(spark)
+    assert _gold_fingerprint(spark) == baseline["gold_ok"]
+    assert _silver_fingerprint(spark) == baseline["silver_ok"]
 
 
-def test_3_rerun_is_idempotent(spark, env):
+def test_3_rerun_is_idempotent(spark, published):
     from pipelines.gold import GoldConfig
     from pipelines.gold import run as gold_run
     from pipelines.silver import SilverConfig, run
@@ -162,12 +220,12 @@ def test_3_rerun_is_idempotent(spark, env):
     run(spark, SilverConfig(catalog="", as_of_date=D2))
     gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
     # nội dung (checksum từng dòng), không chỉ số dòng
-    assert _silver_fingerprint(spark) == env["silver_ok"]
-    assert _gold_fingerprint(spark) == env["gold_ok"]
+    assert _silver_fingerprint(spark) == published["silver_ok"]
+    assert _gold_fingerprint(spark) == published["gold_ok"]
     _assert_integrity(spark)
 
 
-def test_3b_failure_midway_leaves_silver_untouched_then_rerun_recovers(spark, env,
+def test_3b_failure_midway_leaves_silver_untouched_then_rerun_recovers(spark, published,
                                                                        monkeypatch):
     """Bảng thứ N lỗi DQ: các bảng trước KHÔNG được ghi (stage rồi mới publish)."""
     import pipelines.silver as ps
@@ -178,16 +236,16 @@ def test_3b_failure_midway_leaves_silver_untouched_then_rerun_recovers(spark, en
         summary.first()["table_name"] == "card_transactions_hist" or real(summary, pct)))
     with pytest.raises(DQGateFailed, match="card_transactions_hist"):
         run(spark, SilverConfig(catalog="", as_of_date=D2))
-    assert _silver_fingerprint(spark) == env["silver_ok"]
+    assert _silver_fingerprint(spark) == published["silver_ok"]
     assert _runs(spark, "silver")[-1] == (D2, "FAILED")
 
     monkeypatch.setattr(ps, "should_stop", real)
     run(spark, SilverConfig(catalog="", as_of_date=D2))          # sửa xong -> chạy lại
-    assert _silver_fingerprint(spark) == env["silver_ok"]
+    assert _silver_fingerprint(spark) == published["silver_ok"]
     assert _runs(spark, "silver")[-1] == (D2, "SUCCESS")
 
 
-def test_4_duplicate_file_does_not_double_count(spark, env):
+def test_4_duplicate_file_does_not_double_count(spark, published):
     from pyspark.sql import functions as F
 
     from pipelines.gold import GoldConfig
@@ -199,15 +257,15 @@ def test_4_duplicate_file_does_not_double_count(spark, env):
     dup.write.format("delta").mode("append").saveAsTable("bronze.loans")
     run(spark, SilverConfig(catalog="", as_of_date=D2))
     gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
-    assert _silver_fingerprint(spark) == env["silver_ok"]
-    assert _gold_fingerprint(spark) == env["gold_ok"]
+    assert _silver_fingerprint(spark) == published["silver_ok"]
+    assert _gold_fingerprint(spark) == published["gold_ok"]
     _assert_integrity(spark)
     st = spark.sql(f"SELECT status FROM ops.file_manifest WHERE as_of_date = '{D2}' "
                    "AND table_name = 'loan_snapshots'").first()[0]
     assert st == "MULTIPLE_FILES"
 
 
-def test_5_reconciliation_failure_keeps_serving_gold(spark, env):
+def test_5_reconciliation_failure_keeps_serving_gold(spark, published):
     from pyspark.sql import functions as F
 
     from pipelines.gold import GateFailed, GoldConfig
@@ -229,7 +287,7 @@ def test_5_reconciliation_failure_keeps_serving_gold(spark, env):
     finally:
         spark.sql("DROP TABLE silver.dep_summary_source")
         spark.sql("ALTER TABLE silver.dep_summary_source_ok RENAME TO silver.dep_summary_source")
-    assert _gold_fingerprint(spark) == env["gold_ok"]
+    assert _gold_fingerprint(spark) == published["gold_ok"]
     assert spark.table("ops.published_batches").count() == n_pub
     # có version trước publish của mọi bảng Gold (để RESTORE)
     assert spark.sql("SELECT count(DISTINCT table_name) FROM ops.publish_versions "
@@ -240,7 +298,7 @@ def test_5_reconciliation_failure_keeps_serving_gold(spark, env):
     assert gate.status == "FAILED" and "Gate" in gate.error
 
 
-def test_5b_failure_midway_through_gold_publish_is_rolled_back(spark, env, monkeypatch):
+def test_5b_failure_midway_through_gold_publish_is_rolled_back(spark, published, monkeypatch):
     """Lỗi hạ tầng khi đang ghi bảng Gold thứ N/17: mọi bảng đã ghi phải được RESTORE,
     published_batches không có dòng mới -> dashboard vẫn ở batch cũ, không trộn mới / cũ."""
     import pipelines.gold as pg
@@ -258,7 +316,7 @@ def test_5b_failure_midway_through_gold_publish_is_rolled_back(spark, env, monke
     monkeypatch.setattr(pg, "overwrite_date", boom)
     with pytest.raises(OSError):
         gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
-    assert _gold_fingerprint(spark) == env["gold_ok"]
+    assert _gold_fingerprint(spark) == published["gold_ok"]
     assert spark.table("ops.published_batches").count() == n_pub
     last = spark.sql("SELECT status, message FROM ops.pipeline_runs WHERE layer = 'gold' "
                      "ORDER BY started_at DESC, status LIMIT 1").first()
@@ -266,11 +324,11 @@ def test_5b_failure_midway_through_gold_publish_is_rolled_back(spark, env, monke
 
     monkeypatch.setattr(pg, "overwrite_date", real)
     gold_run(spark, GoldConfig(catalog="", as_of_date=D2))      # hạ tầng ổn -> chạy lại
-    assert _gold_fingerprint(spark) == env["gold_ok"]
+    assert _gold_fingerprint(spark) == published["gold_ok"]
     _assert_integrity(spark)
 
 
-def test_6_out_of_order_rerun_rejected_without_damage(spark, env):
+def test_6_out_of_order_rerun_rejected_without_damage(spark, published):
     from pipelines.gold import GoldConfig, NotReproducible
     from pipelines.gold import run as gold_run
     from pipelines.silver import OutOfOrder, SilverConfig, run
@@ -283,17 +341,58 @@ def test_6_out_of_order_rerun_rejected_without_damage(spark, env):
     assert _gold_fingerprint(spark) == before
 
 
-def test_7_daily_runner_catches_up_silver_and_gold_per_day(spark, env):
-    """Gián đoạn nhiều ngày: Silver + Gold phải chạy XEN KẼ từng ngày (snapshot MERGE)."""
+def _resend(spark, table, day):
+    """Nguồn gửi lại file của `day` SAU khi Silver ngày đó đã SUCCESS (file correction)."""
+    from pyspark.sql import functions as F
+
+    (spark.table(f"bronze.{table}").filter(F.col("_as_of_date") == F.lit(day).cast("date"))
+     .withColumn("_source_file", F.concat(F.col("_source_file"), F.lit(".corrected")))
+     .withColumn("_load_ts", F.current_timestamp())
+     .write.format("delta").mode("append").saveAsTable(f"bronze.{table}"))
+
+
+def test_6b_correction_reprocesses_silver_before_gold(spark, published):
     from pipelines import daily
     from pipelines.silver import SilverConfig
 
-    for s in ["silver", "silver_stage", "gold", "gold_stage", "ops"]:
-        spark.sql(f"DROP SCHEMA IF EXISTS {s} CASCADE")
+    n_silver = len(_runs(spark, "silver"))
+    _resend(spark, "loans", D2)
+    assert daily.run(spark, SilverConfig(catalog="")) == []        # không có ngày mới
+    # Silver D2 được xử lý lại TRƯỚC Gold D2 (không dựng Gold từ Silver cũ)
+    new_runs = _runs(spark, "silver")[n_silver:]
+    assert new_runs == [(D2, "RUNNING"), (D2, "SUCCESS")]
+    gold_last = spark.sql("SELECT max(started_at) FROM ops.pipeline_runs WHERE layer = 'gold' "
+                          f"AND as_of_date = '{D2}' AND status = 'SUCCESS'").first()[0]
+    silver_last = spark.sql("SELECT max(finished_at) FROM ops.pipeline_runs WHERE "
+                            f"layer = 'silver' AND as_of_date = '{D2}' AND status = 'SUCCESS'"
+                            ).first()[0]
+    assert gold_last >= silver_last
+    assert _silver_fingerprint(spark) == published["silver_ok"]     # gửi lại cùng nội dung
+    assert _gold_fingerprint(spark) == published["gold_ok"]
+    assert daily.run(spark, SilverConfig(catalog="")) == []        # đã xử lý: không lặp lại
+    assert len(_runs(spark, "silver")) == n_silver + 2
+
+
+def test_6c_correction_older_than_watermark_stops_for_replay(spark, published):
+    from pipelines import daily
+    from pipelines.daily import CorrectionNeedsReplay
+    from pipelines.silver import SilverConfig
+
+    _resend(spark, "loans", D1)
+    with pytest.raises(CorrectionNeedsReplay, match=D1):
+        daily.run(spark, SilverConfig(catalog=""))
+    assert _silver_fingerprint(spark) == published["silver_ok"]
+    assert _gold_fingerprint(spark) == published["gold_ok"]
+
+
+def test_7_daily_runner_catches_up_silver_and_gold_per_day(spark, fresh_bronze):
+    """Gián đoạn nhiều ngày: Silver + Gold phải chạy XEN KẼ từng ngày (snapshot MERGE)."""
+    from pipelines import daily
+    from pipelines.silver import SilverConfig
     assert daily.run(spark, SilverConfig(catalog="")) == [D1, D2]
     assert _runs(spark, "gold") == [(D1, "RUNNING"), (D1, "SUCCESS"),
                                     (D2, "RUNNING"), (D2, "SUCCESS")]
     # chạy bù nhiều ngày một lần = chạy từng ngày (cùng nội dung)
-    assert _silver_fingerprint(spark) == env["silver_ok"]
-    assert _gold_fingerprint(spark) == env["gold_ok"]
+    assert _silver_fingerprint(spark) == fresh_bronze["silver_ok"]
+    assert _gold_fingerprint(spark) == fresh_bronze["gold_ok"]
     _assert_integrity(spark)
