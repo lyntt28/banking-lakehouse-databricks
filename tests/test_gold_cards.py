@@ -121,3 +121,35 @@ def test_monthly_stock_flow_mom_and_targets(spark):
     assert nov.sales_vs_month_target_pct == pytest.approx(50.0)
     assert nov.new_vs_year_target_pct == pytest.approx(10.0)               # YTD 5+5 / 100
     assert m["2026-10"].target_new_month is None
+
+
+def test_deposit_reconciles_on_second_day(spark, tmp_path):
+    """Backfill ngày 2+: FK của TK dùng KH đã có ở Silver từ hôm trước (không chỉ lô hôm nay)."""
+    from datetime import date
+
+    from common.bronze import SOURCES, add_bronze_metadata
+    from common.silver import TABLES, prepare_silver
+    from data_generator.common import DEPOSIT_ALL
+    from data_generator.generate import Sizes, generate
+
+    generate(tmp_path, date(2026, 11, 30), 1, seed=5,
+             sizes=Sizes(3000, 3000, 100, 100, 100), history_months=1)
+    srcs = {s.table: s for s in SOURCES}
+
+    def bronze(t, d):
+        s = srcs[t]
+        df = spark.read.options(**s.options).csv(str(tmp_path / t))
+        return add_bronze_metadata(df, F.input_file_name()).filter(F.col("_as_of_date") == d)
+
+    known = None
+    for d in ["2026-10-31", "2026-11-30"]:
+        cust = prepare_silver(bronze("customers", d), TABLES["core_customers"])
+        k = cust.known_keys("customer_id")
+        known = k if known is None else known.unionByName(k).distinct()
+        acc = prepare_silver(bronze("accounts", d), TABLES["core_accounts"], known)
+    summ = prepare_silver(bronze("deposit_summary", d), TABLES["dep_summary_source"])
+    fx = prepare_silver(bronze("fx_rates", d), TABLES["ref_fx_rates"])
+    r = deposit_reconciliation(build_mart_deposit_daily(acc.valid, d), summ.valid, fx.valid,
+                               {p[0]: p[1] for p in DEPOSIT_ALL})
+    bad = r.filter("status <> 'MATCH'")
+    assert bad.count() == 0, bad.limit(5).collect()
