@@ -4,20 +4,30 @@
       "name": "dep_tickers",
       "displayName": "Tickers",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
-        "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
-        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
-        "\n",
-        ", cust AS (\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.dep_mart_trend\n",
+        "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
+        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
+        "mavg AS (SELECT as_of_date, bal, avg(bal) OVER (PARTITION BY date_trunc('MM', as_of_date)\n",
+        "                ORDER BY as_of_date) AS mavg FROM day),\n",
+        "cust AS (\n",
         "  SELECT c.as_of_date, sum(c.retail_customers) AS retail\n",
         "  FROM gold.dep_mart_casa_customer c LEFT JOIN gold.dim_branch b ON b.branchnbr = c.branchnbr\n",
-        "  WHERE :region = 'all' OR b.region = :region GROUP BY 1)\n",
-        "SELECT x.bal AS ending_balance,\n",
-        "  (SELECT avg(bal) FROM day, p WHERE date_trunc('MM', as_of_date) = date_trunc('MM', p.d)\n",
-        "     AND as_of_date <= p.d) AS monthly_avg_balance,\n",
-        "  (SELECT retail FROM cust, p WHERE cust.as_of_date = (SELECT max(as_of_date) FROM cust\n",
-        "     WHERE as_of_date <= p.d)) AS retail_customers\n",
-        "FROM day x, p WHERE x.as_of_date = p.d\n"
+        "  WHERE (:region = 'all' OR b.region = :region) AND (:branch = 'all' OR c.branchnbr = :branch) GROUP BY 1),\n",
+        "pick AS (\n",
+        "  SELECT 0 AS ord, 'Current' AS cmp, p.d AS dd FROM p\n",
+        "  UNION ALL SELECT 1, 'vs Last Day', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date < p.d) FROM p\n",
+        "  UNION ALL SELECT 2, 'vs Last Month', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p\n",
+        "  UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),\n",
+        "v AS (SELECT pk.ord, pk.cmp, m.bal / p.usd / 1000 AS bal, m.mavg / p.usd / 1000 AS mavg,\n",
+        "             (SELECT max_by(retail, as_of_date) FROM cust WHERE as_of_date <= pk.dd) AS retail\n",
+        "      FROM pick pk CROSS JOIN p LEFT JOIN mavg m ON m.as_of_date = pk.dd)\n",
+        "\n",
+        "SELECT bal AS ending_balance, mavg AS monthly_avg_balance, retail AS retail_customers\n",
+        "FROM v WHERE ord = 0\n"
       ],
       "parameters": [
         {
@@ -38,6 +48,21 @@
         {
           "displayName": "Region",
           "keyword": "region",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
           "dataType": "STRING",
           "defaultSelection": {
             "values": {
@@ -56,21 +81,35 @@
       "name": "dep_compare",
       "displayName": "Tickers vs last day / month / year",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
-        "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
-        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
-        "\n",
-        ", pick AS (\n",
-        "  SELECT 1 AS ord, 'vs Last Day' AS cmp,\n",
-        "         (SELECT max(as_of_date) FROM day, p WHERE as_of_date < p.d) AS dd FROM p\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.dep_mart_trend\n",
+        "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
+        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
+        "mavg AS (SELECT as_of_date, bal, avg(bal) OVER (PARTITION BY date_trunc('MM', as_of_date)\n",
+        "                ORDER BY as_of_date) AS mavg FROM day),\n",
+        "cust AS (\n",
+        "  SELECT c.as_of_date, sum(c.retail_customers) AS retail\n",
+        "  FROM gold.dep_mart_casa_customer c LEFT JOIN gold.dim_branch b ON b.branchnbr = c.branchnbr\n",
+        "  WHERE (:region = 'all' OR b.region = :region) AND (:branch = 'all' OR c.branchnbr = :branch) GROUP BY 1),\n",
+        "pick AS (\n",
+        "  SELECT 0 AS ord, 'Current' AS cmp, p.d AS dd FROM p\n",
+        "  UNION ALL SELECT 1, 'vs Last Day', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date < p.d) FROM p\n",
         "  UNION ALL SELECT 2, 'vs Last Month', (SELECT max(as_of_date) FROM day, p\n",
         "         WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p\n",
         "  UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p\n",
         "         WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),\n",
-        "cur AS (SELECT x.bal FROM day x, p WHERE x.as_of_date = p.d)\n",
-        "SELECT pk.ord, pk.cmp, cur.bal - c.bal AS ending_balance_diff,\n",
-        "       (cur.bal - c.bal) / nullif(c.bal, 0) * 100 AS ending_balance_pct\n",
-        "FROM pick pk CROSS JOIN cur LEFT JOIN day c ON c.as_of_date = pk.dd ORDER BY pk.ord\n"
+        "v AS (SELECT pk.ord, pk.cmp, m.bal / p.usd / 1000 AS bal, m.mavg / p.usd / 1000 AS mavg,\n",
+        "             (SELECT max_by(retail, as_of_date) FROM cust WHERE as_of_date <= pk.dd) AS retail\n",
+        "      FROM pick pk CROSS JOIN p LEFT JOIN mavg m ON m.as_of_date = pk.dd)\n",
+        "\n",
+        "SELECT c.ord, c.cmp,\n",
+        "       cur.bal - c.bal AS bal_diff, (cur.bal - c.bal) / nullif(c.bal, 0) * 100 AS bal_pct,\n",
+        "       cur.mavg - c.mavg AS mavg_diff,\n",
+        "       (cur.mavg - c.mavg) / nullif(c.mavg, 0) * 100 AS mavg_pct,\n",
+        "       cur.retail - c.retail AS cust_diff,\n",
+        "       (cur.retail - c.retail) / nullif(c.retail, 0) * 100 AS cust_pct\n",
+        "FROM v c CROSS JOIN (SELECT * FROM v WHERE ord = 0) cur WHERE c.ord > 0 ORDER BY c.ord\n"
       ],
       "parameters": [
         {
@@ -102,6 +141,21 @@
               ]
             }
           }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -109,9 +163,27 @@
       "name": "dep_gauges",
       "displayName": "Target gauges",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
-        "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
-        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.dep_mart_trend\n",
+        "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
+        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
+        "mavg AS (SELECT as_of_date, bal, avg(bal) OVER (PARTITION BY date_trunc('MM', as_of_date)\n",
+        "                ORDER BY as_of_date) AS mavg FROM day),\n",
+        "cust AS (\n",
+        "  SELECT c.as_of_date, sum(c.retail_customers) AS retail\n",
+        "  FROM gold.dep_mart_casa_customer c LEFT JOIN gold.dim_branch b ON b.branchnbr = c.branchnbr\n",
+        "  WHERE (:region = 'all' OR b.region = :region) AND (:branch = 'all' OR c.branchnbr = :branch) GROUP BY 1),\n",
+        "pick AS (\n",
+        "  SELECT 0 AS ord, 'Current' AS cmp, p.d AS dd FROM p\n",
+        "  UNION ALL SELECT 1, 'vs Last Day', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date < p.d) FROM p\n",
+        "  UNION ALL SELECT 2, 'vs Last Month', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p\n",
+        "  UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),\n",
+        "v AS (SELECT pk.ord, pk.cmp, m.bal / p.usd / 1000 AS bal, m.mavg / p.usd / 1000 AS mavg,\n",
+        "             (SELECT max_by(retail, as_of_date) FROM cust WHERE as_of_date <= pk.dd) AS retail\n",
+        "      FROM pick pk CROSS JOIN p LEFT JOIN mavg m ON m.as_of_date = pk.dd)\n",
         "\n",
         ", cur AS (\n",
         "  SELECT sum(balance_vnd) AS all_bal,\n",
@@ -125,7 +197,7 @@
         "  FROM silver.ref_targets tg CROSS JOIN p\n",
         "  LEFT JOIN gold.dim_branch b ON b.branchnbr = tg.branchnbr\n",
         "  WHERE tg.period_type = 'YEAR' AND tg.period = CAST(year(p.d) AS STRING)\n",
-        "    AND (:region = 'all' OR b.region = :region))\n",
+        "    AND (:region = 'all' OR b.region = :region) AND (:branch = 'all' OR tg.branchnbr = :branch))\n",
         "SELECT cur.all_bal / nullif(t.all_t, 0) * 100 AS all_pct,\n",
         "       cur.casa_bal / nullif(t.casa_t, 0) * 100 AS casa_pct,\n",
         "       cur.tda_bal / nullif(t.tda_t, 0) * 100 AS tda_pct\n",
@@ -161,6 +233,21 @@
               ]
             }
           }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -168,12 +255,32 @@
       "name": "dep_daily30",
       "displayName": "Ending Balance - Last 30 Days",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
-        "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
-        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.dep_mart_trend\n",
+        "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
+        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
+        "mavg AS (SELECT as_of_date, bal, avg(bal) OVER (PARTITION BY date_trunc('MM', as_of_date)\n",
+        "                ORDER BY as_of_date) AS mavg FROM day),\n",
+        "cust AS (\n",
+        "  SELECT c.as_of_date, sum(c.retail_customers) AS retail\n",
+        "  FROM gold.dep_mart_casa_customer c LEFT JOIN gold.dim_branch b ON b.branchnbr = c.branchnbr\n",
+        "  WHERE (:region = 'all' OR b.region = :region) AND (:branch = 'all' OR c.branchnbr = :branch) GROUP BY 1),\n",
+        "pick AS (\n",
+        "  SELECT 0 AS ord, 'Current' AS cmp, p.d AS dd FROM p\n",
+        "  UNION ALL SELECT 1, 'vs Last Day', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date < p.d) FROM p\n",
+        "  UNION ALL SELECT 2, 'vs Last Month', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p\n",
+        "  UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),\n",
+        "v AS (SELECT pk.ord, pk.cmp, m.bal / p.usd / 1000 AS bal, m.mavg / p.usd / 1000 AS mavg,\n",
+        "             (SELECT max_by(retail, as_of_date) FROM cust WHERE as_of_date <= pk.dd) AS retail\n",
+        "      FROM pick pk CROSS JOIN p LEFT JOIN mavg m ON m.as_of_date = pk.dd)\n",
         "\n",
-        "SELECT date_format(as_of_date, 'dd/MM') AS day, bal AS balance FROM day, p\n",
-        "WHERE as_of_date BETWEEN date_sub(p.d, 29) AND p.d\n"
+        "SELECT date_format(f.as_of_date, 'MM-dd') AS day, sum(f.balance_vnd) / p.usd / 1000 AS balance\n",
+        "FROM f, p WHERE f.as_of_date BETWEEN date_sub(p.d, 29) AND p.d\n",
+        "  AND (:daily_product = 'ALL' OR f.group_class = :daily_product)\n",
+        "GROUP BY 1, p.usd\n"
       ],
       "parameters": [
         {
@@ -205,6 +312,36 @@
               ]
             }
           }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Product",
+          "keyword": "daily_product",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "ALL"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -212,9 +349,27 @@
       "name": "dep_mom",
       "displayName": "Monthly Average Balance (MoM)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
-        "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
-        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.dep_mart_trend\n",
+        "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
+        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
+        "mavg AS (SELECT as_of_date, bal, avg(bal) OVER (PARTITION BY date_trunc('MM', as_of_date)\n",
+        "                ORDER BY as_of_date) AS mavg FROM day),\n",
+        "cust AS (\n",
+        "  SELECT c.as_of_date, sum(c.retail_customers) AS retail\n",
+        "  FROM gold.dep_mart_casa_customer c LEFT JOIN gold.dim_branch b ON b.branchnbr = c.branchnbr\n",
+        "  WHERE (:region = 'all' OR b.region = :region) AND (:branch = 'all' OR c.branchnbr = :branch) GROUP BY 1),\n",
+        "pick AS (\n",
+        "  SELECT 0 AS ord, 'Current' AS cmp, p.d AS dd FROM p\n",
+        "  UNION ALL SELECT 1, 'vs Last Day', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date < p.d) FROM p\n",
+        "  UNION ALL SELECT 2, 'vs Last Month', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p\n",
+        "  UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),\n",
+        "v AS (SELECT pk.ord, pk.cmp, m.bal / p.usd / 1000 AS bal, m.mavg / p.usd / 1000 AS mavg,\n",
+        "             (SELECT max_by(retail, as_of_date) FROM cust WHERE as_of_date <= pk.dd) AS retail\n",
+        "      FROM pick pk CROSS JOIN p LEFT JOIN mavg m ON m.as_of_date = pk.dd)\n",
         "\n",
         ", m AS (SELECT year(as_of_date) AS yr, month(as_of_date) AS mn, group_class,\n",
         "               avg(bal) AS avg_bal\n",
@@ -224,7 +379,7 @@
         "SELECT date_format(make_date(2000, m.mn, 1), 'MMM') AS month,\n",
         "       concat(m.group_class, CASE WHEN m.yr = year(p.d) THEN ' this year'\n",
         "                                    ELSE ' last year' END) AS series,\n",
-        "       m.avg_bal\n",
+        "       m.avg_bal / p.usd / 1000 AS avg_bal\n",
         "FROM m, p WHERE m.yr IN (year(p.d), year(p.d) - 1) AND make_date(m.yr, m.mn, 1) <= p.d\n"
       ],
       "parameters": [
@@ -257,6 +412,21 @@
               ]
             }
           }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -264,11 +434,31 @@
       "name": "dep_region",
       "displayName": "Regional Deposit Distribution",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
-        "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
-        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.dep_mart_trend\n",
+        "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
+        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
+        "mavg AS (SELECT as_of_date, bal, avg(bal) OVER (PARTITION BY date_trunc('MM', as_of_date)\n",
+        "                ORDER BY as_of_date) AS mavg FROM day),\n",
+        "cust AS (\n",
+        "  SELECT c.as_of_date, sum(c.retail_customers) AS retail\n",
+        "  FROM gold.dep_mart_casa_customer c LEFT JOIN gold.dim_branch b ON b.branchnbr = c.branchnbr\n",
+        "  WHERE (:region = 'all' OR b.region = :region) AND (:branch = 'all' OR c.branchnbr = :branch) GROUP BY 1),\n",
+        "pick AS (\n",
+        "  SELECT 0 AS ord, 'Current' AS cmp, p.d AS dd FROM p\n",
+        "  UNION ALL SELECT 1, 'vs Last Day', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date < p.d) FROM p\n",
+        "  UNION ALL SELECT 2, 'vs Last Month', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p\n",
+        "  UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),\n",
+        "v AS (SELECT pk.ord, pk.cmp, m.bal / p.usd / 1000 AS bal, m.mavg / p.usd / 1000 AS mavg,\n",
+        "             (SELECT max_by(retail, as_of_date) FROM cust WHERE as_of_date <= pk.dd) AS retail\n",
+        "      FROM pick pk CROSS JOIN p LEFT JOIN mavg m ON m.as_of_date = pk.dd)\n",
         "\n",
-        "SELECT region, sum(balance_vnd) AS balance FROM f, p WHERE f.as_of_date = p.d GROUP BY 1\n"
+        "SELECT f.region, sum(f.balance_vnd) / p.usd / 1000 AS balance FROM f, p\n",
+        "WHERE f.as_of_date = p.d AND (:region_product = 'ALL' OR f.group_class = :region_product)\n",
+        "GROUP BY 1, p.usd\n"
       ],
       "parameters": [
         {
@@ -300,6 +490,36 @@
               ]
             }
           }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Product",
+          "keyword": "region_product",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "ALL"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -307,12 +527,16 @@
       "name": "dep_term",
       "displayName": "Deposit by Term and IR (in Month)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_by_tenor WHERE as_of_date <= :report_date) AS d)\n",
-        "SELECT concat(t.tenor_months, 'M') AS tenor, t.tenor_months,\n",
-        "       sum(t.balance_vnd) AS balance,\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_by_tenor WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd)\n",
+        "SELECT CASE WHEN t.tenor_months < 1 THEN '00-01M' WHEN t.tenor_months < 6 THEN '01-06M'\n",
+        "            WHEN t.tenor_months < 12 THEN '06-12M' WHEN t.tenor_months < 24 THEN '12-24M'\n",
+        "            ELSE '24M+' END AS tenor,\n",
+        "       sum(t.balance_vnd) / p.usd / 1000 AS balance,\n",
         "       sum(t.weighted_rate * t.balance_vnd) / nullif(sum(t.balance_vnd), 0) * 100 AS avg_interest\n",
-        "FROM gold.dep_mart_by_tenor t, p WHERE t.as_of_date = p.d GROUP BY 1, 2\n",
-        "ORDER BY t.tenor_months\n"
+        "FROM gold.dep_mart_by_tenor t CROSS JOIN p\n",
+        "LEFT JOIN gold.dim_branch b ON b.branchnbr = t.branchnbr\n",
+        "WHERE t.as_of_date = p.d AND (:region = 'all' OR b.region = :region) AND (:branch = 'all' OR t.branchnbr = :branch)\n",
+        "GROUP BY 1, p.usd ORDER BY 1\n"
       ],
       "parameters": [
         {
@@ -329,6 +553,36 @@
               ]
             }
           }
+        },
+        {
+          "displayName": "Region",
+          "keyword": "region",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -341,7 +595,8 @@
         "             sum(c.casa_dormant_customers) dormant\n",
         "      FROM gold.dep_mart_casa_customer c CROSS JOIN p\n",
         "      LEFT JOIN gold.dim_branch b ON b.branchnbr = c.branchnbr\n",
-        "      WHERE c.as_of_date = p.d AND (:region = 'all' OR b.region = :region))\n",
+        "      WHERE c.as_of_date = p.d AND (:region = 'all' OR b.region = :region)\n",
+        "        AND (:branch = 'all' OR c.branchnbr = :branch))\n",
         "SELECT 'Non-CASA' AS segment, retail - active - dormant AS customers FROM c\n",
         "UNION ALL SELECT 'Active', active FROM c\n",
         "UNION ALL SELECT 'Dormant', dormant FROM c\n"
@@ -376,6 +631,21 @@
               ]
             }
           }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -389,7 +659,7 @@
         "LEFT JOIN gold.dim_branch b ON b.branchnbr = n.branchnbr\n",
         "WHERE n.product_type = 'KSTUDY' AND n.open_month <= date_format(p.d, 'yyyy-MM')\n",
         "  AND n.open_month > date_format(add_months(p.d, -12), 'yyyy-MM')\n",
-        "  AND (:region = 'all' OR b.region = :region)\n",
+        "  AND (:region = 'all' OR b.region = :region) AND (:branch = 'all' OR n.branchnbr = :branch)\n",
         "GROUP BY 1\n"
       ],
       "parameters": [
@@ -422,6 +692,21 @@
               ]
             }
           }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -429,27 +714,56 @@
       "name": "dep_by_product",
       "displayName": "Balance by Product",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d),\n",
-        "f AS (SELECT * FROM gold.dep_mart_trend WHERE :region = 'all' OR region = :region),\n",
-        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date)\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "f AS (SELECT * FROM gold.dep_mart_trend\n",
+        "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
+        "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
+        "mavg AS (SELECT as_of_date, bal, avg(bal) OVER (PARTITION BY date_trunc('MM', as_of_date)\n",
+        "                ORDER BY as_of_date) AS mavg FROM day),\n",
+        "cust AS (\n",
+        "  SELECT c.as_of_date, sum(c.retail_customers) AS retail\n",
+        "  FROM gold.dep_mart_casa_customer c LEFT JOIN gold.dim_branch b ON b.branchnbr = c.branchnbr\n",
+        "  WHERE (:region = 'all' OR b.region = :region) AND (:branch = 'all' OR c.branchnbr = :branch) GROUP BY 1),\n",
+        "pick AS (\n",
+        "  SELECT 0 AS ord, 'Current' AS cmp, p.d AS dd FROM p\n",
+        "  UNION ALL SELECT 1, 'vs Last Day', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date < p.d) FROM p\n",
+        "  UNION ALL SELECT 2, 'vs Last Month', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p\n",
+        "  UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p\n",
+        "         WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),\n",
+        "v AS (SELECT pk.ord, pk.cmp, m.bal / p.usd / 1000 AS bal, m.mavg / p.usd / 1000 AS mavg,\n",
+        "             (SELECT max_by(retail, as_of_date) FROM cust WHERE as_of_date <= pk.dd) AS retail\n",
+        "      FROM pick pk CROSS JOIN p LEFT JOIN mavg m ON m.as_of_date = pk.dd)\n",
         "\n",
-        ", g AS (SELECT as_of_date, account_group, sum(balance_vnd) bal FROM f GROUP BY 1, 2),\n",
-        "pk AS (\n",
-        "  SELECT (SELECT max(as_of_date) FROM day, p WHERE as_of_date < p.d) AS d1,\n",
-        "         (SELECT max(as_of_date) FROM day, p\n",
-        "          WHERE as_of_date <= last_day(add_months(p.d, -1))) AS m1,\n",
-        "         (SELECT max(as_of_date) FROM day, p\n",
-        "          WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) AS y1),\n",
-        "cur AS (SELECT g.* FROM g, p WHERE g.as_of_date = p.d)\n",
-        "SELECT cur.account_group AS product, cur.bal AS ending_balance,\n",
-        "       CAST(cur.bal AS DOUBLE) / sum(CAST(cur.bal AS DOUBLE)) OVER () * 100 AS portion,\n",
-        "       cur.bal - d1.bal AS diff_last_day, cur.bal - m1.bal AS diff_last_month,\n",
-        "       cur.bal - y1.bal AS diff_last_year\n",
-        "FROM cur CROSS JOIN pk\n",
-        "LEFT JOIN g d1 ON d1.account_group = cur.account_group AND d1.as_of_date = pk.d1\n",
-        "LEFT JOIN g m1 ON m1.account_group = cur.account_group AND m1.as_of_date = pk.m1\n",
-        "LEFT JOIN g y1 ON y1.account_group = cur.account_group AND y1.as_of_date = pk.y1\n",
-        "ORDER BY ending_balance DESC\n"
+        ", ff AS (SELECT * FROM f WHERE (:currency = 'all' OR currencycd = :currency)\n",
+        "                           AND (:nationality = 'all' OR nationality = :nationality)),\n",
+        "g AS (SELECT as_of_date, group_class, account_group, sum(balance_vnd) bal\n",
+        "      FROM ff GROUP BY 1, 2, 3),\n",
+        "pk AS (SELECT max(CASE WHEN ord = 1 THEN dd END) AS d1, max(CASE WHEN ord = 2 THEN dd END) AS m1,\n",
+        "              max(CASE WHEN ord = 3 THEN dd END) AS y1 FROM pick),\n",
+        "r AS (\n",
+        "  SELECT cur.group_class, cur.account_group, cur.bal, d1.bal AS b_d1, m1.bal AS b_m1,\n",
+        "         y1.bal AS b_y1\n",
+        "  FROM g cur CROSS JOIN p CROSS JOIN pk\n",
+        "  LEFT JOIN g d1 ON d1.account_group = cur.account_group\n",
+        "       AND d1.group_class = cur.group_class AND d1.as_of_date = pk.d1\n",
+        "  LEFT JOIN g m1 ON m1.account_group = cur.account_group\n",
+        "       AND m1.group_class = cur.group_class AND m1.as_of_date = pk.m1\n",
+        "  LEFT JOIN g y1 ON y1.account_group = cur.account_group\n",
+        "       AND y1.group_class = cur.group_class AND y1.as_of_date = pk.y1\n",
+        "  WHERE cur.as_of_date = p.d),\n",
+        "lv AS (\n",
+        "  SELECT group_class AS k, 0 AS lvl, group_class AS product, sum(bal) bal, sum(b_d1) b_d1,\n",
+        "         sum(b_m1) b_m1, sum(b_y1) b_y1 FROM r GROUP BY group_class\n",
+        "  UNION ALL SELECT group_class, 1, concat('    ', account_group), bal, b_d1, b_m1, b_y1 FROM r\n",
+        "  UNION ALL SELECT 'zz', 2, 'GRAND TOTAL', sum(bal), sum(b_d1), sum(b_m1), sum(b_y1) FROM r)\n",
+        "SELECT lv.product, lv.bal / p.usd / 1000 AS ending_balance,\n",
+        "       lv.bal / nullif(sum(CASE WHEN lv.lvl = 2 THEN lv.bal END) OVER (), 0) * 100 AS portion,\n",
+        "       (lv.bal - lv.b_d1) / p.usd / 1000 AS diff_last_day,\n",
+        "       (lv.bal - lv.b_m1) / p.usd / 1000 AS diff_last_month,\n",
+        "       (lv.bal - lv.b_y1) / p.usd / 1000 AS diff_last_year\n",
+        "FROM lv CROSS JOIN p ORDER BY lv.k, lv.lvl, lv.product\n"
       ],
       "parameters": [
         {
@@ -481,6 +795,51 @@
               ]
             }
           }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Currency",
+          "keyword": "currency",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Nationality",
+          "keyword": "nationality",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -491,26 +850,61 @@
         "SELECT 'all' AS region UNION ALL SELECT DISTINCT region FROM gold.dim_branch\n"
       ],
       "parameters": []
+    },
+    {
+      "name": "dep_branch_options",
+      "displayName": "Branch options",
+      "queryLines": [
+        "SELECT 'all' AS branch UNION ALL SELECT DISTINCT branchnbr FROM gold.dim_branch\n"
+      ],
+      "parameters": []
+    },
+    {
+      "name": "dep_product_options",
+      "displayName": "Product options",
+      "queryLines": [
+        "SELECT 'ALL' AS product\n",
+        "UNION ALL SELECT '1-CASA' AS product\n",
+        "UNION ALL SELECT '2-TD' AS product\n",
+        "UNION ALL SELECT '3-ISA' AS product\n"
+      ],
+      "parameters": []
+    },
+    {
+      "name": "dep_currency_options",
+      "displayName": "Currency options",
+      "queryLines": [
+        "SELECT 'all' AS currency UNION ALL SELECT DISTINCT currencycd FROM gold.dep_mart_trend\n"
+      ],
+      "parameters": []
+    },
+    {
+      "name": "dep_nationality_options",
+      "displayName": "Nationality options",
+      "queryLines": [
+        "SELECT 'all' AS nationality UNION ALL SELECT DISTINCT nationality FROM gold.dep_mart_trend\n"
+      ],
+      "parameters": []
     }
   ],
   "pages": [
     {
-      "name": "retail_deposit",
-      "displayName": "Retail Deposit Performance",
+      "name": "overview",
+      "displayName": "Overview & Performance",
       "layout": [
         {
           "widget": {
             "name": "text_01",
             "multilineTextboxSpec": {
               "lines": [
-                "# Retail Deposit Performance"
+                "# Retail Deposit Performance\nUnit: USD 1,000"
               ]
             }
           },
           "position": {
             "x": 0,
             "y": 0,
-            "width": 4,
+            "width": 3,
             "height": 2
           }
         },
@@ -546,6 +940,9 @@
                       "type": "max",
                       "places": 1
                     }
+                  },
+                  "style": {
+                    "color": "#223A5E"
                   }
                 }
               },
@@ -564,7 +961,85 @@
         },
         {
           "widget": {
-            "name": "counter_03",
+            "name": "table_03",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dep_compare",
+                  "fields": [
+                    {
+                      "name": "cmp",
+                      "expression": "`cmp`"
+                    },
+                    {
+                      "name": "bal_diff",
+                      "expression": "`bal_diff`"
+                    },
+                    {
+                      "name": "bal_pct",
+                      "expression": "`bal_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "cmp",
+                    "displayName": "",
+                    "title": "",
+                    "order": 100000,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "bal_diff",
+                    "displayName": "+/-",
+                    "title": "+/-",
+                    "order": 100001,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "#,##0.00"
+                  },
+                  {
+                    "fieldName": "bal_pct",
+                    "displayName": "+/- %",
+                    "title": "+/- %",
+                    "order": 100002,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "0.00"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ending Balance vs Last Day / Month / Year"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_04",
             "queries": [
               {
                 "name": "main_query",
@@ -594,6 +1069,9 @@
                       "type": "max",
                       "places": 1
                     }
+                  },
+                  "style": {
+                    "color": "#009688"
                   }
                 }
               },
@@ -612,7 +1090,85 @@
         },
         {
           "widget": {
-            "name": "counter_04",
+            "name": "table_05",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dep_compare",
+                  "fields": [
+                    {
+                      "name": "cmp",
+                      "expression": "`cmp`"
+                    },
+                    {
+                      "name": "mavg_diff",
+                      "expression": "`mavg_diff`"
+                    },
+                    {
+                      "name": "mavg_pct",
+                      "expression": "`mavg_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "cmp",
+                    "displayName": "",
+                    "title": "",
+                    "order": 100000,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "mavg_diff",
+                    "displayName": "+/-",
+                    "title": "+/-",
+                    "order": 100001,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "#,##0.00"
+                  },
+                  {
+                    "fieldName": "mavg_pct",
+                    "displayName": "+/- %",
+                    "title": "+/- %",
+                    "order": 100002,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "0.00"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Monthly Avg Balance vs Last Day / Month / Year"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 5,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_06",
             "queries": [
               {
                 "name": "main_query",
@@ -641,6 +1197,9 @@
                       "type": "exact",
                       "places": 0
                     }
+                  },
+                  "style": {
+                    "color": "#F4A300"
                   }
                 }
               },
@@ -659,7 +1218,7 @@
         },
         {
           "widget": {
-            "name": "table_05",
+            "name": "table_07",
             "queries": [
               {
                 "name": "main_query",
@@ -671,12 +1230,12 @@
                       "expression": "`cmp`"
                     },
                     {
-                      "name": "ending_balance_diff",
-                      "expression": "`ending_balance_diff`"
+                      "name": "cust_diff",
+                      "expression": "`cust_diff`"
                     },
                     {
-                      "name": "ending_balance_pct",
-                      "expression": "`ending_balance_pct`"
+                      "name": "cust_pct",
+                      "expression": "`cust_pct`"
                     }
                   ],
                   "disaggregated": true
@@ -699,18 +1258,18 @@
                     "visible": true
                   },
                   {
-                    "fieldName": "ending_balance_diff",
-                    "displayName": "+/- Balance",
-                    "title": "+/- Balance",
+                    "fieldName": "cust_diff",
+                    "displayName": "+/-",
+                    "title": "+/-",
                     "order": 100001,
                     "type": "float",
                     "displayAs": "number",
                     "alignContent": "right",
                     "visible": true,
-                    "numberFormat": "#,##0.00"
+                    "numberFormat": "#,##0"
                   },
                   {
-                    "fieldName": "ending_balance_pct",
+                    "fieldName": "cust_pct",
                     "displayName": "+/- %",
                     "title": "+/- %",
                     "order": 100002,
@@ -724,20 +1283,20 @@
               },
               "frame": {
                 "showTitle": true,
-                "title": "Ending Balance vs Last Day / Month / Year"
+                "title": "Retail Customers vs Last Day / Month / Year"
               }
             }
           },
           "position": {
-            "x": 0,
+            "x": 4,
             "y": 5,
-            "width": 6,
+            "width": 2,
             "height": 3
           }
         },
         {
           "widget": {
-            "name": "counter_06",
+            "name": "counter_08",
             "queries": [
               {
                 "name": "main_query",
@@ -788,7 +1347,7 @@
         },
         {
           "widget": {
-            "name": "counter_07",
+            "name": "counter_09",
             "queries": [
               {
                 "name": "main_query",
@@ -839,7 +1398,7 @@
         },
         {
           "widget": {
-            "name": "counter_08",
+            "name": "counter_10",
             "queries": [
               {
                 "name": "main_query",
@@ -890,7 +1449,7 @@
         },
         {
           "widget": {
-            "name": "bar_09",
+            "name": "bar_11",
             "queries": [
               {
                 "name": "main_query",
@@ -919,14 +1478,14 @@
                   "scale": {
                     "type": "categorical"
                   },
-                  "displayName": "day"
+                  "displayName": "Date"
                 },
                 "y": {
                   "fieldName": "sum(balance)",
                   "scale": {
                     "type": "quantitative"
                   },
-                  "displayName": "balance"
+                  "displayName": "Balance (K USD)"
                 }
               },
               "frame": {
@@ -949,7 +1508,7 @@
         },
         {
           "widget": {
-            "name": "bar_10",
+            "name": "bar_12",
             "queries": [
               {
                 "name": "main_query",
@@ -982,14 +1541,14 @@
                   "scale": {
                     "type": "categorical"
                   },
-                  "displayName": "month"
+                  "displayName": "Month"
                 },
                 "y": {
                   "fieldName": "sum(avg_bal)",
                   "scale": {
                     "type": "quantitative"
                   },
-                  "displayName": "avg_bal"
+                  "displayName": "Avg Balance (K USD)"
                 },
                 "color": {
                   "fieldName": "series",
@@ -1038,12 +1597,12 @@
             "x": 0,
             "y": 18,
             "width": 6,
-            "height": 7
+            "height": 8
           }
         },
         {
           "widget": {
-            "name": "pie_11",
+            "name": "pie_13",
             "queries": [
               {
                 "name": "main_query",
@@ -1072,7 +1631,7 @@
                   "scale": {
                     "type": "quantitative"
                   },
-                  "displayName": "balance"
+                  "displayName": "Balance (K USD)"
                 },
                 "color": {
                   "fieldName": "region",
@@ -1088,16 +1647,32 @@
                         "color": "#1A237E"
                       },
                       {
+                        "value": "South 3",
+                        "color": "#80CBC4"
+                      },
+                      {
+                        "value": "North 1",
+                        "color": "#FFE082"
+                      },
+                      {
+                        "value": "North 2",
+                        "color": "#F4A300"
+                      },
+                      {
                         "value": "North",
                         "color": "#FFE082"
                       },
                       {
                         "value": "Central",
+                        "color": "#F4A300"
+                      },
+                      {
+                        "value": "Others",
                         "color": "#F47B20"
                       }
                     ]
                   },
-                  "displayName": "region"
+                  "displayName": "Region"
                 },
                 "label": {
                   "show": true
@@ -1111,14 +1686,14 @@
           },
           "position": {
             "x": 0,
-            "y": 25,
+            "y": 28,
             "width": 2,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "combo_12",
+            "name": "combo_14",
             "queries": [
               {
                 "name": "main_query",
@@ -1161,7 +1736,7 @@
                     "fields": [
                       {
                         "fieldName": "sum(balance)",
-                        "displayName": "Balance"
+                        "displayName": "Balance (K USD)"
                       }
                     ]
                   },
@@ -1169,7 +1744,7 @@
                     "fields": [
                       {
                         "fieldName": "sum(avg_interest)",
-                        "displayName": "Avg Interest"
+                        "displayName": "Avg Interest (%)"
                       }
                     ]
                   }
@@ -1179,11 +1754,11 @@
                     "type": "categorical",
                     "mappings": [
                       {
-                        "value": "Balance",
+                        "value": "Balance (K USD)",
                         "color": "#009688"
                       },
                       {
-                        "value": "Avg Interest",
+                        "value": "Avg Interest (%)",
                         "color": "#F4A300"
                       }
                     ]
@@ -1201,14 +1776,625 @@
           },
           "position": {
             "x": 2,
-            "y": 25,
+            "y": 26,
             "width": 4,
-            "height": 7
+            "height": 9
           }
         },
         {
           "widget": {
-            "name": "pie_13",
+            "name": "filter_15",
+            "queries": [
+              {
+                "name": "param_dep_tickers_report_date",
+                "query": {
+                  "datasetName": "dep_tickers",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_compare_report_date",
+                "query": {
+                  "datasetName": "dep_compare",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_gauges_report_date",
+                "query": {
+                  "datasetName": "dep_gauges",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_daily30_report_date",
+                "query": {
+                  "datasetName": "dep_daily30",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_mom_report_date",
+                "query": {
+                  "datasetName": "dep_mom",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_region_report_date",
+                "query": {
+                  "datasetName": "dep_region",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_term_report_date",
+                "query": {
+                  "datasetName": "dep_term",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_dep_tickers_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_dep_compare_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_dep_gauges_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_dep_daily30_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_dep_mom_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_dep_region_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_dep_term_report_date"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Date"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_16",
+            "queries": [
+              {
+                "name": "options",
+                "query": {
+                  "datasetName": "dep_region_options",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_tickers_region",
+                "query": {
+                  "datasetName": "dep_tickers",
+                  "parameters": [
+                    {
+                      "name": "region",
+                      "keyword": "region"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_compare_region",
+                "query": {
+                  "datasetName": "dep_compare",
+                  "parameters": [
+                    {
+                      "name": "region",
+                      "keyword": "region"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_gauges_region",
+                "query": {
+                  "datasetName": "dep_gauges",
+                  "parameters": [
+                    {
+                      "name": "region",
+                      "keyword": "region"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_daily30_region",
+                "query": {
+                  "datasetName": "dep_daily30",
+                  "parameters": [
+                    {
+                      "name": "region",
+                      "keyword": "region"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_mom_region",
+                "query": {
+                  "datasetName": "dep_mom",
+                  "parameters": [
+                    {
+                      "name": "region",
+                      "keyword": "region"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_region_region",
+                "query": {
+                  "datasetName": "dep_region",
+                  "parameters": [
+                    {
+                      "name": "region",
+                      "keyword": "region"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_term_region",
+                "query": {
+                  "datasetName": "dep_term",
+                  "parameters": [
+                    {
+                      "name": "region",
+                      "keyword": "region"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "options"
+                  },
+                  {
+                    "parameterName": "region",
+                    "queryName": "param_dep_tickers_region"
+                  },
+                  {
+                    "parameterName": "region",
+                    "queryName": "param_dep_compare_region"
+                  },
+                  {
+                    "parameterName": "region",
+                    "queryName": "param_dep_gauges_region"
+                  },
+                  {
+                    "parameterName": "region",
+                    "queryName": "param_dep_daily30_region"
+                  },
+                  {
+                    "parameterName": "region",
+                    "queryName": "param_dep_mom_region"
+                  },
+                  {
+                    "parameterName": "region",
+                    "queryName": "param_dep_region_region"
+                  },
+                  {
+                    "parameterName": "region",
+                    "queryName": "param_dep_term_region"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Region"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_17",
+            "queries": [
+              {
+                "name": "options",
+                "query": {
+                  "datasetName": "dep_branch_options",
+                  "fields": [
+                    {
+                      "name": "branch",
+                      "expression": "`branch`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_tickers_branch",
+                "query": {
+                  "datasetName": "dep_tickers",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_compare_branch",
+                "query": {
+                  "datasetName": "dep_compare",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_gauges_branch",
+                "query": {
+                  "datasetName": "dep_gauges",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_daily30_branch",
+                "query": {
+                  "datasetName": "dep_daily30",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_mom_branch",
+                "query": {
+                  "datasetName": "dep_mom",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_region_branch",
+                "query": {
+                  "datasetName": "dep_region",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_term_branch",
+                "query": {
+                  "datasetName": "dep_term",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "branch",
+                    "displayName": "Branch",
+                    "queryName": "options"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_tickers_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_compare_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_gauges_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_daily30_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_mom_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_region_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_term_branch"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Branch"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_18",
+            "queries": [
+              {
+                "name": "options",
+                "query": {
+                  "datasetName": "dep_product_options",
+                  "fields": [
+                    {
+                      "name": "product",
+                      "expression": "`product`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_daily30_daily_product",
+                "query": {
+                  "datasetName": "dep_daily30",
+                  "parameters": [
+                    {
+                      "name": "daily_product",
+                      "keyword": "daily_product"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "product",
+                    "displayName": "Product (Last 30 Days)",
+                    "queryName": "options"
+                  },
+                  {
+                    "parameterName": "daily_product",
+                    "queryName": "param_dep_daily30_daily_product"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Product (Last 30 Days)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 26,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_19",
+            "queries": [
+              {
+                "name": "options",
+                "query": {
+                  "datasetName": "dep_product_options",
+                  "fields": [
+                    {
+                      "name": "product",
+                      "expression": "`product`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_region_region_product",
+                "query": {
+                  "datasetName": "dep_region",
+                  "parameters": [
+                    {
+                      "name": "region_product",
+                      "keyword": "region_product"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "product",
+                    "displayName": "Product (Region)",
+                    "queryName": "options"
+                  },
+                  {
+                    "parameterName": "region_product",
+                    "queryName": "param_dep_region_region_product"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Product (Region)"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 26,
+            "width": 1,
+            "height": 2
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    },
+    {
+      "name": "insights",
+      "displayName": "Customer & Product Insights",
+      "layout": [
+        {
+          "widget": {
+            "name": "text_20",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Customer & Product Insights\nUnit: USD 1,000"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 3,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "pie_21",
             "queries": [
               {
                 "name": "main_query",
@@ -1237,7 +2423,7 @@
                   "scale": {
                     "type": "quantitative"
                   },
-                  "displayName": "customers"
+                  "displayName": "Customers"
                 },
                 "color": {
                   "fieldName": "segment",
@@ -1258,7 +2444,7 @@
                       }
                     ]
                   },
-                  "displayName": "segment"
+                  "displayName": "Segment"
                 },
                 "label": {
                   "show": true
@@ -1272,14 +2458,14 @@
           },
           "position": {
             "x": 0,
-            "y": 32,
+            "y": 2,
             "width": 2,
-            "height": 7
+            "height": 8
           }
         },
         {
           "widget": {
-            "name": "bar_14",
+            "name": "bar_22",
             "queries": [
               {
                 "name": "main_query",
@@ -1308,14 +2494,14 @@
                   "scale": {
                     "type": "categorical"
                   },
-                  "displayName": "month"
+                  "displayName": "Month"
                 },
                 "y": {
                   "fieldName": "sum(cumulative_accounts)",
                   "scale": {
                     "type": "quantitative"
                   },
-                  "displayName": "cumulative_accounts"
+                  "displayName": "Accounts"
                 },
                 "label": {
                   "show": true
@@ -1334,14 +2520,14 @@
           },
           "position": {
             "x": 2,
-            "y": 32,
+            "y": 2,
             "width": 4,
-            "height": 7
+            "height": 8
           }
         },
         {
           "widget": {
-            "name": "table_15",
+            "name": "table_23",
             "queries": [
               {
                 "name": "main_query",
@@ -1457,106 +2643,15 @@
           },
           "position": {
             "x": 0,
-            "y": 39,
+            "y": 12,
             "width": 6,
-            "height": 6
+            "height": 10
           }
         },
         {
           "widget": {
-            "name": "filter_16",
+            "name": "filter_24",
             "queries": [
-              {
-                "name": "param_dep_tickers_report_date",
-                "query": {
-                  "datasetName": "dep_tickers",
-                  "parameters": [
-                    {
-                      "name": "report_date",
-                      "keyword": "report_date"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_compare_report_date",
-                "query": {
-                  "datasetName": "dep_compare",
-                  "parameters": [
-                    {
-                      "name": "report_date",
-                      "keyword": "report_date"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_gauges_report_date",
-                "query": {
-                  "datasetName": "dep_gauges",
-                  "parameters": [
-                    {
-                      "name": "report_date",
-                      "keyword": "report_date"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_daily30_report_date",
-                "query": {
-                  "datasetName": "dep_daily30",
-                  "parameters": [
-                    {
-                      "name": "report_date",
-                      "keyword": "report_date"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_mom_report_date",
-                "query": {
-                  "datasetName": "dep_mom",
-                  "parameters": [
-                    {
-                      "name": "report_date",
-                      "keyword": "report_date"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_region_report_date",
-                "query": {
-                  "datasetName": "dep_region",
-                  "parameters": [
-                    {
-                      "name": "report_date",
-                      "keyword": "report_date"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_term_report_date",
-                "query": {
-                  "datasetName": "dep_term",
-                  "parameters": [
-                    {
-                      "name": "report_date",
-                      "keyword": "report_date"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
               {
                 "name": "param_dep_casa_customer_report_date",
                 "query": {
@@ -1604,34 +2699,6 @@
                 "fields": [
                   {
                     "parameterName": "report_date",
-                    "queryName": "param_dep_tickers_report_date"
-                  },
-                  {
-                    "parameterName": "report_date",
-                    "queryName": "param_dep_compare_report_date"
-                  },
-                  {
-                    "parameterName": "report_date",
-                    "queryName": "param_dep_gauges_report_date"
-                  },
-                  {
-                    "parameterName": "report_date",
-                    "queryName": "param_dep_daily30_report_date"
-                  },
-                  {
-                    "parameterName": "report_date",
-                    "queryName": "param_dep_mom_report_date"
-                  },
-                  {
-                    "parameterName": "report_date",
-                    "queryName": "param_dep_region_report_date"
-                  },
-                  {
-                    "parameterName": "report_date",
-                    "queryName": "param_dep_term_report_date"
-                  },
-                  {
-                    "parameterName": "report_date",
                     "queryName": "param_dep_casa_customer_report_date"
                   },
                   {
@@ -1646,12 +2713,12 @@
               },
               "frame": {
                 "showTitle": true,
-                "title": "Report date"
+                "title": "Date"
               }
             }
           },
           "position": {
-            "x": 4,
+            "x": 3,
             "y": 0,
             "width": 1,
             "height": 2
@@ -1659,7 +2726,7 @@
         },
         {
           "widget": {
-            "name": "filter_17",
+            "name": "filter_25",
             "queries": [
               {
                 "name": "options",
@@ -1669,84 +2736,6 @@
                     {
                       "name": "region",
                       "expression": "`region`"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_tickers_region",
-                "query": {
-                  "datasetName": "dep_tickers",
-                  "parameters": [
-                    {
-                      "name": "region",
-                      "keyword": "region"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_compare_region",
-                "query": {
-                  "datasetName": "dep_compare",
-                  "parameters": [
-                    {
-                      "name": "region",
-                      "keyword": "region"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_gauges_region",
-                "query": {
-                  "datasetName": "dep_gauges",
-                  "parameters": [
-                    {
-                      "name": "region",
-                      "keyword": "region"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_daily30_region",
-                "query": {
-                  "datasetName": "dep_daily30",
-                  "parameters": [
-                    {
-                      "name": "region",
-                      "keyword": "region"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_mom_region",
-                "query": {
-                  "datasetName": "dep_mom",
-                  "parameters": [
-                    {
-                      "name": "region",
-                      "keyword": "region"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_region_region",
-                "query": {
-                  "datasetName": "dep_region",
-                  "parameters": [
-                    {
-                      "name": "region",
-                      "keyword": "region"
                     }
                   ],
                   "disaggregated": false
@@ -1804,30 +2793,6 @@
                   },
                   {
                     "parameterName": "region",
-                    "queryName": "param_dep_tickers_region"
-                  },
-                  {
-                    "parameterName": "region",
-                    "queryName": "param_dep_compare_region"
-                  },
-                  {
-                    "parameterName": "region",
-                    "queryName": "param_dep_gauges_region"
-                  },
-                  {
-                    "parameterName": "region",
-                    "queryName": "param_dep_daily30_region"
-                  },
-                  {
-                    "parameterName": "region",
-                    "queryName": "param_dep_mom_region"
-                  },
-                  {
-                    "parameterName": "region",
-                    "queryName": "param_dep_region_region"
-                  },
-                  {
-                    "parameterName": "region",
                     "queryName": "param_dep_casa_customer_region"
                   },
                   {
@@ -1847,8 +2812,222 @@
             }
           },
           "position": {
+            "x": 4,
+            "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_26",
+            "queries": [
+              {
+                "name": "options",
+                "query": {
+                  "datasetName": "dep_branch_options",
+                  "fields": [
+                    {
+                      "name": "branch",
+                      "expression": "`branch`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_casa_customer_branch",
+                "query": {
+                  "datasetName": "dep_casa_customer",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_kstudy_branch",
+                "query": {
+                  "datasetName": "dep_kstudy",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_by_product_branch",
+                "query": {
+                  "datasetName": "dep_by_product",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "branch",
+                    "displayName": "Branch",
+                    "queryName": "options"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_casa_customer_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_kstudy_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_by_product_branch"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Branch"
+              }
+            }
+          },
+          "position": {
             "x": 5,
             "y": 0,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_27",
+            "queries": [
+              {
+                "name": "options",
+                "query": {
+                  "datasetName": "dep_currency_options",
+                  "fields": [
+                    {
+                      "name": "currency",
+                      "expression": "`currency`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_by_product_currency",
+                "query": {
+                  "datasetName": "dep_by_product",
+                  "parameters": [
+                    {
+                      "name": "currency",
+                      "keyword": "currency"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "currency",
+                    "displayName": "Currency",
+                    "queryName": "options"
+                  },
+                  {
+                    "parameterName": "currency",
+                    "queryName": "param_dep_by_product_currency"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Currency"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 10,
+            "width": 1,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_28",
+            "queries": [
+              {
+                "name": "options",
+                "query": {
+                  "datasetName": "dep_nationality_options",
+                  "fields": [
+                    {
+                      "name": "nationality",
+                      "expression": "`nationality`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_by_product_nationality",
+                "query": {
+                  "datasetName": "dep_by_product",
+                  "parameters": [
+                    {
+                      "name": "nationality",
+                      "keyword": "nationality"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "nationality",
+                    "displayName": "Nationality",
+                    "queryName": "options"
+                  },
+                  {
+                    "parameterName": "nationality",
+                    "queryName": "param_dep_by_product_nationality"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Nationality"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 10,
             "width": 1,
             "height": 2
           }

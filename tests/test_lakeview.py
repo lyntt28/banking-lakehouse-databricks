@@ -29,7 +29,8 @@ def tables(spark, results):
         "gold_card_mart_kpi_daily": gc.build_mart_card_kpi_daily(
             r["card_master"], r["card_transactions_hist"], r["card_statements_hist"], AS_OF),
         "gold_dep_mart_trend": gd.build_mart_deposit_trend(
-            r["core_accounts"], dim_product, r["ref_fx_rates"], r["ref_branches"], AS_OF),
+            r["core_accounts"], dim_product, r["ref_fx_rates"], r["ref_branches"], AS_OF,
+            customers=dim_customer),
         "gold_dep_mart_by_tenor": gd.build_mart_deposit_by_tenor(
             r["core_accounts"], dim_product, r["ref_fx_rates"], AS_OF),
         "gold_dep_mart_casa_customer": gd.build_mart_casa_customer(
@@ -75,9 +76,16 @@ def _local_sql(ds: dict, params: dict) -> str:
 
 
 PARAMS = [{"report_date": "DATE'2026-11-01'", "customer_type": "'consumer'", "branch": "'all'",
-           "region": "'all'"},
+           "region": "'all'", "daily_product": "'ALL'", "region_product": "'ALL'",
+           "currency": "'all'", "nationality": "'all'"},
           {"report_date": "DATE'2026-12-31'", "customer_type": "'all'", "branch": "'101'",
-           "region": "'North'"}]
+           "region": "'North'", "daily_product": "'1-CASA'", "region_product": "'2-TD'",
+           "currency": "'VND'", "nationality": "'KOREAN'"}]
+
+
+def _items(body):
+    """Mọi widget của mọi trang."""
+    return [i for pg in body["pages"] for i in pg["layout"]]
 ALL_DS = [(f, ds) for f, body in DASHES.items() for ds in body["datasets"]]
 
 
@@ -100,7 +108,7 @@ def test_widget_fields_exist_in_dataset(spark, tables):
     for _, body in DASHES.items():
         cols = {ds["name"]: set(spark.sql(_local_sql(ds, PARAMS[0])).columns)
                 for ds in body["datasets"]}
-        for item in body["pages"][0]["layout"]:
+        for item in _items(body):
             for q in item["widget"].get("queries", []):
                 query = q["query"]
                 for f in query.get("fields", []):
@@ -113,29 +121,30 @@ def test_widget_fields_exist_in_dataset(spark, tables):
 
 def test_layout_fits_grid_without_overlap():
     for name, body in DASHES.items():
-        cells = set()
-        for item in body["pages"][0]["layout"]:
-            p = item["position"]
-            assert p["x"] >= 0 and p["x"] + p["width"] <= 6, name
-            for x in range(p["x"], p["x"] + p["width"]):
-                for y in range(p["y"], p["y"] + p["height"]):
-                    assert (x, y) not in cells, (name, item["widget"]["name"], x, y)
-                    cells.add((x, y))
+        for pg in body["pages"]:
+            cells = set()
+            for item in pg["layout"]:
+                p = item["position"]
+                assert p["x"] >= 0 and p["x"] + p["width"] <= 6, name
+                for x in range(p["x"], p["x"] + p["width"]):
+                    for y in range(p["y"], p["y"] + p["height"]):
+                        assert (x, y) not in cells, (name, item["widget"]["name"], x, y)
+                        cells.add((x, y))
 
 
 def test_widget_names_unique_and_specs_present():
     for body in DASHES.values():
-        names = [i["widget"]["name"] for i in body["pages"][0]["layout"]]
+        names = [i["widget"]["name"] for i in _items(body)]
         assert len(names) == len(set(names))
-        for i in body["pages"][0]["layout"]:
+        for i in _items(body):
             w = i["widget"]
             assert "spec" in w or "multilineTextboxSpec" in w
 
 
 def test_section_order_matches_original():
     """Thứ tự tiêu đề widget từ trên xuống phải theo đúng dashboard gốc."""
-    def titles(name):
-        items = sorted(DASHES[name]["pages"][0]["layout"],
+    def titles(name, page=0):
+        items = sorted(DASHES[name]["pages"][page]["layout"],
                        key=lambda i: (i["position"]["y"], i["position"]["x"]))
         return [i["widget"]["spec"]["frame"]["title"] for i in items
                 if "spec" in i["widget"] and not i["widget"]["spec"]["widgetType"]
@@ -153,13 +162,35 @@ def test_section_order_matches_original():
                    "Comparison", "Overdue Trend (Last 5 Days)", "Overdue Trend (Monthly)",
                    "Overdue Amount by Debt Groups", "Overdue Amount by Product Groups",
                    "Overdue Ratio by Product Groups", "Overdue Ratio by Branches - Top5"]
-    dep = titles("retail_deposit.lvdash.json")
-    assert dep == ["Ending Balance", "Monthly Avg Balance", "Retail Customers",
-                   "Ending Balance vs Last Day / Month / Year", "All Products Target (%)",
-                   "CASA Target (%)", "TDA/ISA Target (%)", "Ending Balance - Last 30 Days",
-                   "Monthly Average Balance (MoM)", "Regional Deposit Distribution",
-                   "Deposit by Term and IR (in Month)", "CASA Customer Distribution",
-                   "K-Study New open Account_ Accumulate by Month", "Balance by Product"]
+    dep = DASHES["retail_deposit.lvdash.json"]
+    assert [pg["displayName"] for pg in dep["pages"]] == ["Overview & Performance",
+                                                          "Customer & Product Insights"]
+    assert titles("retail_deposit.lvdash.json", 0) == [
+        "Ending Balance", "Monthly Avg Balance", "Retail Customers",
+        "Ending Balance vs Last Day / Month / Year",
+        "Monthly Avg Balance vs Last Day / Month / Year",
+        "Retail Customers vs Last Day / Month / Year", "All Products Target (%)",
+        "CASA Target (%)", "TDA/ISA Target (%)", "Ending Balance - Last 30 Days",
+        "Monthly Average Balance (MoM)", "Deposit by Term and IR (in Month)",
+        "Regional Deposit Distribution"]
+    assert titles("retail_deposit.lvdash.json", 1) == [
+        "CASA Customer Distribution", "K-Study New open Account_ Accumulate by Month",
+        "Balance by Product"]
+
+
+def test_deposit_filters_per_page():
+    """Mỗi trang có Date / Region / Branch; filter chỉ gắn dataset của chính trang đó."""
+    dep = DASHES["retail_deposit.lvdash.json"]
+    for pg in dep["pages"]:
+        used = {q["query"]["datasetName"] for i in pg["layout"]
+                for q in i["widget"].get("queries", []) if q["name"] == "main_query"}
+        filters = {i["widget"]["spec"]["frame"]["title"]: i for i in pg["layout"]
+                   if i["widget"].get("spec", {}).get("widgetType", "").startswith("filter")}
+        assert {"Date", "Region", "Branch"} <= set(filters)
+        for f in filters.values():
+            for q in f["widget"]["queries"]:
+                if q["name"].startswith("param_"):
+                    assert q["query"]["datasetName"] in used
 
 
 def test_bundle_files_up_to_date():
@@ -176,7 +207,7 @@ def test_bundle_files_up_to_date():
 def test_card_colors_from_original_palette():
     body = DASHES["card_business.lvdash.json"]
     maps = {}
-    for i in body["pages"][0]["layout"]:
+    for i in _items(body):
         spec = i["widget"].get("spec", {})
         for m in spec.get("encodings", {}).get("color", {}).get("scale", {}).get("mappings", []):
             maps[(spec["frame"]["title"], m["value"])] = m["color"]
