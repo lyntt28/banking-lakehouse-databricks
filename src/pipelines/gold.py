@@ -95,6 +95,20 @@ def pending_days(spark: SparkSession, cfg: GoldConfig) -> list[str]:
         f"WHERE layer = 'silver' AND status = 'SUCCESS' {cond} ORDER BY as_of_date").collect()]
 
 
+def publish_batch_snapshot(df, target: str, day_s: str) -> None:
+    """Mart tính lại TOÀN BỘ mỗi ngày (tháng, luỹ kế) nhưng dashboard đọc: lưu 1 snapshot / batch
+    (cột as_of_date = ngày batch) thay vì ghi đè cả bảng -> trong lúc publish đang chạy, view
+    (lọc as_of_date = batch đã publish) vẫn đọc bản cũ, không thấy bản mới dở dang.
+    Bảng cũ chưa có cột as_of_date (trước nâng cấp): ghi đè 1 lần để đổi schema."""
+    spark = df.sparkSession
+    df = df.withColumn("as_of_date", F.lit(day_s).cast("date"))
+    if spark.catalog.tableExists(target) and \
+            "as_of_date" not in spark.table(target).columns:
+        overwrite(df, target)
+        return
+    overwrite_date(df, target, "as_of_date", day_s)
+
+
 def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
                       rec: StepRecorder) -> dict:
     S = lambda t: cfg.t("silver", t)  # noqa: E731
@@ -191,9 +205,9 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         overwrite_date(card_daily, G("card_mart_kpi_daily"), "as_of_date", day_s)
         overwrite_date(gc.build_mart_card_spend_mix(ctx_day, day_s), G("card_mart_spend_mix"),
                        "as_of_date", day_s)
-        overwrite(gc.build_mart_card_kpi_monthly(spark.table(G("card_mart_kpi_daily")),
-                                                 spark.table(S("ref_targets"))),
-                  G("card_mart_kpi_monthly"))
+        publish_batch_snapshot(gc.build_mart_card_kpi_monthly(
+            spark.table(G("card_mart_kpi_daily")), spark.table(S("ref_targets"))),
+            G("card_mart_kpi_monthly"), day_s)
 
         fx_day = spark.table(S("ref_fx_rates")).filter(F.col("rate_date") == day)
         trend_hist = (spark.table(G("dep_mart_trend"))
@@ -207,8 +221,8 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         overwrite_date(gd.build_mart_casa_customer(acc_day, dim_product,
                                                    dim_customer_g.filter("is_current"), day_s),
                        G("dep_mart_casa_customer"), "as_of_date", day_s)
-        overwrite(gd.build_mart_deposit_new_accounts(spark.table(S("core_accounts"))),
-                  G("dep_mart_new_accounts"))
+        publish_batch_snapshot(gd.build_mart_deposit_new_accounts(spark.table(S("core_accounts"))),
+                               G("dep_mart_new_accounts"), day_s)
 
         (spark.createDataFrame([(day_s, rec.run_id, json.dumps(checks))],
                                "as_of_date string, run_id string, checks string")

@@ -34,7 +34,8 @@ def tables(spark, results):
             r["core_accounts"], dim_product, r["ref_fx_rates"], AS_OF),
         "gold_dep_mart_casa_customer": gd.build_mart_casa_customer(
             r["core_accounts"], dim_product, dim_customer, AS_OF),
-        "gold_dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"]),
+        "gold_dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"])
+        .withColumn("as_of_date", F.lit(AS_OF).cast("date")),
         "silver_ref_targets": r["ref_targets"], "silver_ref_fx_rates": r["ref_fx_rates"],
     }
     ops = {

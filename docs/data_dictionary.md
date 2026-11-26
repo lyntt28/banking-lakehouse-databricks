@@ -29,11 +29,11 @@ landing (CSV/JSON, Volume)
 | `dep_mart_trend` | as_of_date × … | snapshot/day | core_accounts, ref_fx_rates | |
 | `dep_mart_by_tenor` | as_of_date × tenor | snapshot/day | core_accounts | |
 | `dep_mart_casa_customer` | as_of_date × … | snapshot/day | core_accounts, dim_customer | |
-| `dep_mart_new_accounts` | tháng mở | full | core_accounts | |
+| `dep_mart_new_accounts` | as_of_date × tháng mở | snapshot/batch | core_accounts | Tính lại toàn bộ, lưu 1 bản / batch: dashboard đọc bản của batch đã publish |
 | `cust_mart_360` | customer_id | full | dim_customer, facts | Trạng thái ngày chạy gần nhất |
 | `card_mart_kpi_daily` | as_of_date × branchnbr × … | snapshot/day | card_master, card_transactions_hist, card_statements_hist | Gate: khớp file card_kpi |
 | `card_mart_spend_mix` | as_of_date × dimension | snapshot/day | card_transactions_hist | |
-| `card_mart_kpi_monthly` | month × branchnbr | full | card_mart_kpi_daily, ref_targets | |
+| `card_mart_kpi_monthly` | as_of_date × month × branchnbr | snapshot/batch | card_mart_kpi_daily, ref_targets | Tính lại toàn bộ, lưu 1 bản / batch |
 
 ## Ops
 | Bảng | Grain | Dùng để |

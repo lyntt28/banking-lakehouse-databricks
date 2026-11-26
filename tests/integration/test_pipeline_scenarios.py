@@ -5,12 +5,14 @@ Mỗi kịch bản ĐỘC LẬP: tự dựng trạng thái nó cần, không d�
 1 test (`pytest -k test_5b`), đổi thứ tự, hay debug đều cho cùng kết quả.
     - fixture `baseline` (1 lần / module): Bronze 2 ngày, chạy Silver + Gold TỪNG ngày, lưu
       checksum "đúng" và chụp mọi bảng sang schema snap_* .
-    - fixture `published`: khôi phục toàn bộ trạng thái đã publish D1, D2 từ snap_* (mỗi test).
+    - fixture `published`: khôi phục trạng thái đã publish D1, D2 (mỗi test). Bảng còn tồn tại:
+      `RESTORE TABLE ... TO VERSION AS OF` (chỉ đổi metadata, gần như tức thì); bảng đã bị xóa
+      (sau kịch bản dựng lại từ Bronze): copy lại từ snap_*.
     - fixture `fresh_bronze`: chỉ có Bronze, chưa có Silver / Gold / ops (mỗi test).
 
 Kịch bản sự cố:
-    1. thiếu file ngày 2           -> ngày 1 SUCCESS, ngày 2 FAILED, watermark đứng ở ngày 1
-    2. file về trễ                 -> chạy lại tự xử lý ngày 2; Gold publish đủ 2 ngày
+    1. thiếu file ngày 2, rồi file về trễ -> ngày 1 SUCCESS, ngày 2 FAILED, watermark đứng ở
+                                      ngày 1; chạy lại tự xử lý ngày 2, Gold publish đủ 2 ngày
     3. chạy lại nhiều lần          -> checksum nội dung Silver/Gold không đổi, không trùng khóa
     3b. lỗi giữa chừng (bảng thứ N) -> Silver không bị ghi dở; sửa xong chạy lại hội tụ
     4. file trùng (gửi lại)        -> không nhân đôi dữ liệu, manifest báo MULTIPLE_FILES
@@ -47,6 +49,12 @@ def _write_bronze(spark, frames, skip_d2_transactions=False):
         df.write.format("delta").saveAsTable(f"bronze.{t}")
 
 
+def table_version(spark, name):
+    from common.batch import table_version as v
+
+    return v(spark, name)
+
+
 def _tables(spark, schema):
     return [r.tableName for r in spark.sql(f"SHOW TABLES IN {schema}").collect()
             if not r.isTemporary]
@@ -80,24 +88,37 @@ def baseline(spark, tmp_path_factory):
         gold_run(spark, GoldConfig(catalog="", as_of_date=d))
     _assert_integrity(spark)
     base = {"frames": frames, "gold_ok": _gold_fingerprint(spark),
-            "silver_ok": _silver_fingerprint(spark), "tables": {}}
+            "silver_ok": _silver_fingerprint(spark), "tables": {}, "versions": {}}
     for schema in SCHEMAS:                   # chụp trạng thái đã publish
         spark.sql(f"CREATE SCHEMA IF NOT EXISTS snap_{schema}")
         base["tables"][schema] = _tables(spark, schema)
         for t in base["tables"][schema]:
             spark.sql(f"CREATE TABLE snap_{schema}.{t} USING DELTA AS SELECT * FROM {schema}.{t}")
+            v = table_version(spark, f"{schema}.{t}")
+            # (version có nội dung baseline, version hiện tại được biết là "sạch")
+            base["versions"][f"{schema}.{t}"] = [v, v]
     yield base
     _drop_all(spark, SCHEMAS + [f"snap_{s}" for s in SCHEMAS])
 
 
 @pytest.fixture
 def published(spark, baseline):
-    """Trạng thái sau khi D1, D2 đã Silver + Gold SUCCESS (khôi phục từ snap_*)."""
-    _drop_all(spark)
+    """Trạng thái sau khi D1, D2 đã Silver + Gold SUCCESS."""
+    versions = baseline["versions"]
     for schema, tables in baseline["tables"].items():
-        spark.sql(f"CREATE SCHEMA {schema}")
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+        existing = set(_tables(spark, schema))
+        for t in existing - set(tables):                 # bảng do test trước tạo thêm
+            spark.sql(f"DROP TABLE {schema}.{t}")
         for t in tables:
-            spark.sql(f"CREATE TABLE {schema}.{t} USING DELTA AS SELECT * FROM snap_{schema}.{t}")
+            name = f"{schema}.{t}"
+            if t not in existing:
+                spark.sql(f"CREATE TABLE {name} USING DELTA AS SELECT * FROM snap_{name}")
+                v = table_version(spark, name)
+                versions[name] = [v, v]
+            elif table_version(spark, name) != versions[name][1]:   # test trước đã ghi
+                spark.sql(f"RESTORE TABLE {name} TO VERSION AS OF {versions[name][0]}")
+                versions[name][1] = table_version(spark, name)
     return baseline
 
 
@@ -167,12 +188,15 @@ def _assert_integrity(spark):
                      "HAVING count(*) > 1").count() == 0
 
 
-def test_1_missing_file_stops_at_that_day(spark, baseline):
+def test_1_missing_file_stops_at_that_day_then_late_file_is_picked_up(spark, baseline):
+    from pyspark.sql import functions as F
+
     from pipelines import daily
     from pipelines.silver import SilverConfig, SourceFilesMissing
 
     _write_bronze(spark, baseline["frames"], skip_d2_transactions=True)
 
+    # (1) thiếu file transactions ngày 2
     with pytest.raises(SourceFilesMissing):
         daily.run(spark, SilverConfig(catalog=""))
     # ngày 1 đã đủ Silver + Gold trước khi ngày 2 dừng
@@ -189,19 +213,10 @@ def test_1_missing_file_stops_at_that_day(spark, baseline):
                       f"WHERE as_of_date = '{D2}'").collect()
     assert ("file_manifest", "FAILED") in [(r.step, r.status) for r in steps]
 
-
-def test_2_late_file_is_picked_up_and_gold_published(spark, baseline):
-    from pyspark.sql import functions as F
-
-    from pipelines import daily
-    from pipelines.silver import SilverConfig, SourceFilesMissing
-
-    _write_bronze(spark, baseline["frames"], skip_d2_transactions=True)
-    with pytest.raises(SourceFilesMissing):
-        daily.run(spark, SilverConfig(catalog=""))               # D1 xong, D2 chờ file
+    # (2) file về trễ -> chạy lại job: chỉ xử lý ngày còn thiếu, Gold publish đủ 2 ngày
     baseline["frames"]["transactions"].filter(F.col("_as_of_date") == F.lit(D2).cast("date")) \
         .write.format("delta").mode("append").saveAsTable("bronze.transactions")
-    assert daily.run(spark, SilverConfig(catalog="")) == [D2]     # chỉ ngày còn thiếu
+    assert daily.run(spark, SilverConfig(catalog="")) == [D2]
     pub = [str(r[0]) for r in spark.sql(
         "SELECT as_of_date FROM ops.published_batches ORDER BY 1").collect()]
     assert pub == [D1, D2]
