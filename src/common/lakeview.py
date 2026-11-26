@@ -137,19 +137,14 @@ class Dash:
 
     def table(self, ds: str, title: str, cols: list[tuple[str, str, str]], x: int, y: int,
               w: int, h: int) -> None:
-        """cols: (cột, tiêu đề, định dạng: text | int | num | pct)."""
-        enc = []
-        for i, (c, t, f) in enumerate(cols):
-            e = {"fieldName": c, "displayName": t, "title": t, "order": 100000 + i,
-                 "type": "string" if f == "text" else "float",
-                 "displayAs": "string" if f == "text" else "number", "alignContent":
-                 "left" if f == "text" else "right", "visible": True}
-            if f != "text":
-                e["numberFormat"] = {"int": "#,##0", "num": "#,##0.00", "pct": "0.00"}[f]
-            enc.append(e)
+        """cols: (cột, tiêu đề, định dạng: text | int | num | pct).
+
+        Spec table version 2 (cột chỉ cần fieldName + displayName): spec v1 kiểu cũ bị
+        Databricks báo "Invalid widget definition is imported". Định dạng số làm trong SQL."""
+        enc = [{"fieldName": c, "displayName": t or c} for c, t, _ in cols]
         self.place({"name": self._wid("table"),
                     "queries": self._query(ds, [(c, f"`{c}`") for c, _, _ in cols], agg=False),
-                    "spec": {"version": 1, "widgetType": "table",
+                    "spec": {"version": 2, "widgetType": "table",
                              "encodings": {"columns": enc},
                              "frame": {"showTitle": True, "title": title}}}, x, y, w, h)
 
@@ -196,6 +191,7 @@ def _number_format(fmt: str) -> dict:
     return {"pct": {"type": "number-plain", "decimalPlaces": {"type": "exact", "places": 2},
                     "suffix": "%"},
             "int": {"type": "number-plain", "decimalPlaces": {"type": "exact", "places": 0}},
+            "num": {"type": "number-plain", "decimalPlaces": {"type": "max", "places": 3}},
             "compact": {"type": "number-plain", "abbreviation": "compact",
                         "decimalPlaces": {"type": "max", "places": 1}}}[fmt]
 
@@ -431,114 +427,127 @@ SELECT explode(array('consumer', 'corporate', 'all')) AS customer_type
 
 
 # ============================================================ 2. OVERDUE (LOAN)
+# Nguồn: gold.card_mart_overdue_daily (file credit_card_overdue_YYYYMMDD.txt), logic theo
+# reference/dashboards/overdue/api_server.py: tỷ lệ = sum(ovd_bal) / sum(port_bal),
+# lọc chi nhánh theo mng_br, không lọc loại sản phẩm (All).
 OVD_COLORS = {   # reference/dashboards/overdue/dashboardv200.js
-    "amount": "#3498DB", "ratio": "#E67E22",
+    "amount": "#3498DB", "ratio": "#E67E22", "fx": "#0077B6",
     "ticker": {"ratio": "#48bb78", "overdue": "#4299e1", "ending": "#ed8936"},
-    "debt_groups": {"Group 2": "#90CAF9", "Group 3": "#42A5F5", "Group 4": "#1E88E5",
-                    "Group 5": "#0D47A1"},
+    # stackedColors (xanh nhạt -> đậm) theo thứ tự nhóm nợ
+    "debt_groups": {"1-10": "#BBDEFB", "11-90": "#90CAF9", "91-180": "#64B5F6",
+                    "181-360": "#42A5F5", "361+": "#1E88E5"},
     "products": ["#3498DB", "#E74C3C", "#2ECC71", "#F39C12", "#9B59B6", "#1ABC9C", "#E67E22",
                  "#34495E", "#E91E63", "#00BCD4"],
-    "top5": ["#3498DB", "#E74C3C", "#2ECC71", "#F39C12", "#9B59B6"],
+    "top5": ["#3498DB", "#1976D2", "#2196F3", "#42A5F5", "#64B5F6"],
 }
-
-
-# nhóm sản phẩm vay (products.product_group), màu theo thứ tự như modernColors gốc
-LOAN_PRODUCT_GROUPS = ["Nhom SP tai tro TMTN", "Nhom SP tai tro du an va dau tu TSCD",
-                       "Nhom SP cho vay tieu dung"]
+OVD_DEBT_GROUPS = list(OVD_COLORS["debt_groups"])   # bỏ nhóm "0" (chưa quá hạn)
+OVD_EXCLUDED_BRANCHES = ("8125",)                    # api_server: mng_br NOT IN ('8125')
+OVD_TOP_MIN_USD = 10_000                             # chỉ xếp hạng CN có nợ quá hạn > 10k USD
 
 
 def overdue_dashboard(catalog: str) -> dict:
     G = _q(catalog, "gold")
+    T = f"{G}.card_mart_overdue_daily"
     d = Dash("overdue", "Retail Loan Overdue Tracking")
     d.param("report_date", "Report date", "DATE", "now/d")
     d.param("branch", "Branch", "STRING", "all")
     usd = USD_RATE.format(silver=_q(catalog, "silver"))
     base = f"""
-WITH p AS (SELECT {_report_day(f'{G}.loan_mart_overdue_daily')} AS d, {usd} AS usd),
-f AS (SELECT * FROM {G}.loan_mart_overdue_daily WHERE :branch = 'all' OR branchnbr = :branch),
-day AS (SELECT as_of_date, sum(overdue_balance) ovd, sum(portfolio_balance) port
-        FROM f GROUP BY as_of_date)
+WITH p AS (SELECT {_report_day(T)} AS d, {usd} AS usd),
+f AS (SELECT * FROM {T} WHERE :branch = 'all' OR mng_br = :branch),
+day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)
 """
+    ds_fx = d.dataset("ovd_fx", "FX rate", f"SELECT {usd} AS fx_vnd_usd", ["report_date"])
     ds_tick = d.dataset("ovd_tickers", "Tickers", base + """
 SELECT x.ovd / nullif(x.port, 0) * 100 AS overdue_ratio,
        x.ovd / p.usd AS overdue_usd, x.port / p.usd AS ending_usd
 FROM day x, p WHERE x.as_of_date = p.d
 """, ["report_date", "branch"])
+    # get_comparison_dates: D-1, cuối tháng trước, 31/12 năm trước -> ngày có data gần nhất <=
     ds_cmp = d.dataset("ovd_compare", "Tickers vs last day / month / year", base + """
 , pick AS (
   SELECT 1 AS ord, 'vs Last Day' AS cmp,
-         (SELECT max(as_of_date) FROM day, p WHERE as_of_date < p.d) AS dd FROM p
+         (SELECT max(as_of_date) FROM day, p WHERE as_of_date <= date_sub(p.d, 1)) AS dd FROM p
   UNION ALL SELECT 2, 'vs Last Month', (SELECT max(as_of_date) FROM day, p
          WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p
   UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p
          WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),
 cur AS (SELECT x.* FROM day x, p WHERE x.as_of_date = p.d)
 SELECT pk.ord, pk.cmp,
-  (cur.ovd / nullif(cur.port, 0) - c.ovd / nullif(c.port, 0)) * 100 AS ratio_pp,
-  (cur.ovd - c.ovd) / p.usd AS overdue_usd, (cur.port - c.port) / p.usd AS ending_usd
+  round((cur.ovd / nullif(cur.port, 0) - c.ovd / nullif(c.port, 0)) * 100, 2) AS ratio_pp,
+  round((cur.ovd - c.ovd) / p.usd, 0) AS overdue_usd,
+  round((cur.port - c.port) / p.usd, 0) AS ending_usd
 FROM pick pk CROSS JOIN cur CROSS JOIN p LEFT JOIN day c ON c.as_of_date = pk.dd
 ORDER BY pk.ord
 """, ["report_date", "branch"])
-    ds_5d = d.dataset("ovd_last5", "Overdue Trend (Last 5 Days)", base + """
-SELECT date_format(x.as_of_date, 'dd/MM') AS day, x.ovd / p.usd / 1000 AS overdue_k_usd,
-       x.ovd / nullif(x.port, 0) * 100 AS overdue_ratio
-FROM day x, p WHERE x.as_of_date IN (
-  SELECT as_of_date FROM day, p WHERE as_of_date <= p.d ORDER BY as_of_date DESC LIMIT 5)
+    # 5 ngày có data gần nhất (chọn ngày KHÔNG theo chi nhánh, giá trị theo chi nhánh)
+    ds_5d = d.dataset("ovd_last5", "Overdue Trend (Last 5 Days)", base + f"""
+, dd AS (SELECT DISTINCT as_of_date FROM {T}, p WHERE as_of_date <= p.d
+         ORDER BY as_of_date DESC LIMIT 5)
+SELECT date_format(dd.as_of_date, 'MM-dd') AS day,
+       coalesce(x.ovd, 0) / p.usd / 1000 AS overdue_k_usd,
+       coalesce(x.ovd / nullif(x.port, 0) * 100, 0) AS overdue_ratio
+FROM dd CROSS JOIN p LEFT JOIN day x ON x.as_of_date = dd.as_of_date
 """, ["report_date", "branch"])
-    ds_mon = d.dataset("ovd_monthly", "Overdue Trend (Monthly)", base + """
+    # 6 tháng: tháng trước lấy ngày cuối có data, tháng hiện tại lấy ngày gần nhất <= report_date
+    months = f"""
 , m AS (SELECT date_format(as_of_date, 'yyyy-MM') AS month, max(as_of_date) AS last_d
-        FROM day, p WHERE as_of_date <= p.d GROUP BY 1)
-SELECT m.month, x.ovd / p.usd / 1000 AS overdue_k_usd,
-       x.ovd / nullif(x.port, 0) * 100 AS overdue_ratio
-FROM m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p
-WHERE m.month > date_format(add_months(p.d, -6), 'yyyy-MM')
+        FROM {T}, p WHERE as_of_date <= p.d
+          AND as_of_date > last_day(add_months(p.d, -6)) GROUP BY 1)
+"""
+    ds_mon = d.dataset("ovd_monthly", "Overdue Trend (Monthly)", base + months + """
+SELECT m.month, coalesce(x.ovd, 0) / p.usd / 1000 AS overdue_k_usd,
+       coalesce(x.ovd / nullif(x.port, 0) * 100, 0) AS overdue_ratio
+FROM m CROSS JOIN p LEFT JOIN day x ON x.as_of_date = m.last_d
 """, ["report_date", "branch"])
-    ds_dg = d.dataset("ovd_debt_groups", "Overdue Amount by Debt Groups", base + """
-, m AS (SELECT date_format(as_of_date, 'yyyy-MM') AS month, max(as_of_date) AS last_d
-        FROM day, p WHERE as_of_date <= p.d GROUP BY 1)
-SELECT m.month, concat('Group ', f.debt_group) AS debt_group,
-       sum(f.overdue_balance) / p.usd / 1000 AS overdue_k_usd
+    groups = ", ".join(f"'{g}'" for g in OVD_DEBT_GROUPS)
+    ds_dg = d.dataset("ovd_debt_groups", "Overdue Amount by Debt Groups", base + months + f"""
+SELECT m.month, f.del_grp AS debt_group, sum(f.ovd_bal) / p.usd / 1000 AS overdue_k_usd
 FROM m JOIN f ON f.as_of_date = m.last_d CROSS JOIN p
-WHERE f.debt_group >= 2 AND m.month > date_format(add_months(p.d, -6), 'yyyy-MM')
-GROUP BY m.month, f.debt_group, p.usd
+WHERE f.del_grp IN ({groups})
+GROUP BY m.month, f.del_grp, p.usd
 """, ["report_date", "branch"])
     ds_pa = d.dataset("ovd_product_amount", "Overdue Amount by Product Groups", base + """
 SELECT coalesce(f.product_group, 'Other') AS product_group,
-       sum(f.overdue_balance) / p.usd / 1000 AS overdue_k_usd
+       sum(f.ovd_bal) / p.usd / 1000 AS overdue_k_usd
 FROM f, p WHERE f.as_of_date = p.d GROUP BY 1, p.usd
 """, ["report_date", "branch"])
-    ds_pr = d.dataset("ovd_product_ratio", "Overdue Ratio by Product Groups", base + """
-SELECT coalesce(f.product_group, 'Other') AS product_group,
-       sum(f.overdue_balance) / nullif(sum(f.portfolio_balance), 0) * 100 AS overdue_ratio
-FROM f, p WHERE f.as_of_date = p.d GROUP BY 1
+    ds_pr = d.dataset("ovd_product_ratio", "Overdue Ratio by Product Groups - Top5", base + """
+SELECT product_group, overdue_ratio FROM (
+  SELECT coalesce(f.product_group, 'Other') AS product_group,
+         coalesce(sum(f.ovd_bal) / nullif(sum(f.port_bal), 0) * 100, 0) AS overdue_ratio
+  FROM f, p WHERE f.as_of_date = p.d GROUP BY 1)
+ORDER BY overdue_ratio DESC LIMIT 5
 """, ["report_date", "branch"])
-    ds_top = d.dataset("ovd_branch_top5", "Overdue Ratio by Branches - Top5", f"""
-WITH p AS (SELECT {_report_day(f'{G}.loan_mart_overdue_daily')} AS d),
-b AS (SELECT o.branchnbr, coalesce(db.br_name, o.branchnbr) AS branch,
-             sum(o.overdue_balance) / nullif(sum(o.portfolio_balance), 0) * 100 AS ratio
-      FROM {G}.loan_mart_overdue_daily o CROSS JOIN p
-      LEFT JOIN {G}.dim_branch db ON db.branchnbr = o.branchnbr
-      WHERE o.as_of_date = p.d GROUP BY 1, 2)
-SELECT concat('#', rn) AS rank, concat('#', rn, ' ', branch) AS branch, ratio
-FROM (SELECT *, row_number() OVER (ORDER BY ratio DESC) AS rn FROM b) WHERE rn <= 5
-""", ["report_date"])
+    excl = ", ".join(f"'{b}'" for b in OVD_EXCLUDED_BRANCHES)
+    ds_top = d.dataset("ovd_branch_top5", "Overdue Ratio by Branches - Top5", base + f"""
+, b AS (SELECT f.mng_br, coalesce(max(db.br_name), f.mng_br) AS branch,
+               sum(f.ovd_bal) / nullif(sum(f.port_bal), 0) * 100 AS ratio,
+               sum(f.ovd_bal) / max(p.usd) AS overdue_usd
+        FROM f CROSS JOIN p LEFT JOIN {G}.dim_branch db ON db.branchnbr = f.mng_br
+        WHERE f.as_of_date = p.d AND f.mng_br NOT IN ({excl}) GROUP BY f.mng_br)
+SELECT concat('#', rn) AS rank, concat('#', rn, ' ', upper(branch)) AS branch, ratio
+FROM (SELECT *, row_number() OVER (ORDER BY ratio DESC) AS rn FROM b
+      WHERE overdue_usd > {OVD_TOP_MIN_USD}) WHERE rn <= 5
+""", ["report_date", "branch"])
     ds_br = d.dataset("ovd_branch_options", "Branch options", f"""
 SELECT 'all' AS branch UNION ALL
-SELECT DISTINCT branchnbr FROM {G}.dim_branch
+SELECT DISTINCT mng_br FROM {T} WHERE mng_br IS NOT NULL
 """, [])
 
     c = OVD_COLORS
-    d.text("# RETAIL LOAN OVERDUE TRACKING", 0, 0, 4, 2)
+    d.text("# RETAIL LOAN OVERDUE TRACKING", 0, 0, 3, 2)
+    d.counter(ds_fx, "fx_vnd_usd", "FX (VND/USD)", 3, 0, w=1, h=2, color=c["fx"], fmt="num")
     # main-stats repeat(3, 1fr)
     for i, (col, title, key, fmt) in enumerate([
             ("overdue_ratio", "Overdue Ratio", "ratio", "pct"),
-            ("overdue_usd", "Overdue Balance (USD)", "overdue", "compact"),
-            ("ending_usd", "Ending Balance (USD)", "ending", "compact")]):
+            ("overdue_usd", "Overdue Balance (USD)", "overdue", "int"),
+            ("ending_usd", "Ending Balance (USD)", "ending", "int")]):
         d.counter(ds_tick, col, title, 2 * i, 2, w=2, color=c["ticker"][key], fmt=fmt)
     d.table(ds_cmp, "Comparison", [
-        ("cmp", "", "text"), ("ratio_pp", "Overdue Ratio (pp)", "pct"),
-        ("overdue_usd", "Overdue Balance (USD)", "num"),
-        ("ending_usd", "Ending Balance (USD)", "num")], 0, 5, 6, 3)
+        ("cmp", "Compare", "text"), ("ratio_pp", "Overdue Ratio (pp)", "pct"),
+        ("overdue_usd", "Overdue Balance (USD)", "int"),
+        ("ending_usd", "Ending Balance (USD)", "int")], 0, 5, 6, 3)
     # top-charts-grid 1fr 1.5fr -> 2 + 4
     d.combo(ds_5d, "Overdue Trend (Last 5 Days)", 0, 8, 2, 7, cat="day",
             bar="overdue_k_usd", line="overdue_ratio", bar_title="Overdue Amount (1000 USD)",
@@ -552,12 +561,11 @@ SELECT DISTINCT branchnbr FROM {G}.dim_branch
             colors=c["debt_groups"], val_title="1000 USD")
     # product-groups-grid 1fr 1fr
     d.chart("pie", ds_pa, "Overdue Amount by Product Groups", 0, 22, 3, 7,
-            cat="product_group", val="overdue_k_usd",
-            colors=dict(zip(LOAN_PRODUCT_GROUPS + ["Other"], c["products"][:4], strict=True)))
+            cat="product_group", val="overdue_k_usd", val_title="1000 USD")
     d.chart("bar", ds_pr, "Overdue Ratio by Product Groups", 3, 22, 3, 7,
             cat="product_group", val="overdue_ratio", horizontal=True,
-            single_color=c["amount"], sort_desc=True)
-    # branches-grid 1fr
+            single_color=c["amount"], sort_desc=True, val_title="Overdue Ratio (%)")
+    # branches-grid 1fr (treemap gốc -> bar ngang top 5)
     d.chart("bar", ds_top, "Overdue Ratio by Branches - Top5", 0, 29, 6, 6, cat="branch",
             val="ratio", horizontal=True, series="rank", sort_desc=True,
             colors={f"#{i + 1}": col for i, col in enumerate(c["top5"])})
@@ -716,7 +724,7 @@ SELECT 'all' AS region UNION ALL SELECT DISTINCT region FROM {G}.dim_branch
             ("retail_customers", "Retail Customers", "int")]):
         d.counter(ds_tick, col, title, 2 * i, 2, w=2, fmt=fmt)
     d.table(ds_cmp, "Ending Balance vs Last Day / Month / Year", [
-        ("cmp", "", "text"), ("ending_balance_diff", "+/- Balance", "num"),
+        ("cmp", "Compare", "text"), ("ending_balance_diff", "+/- Balance", "num"),
         ("ending_balance_pct", "+/- %", "pct")], 0, 5, 6, 3)
     # gauge-row: 3 đồng hồ -> counter % (Lakeview không có gauge)
     for i, (col, title, key) in enumerate([("all_pct", "All Products Target (%)", "all"),

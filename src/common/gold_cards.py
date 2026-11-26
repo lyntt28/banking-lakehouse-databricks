@@ -292,3 +292,17 @@ def deposit_reconciliation(mart_deposit: DataFrame, deposit_summary: DataFrame,
         .when(F.col("source_mil_vnd").isNull(), "MISSING_IN_SOURCE")
         .when(F.abs(diff) <= 0.01, "MATCH")       # nguồn làm tròn 2 số lẻ (triệu VND)
         .otherwise("MISMATCH"))
+
+
+def build_mart_card_overdue_daily(src: DataFrame) -> DataFrame:
+    """silver.card_overdue_source -> gold.card_mart_overdue_daily (VND, chưa quy đổi USD).
+
+    Grain: ngày x nhóm SP x sản phẩm x CN quản lý x CN bán x nhóm nợ. Nguồn cho dashboard
+    Overdue (tỷ lệ quá hạn = sum(ovd_bal) / sum(port_bal), lọc theo CN quản lý)."""
+    return (
+        src.withColumnRenamed("report_dt", "as_of_date")
+        .groupBy("as_of_date", "product_type", "product_group", "product_name", "mng_br",
+                 "sal_br", "del_grp")
+        .agg(F.sum("port_acc").alias("port_acc"), F.sum("ovd_acc").alias("ovd_acc"),
+             F.sum("port_bal").alias("port_bal"), F.sum("ovd_bal").alias("ovd_bal"))
+    )
