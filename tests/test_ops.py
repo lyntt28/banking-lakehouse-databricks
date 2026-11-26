@@ -4,7 +4,12 @@ import json
 
 import pytest
 
-from common.batch import manifest_status
+from common.batch import (
+    REQUIRED_FILE_GROUPS,
+    incomplete_tables,
+    manifest_status,
+    missing_file_groups,
+)
 from common.names import fq
 from common.ops_log import StepRecorder, log
 from common.silver import ORDER
@@ -19,16 +24,29 @@ def test_fq_local_and_unity_catalog():
     assert fq("bank_prod", "gold") == "bank_prod.gold"
 
 
+KPI = [f"/landing/card_kpi/{g}_20261101.txt" for g in REQUIRED_FILE_GROUPS["card_kpi_source"]]
+
+
 @pytest.mark.parametrize("table,files,expected", [
-    ("core_transactions", 0, "MISSING"),
-    ("ref_branches", 0, "NOT_SENT"),
-    ("loan_snapshots", 1, "ARRIVED"),
-    ("loan_snapshots", 2, "MULTIPLE_FILES"),
-    ("card_kpi_source", 9, "ARRIVED"),          # 9 nhóm KPI = 9 file / ngày theo thiết kế
-    ("card_kpi_source", 18, "MULTIPLE_FILES"),
+    ("core_transactions", [], "MISSING"),
+    ("ref_branches", [], "NOT_SENT"),
+    ("loan_snapshots", ["a.csv"], "ARRIVED"),
+    ("loan_snapshots", ["a.csv", "a.csv.resent"], "MULTIPLE_FILES"),
+    ("card_kpi_source", KPI, "ARRIVED"),                 # 9 nhóm KPI = 9 file / ngày
+    ("card_kpi_source", KPI + KPI, "MULTIPLE_FILES"),     # gửi lại đủ bộ
+    ("card_kpi_source", KPI[:5], "INCOMPLETE"),          # mới nhận 5/9 file
+    ("card_kpi_source", KPI[:8] + [KPI[0]], "INCOMPLETE"),  # đủ 9 file nhưng thiếu nhóm 09
 ])
 def test_manifest_status(table, files, expected):
     assert manifest_status(table, files, ORDER) == expected
+
+
+def test_missing_file_groups_and_incomplete_tables():
+    assert missing_file_groups("card_kpi_source", KPI) == []
+    assert missing_file_groups("card_kpi_source", KPI[:7]) == ["08_spend_channel",
+                                                               "09_risk_dpd"]
+    assert missing_file_groups("loan_snapshots", ["a.csv"]) == []
+    assert incomplete_tables({"a": "ARRIVED", "c": "INCOMPLETE", "b": "INCOMPLETE"}) == ["b", "c"]
 
 
 def test_gate_passes_only_when_everything_reconciles():
@@ -68,3 +86,4 @@ def test_expected_card_kpi_files_match_generator():
     from data_generator.summaries import KPI_FILES
 
     assert EXPECTED_FILES["card_kpi_source"] == len(KPI_FILES)
+    assert list(REQUIRED_FILE_GROUPS["card_kpi_source"]) == KPI_FILES

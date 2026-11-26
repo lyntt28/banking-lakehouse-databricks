@@ -20,7 +20,9 @@ from pyspark.sql import functions as F
 
 from common.batch import (
     ensure_ops_tables,
+    incomplete_tables,
     manifest_status,
+    missing_file_groups,
     missing_tables,
     pending_dates,
     record_run,
@@ -87,7 +89,7 @@ def build_manifest(spark: SparkSession, bronze: dict[str, DataFrame], day: str) 
         n = sum(r["n"] for r in stats)
         first = min((r["ts"] for r in stats if r["ts"] is not None), default=None)
         rows.append((day, name, name in required_tables(ORDER),
-                     manifest_status(name, len(files), ORDER), len(files), n, files, first))
+                     manifest_status(name, files, ORDER), len(files), n, files, first))
     return (spark.createDataFrame(
         rows, "as_of_date string, table_name string, required boolean, status string, "
               "file_count long, rows long, source_files array<string>, "
@@ -114,11 +116,18 @@ def process_day(spark: SparkSession, cfg: SilverConfig, day: str, rec: StepRecor
     with rec.step("file_manifest") as s:
         manifest = build_manifest(spark, bronze, day)
         overwrite_date(manifest, cfg.t("ops", "file_manifest"), "as_of_date", day)
-        counts = {r.table_name: r.rows for r in manifest.collect()}
+        m_rows = manifest.collect()
+        counts = {r.table_name: r.rows for r in m_rows}
         s.rows_in = sum(counts.values())
         missing = missing_tables(counts, ORDER)
         if missing:
             raise SourceFilesMissing(f"{day}: thiếu file nguồn {missing} (chờ file về)")
+        files = {r.table_name: r.source_files for r in m_rows}
+        partial = {t: missing_file_groups(t, files[t])
+                   for t in incomplete_tables({r.table_name: r.status for r in m_rows})}
+        if partial:
+            raise SourceFilesMissing(f"{day}: file nguồn chưa đủ theo data contract {partial} "
+                                     "(chờ nguồn gửi đủ)")
 
     # ---------- Phase 1: kiểm tra TẤT CẢ bảng, ghi bản ứng viên vào silver_stage.
     # Bảng silver thật chưa bị đụng tới -> bảng thứ 5 lỗi DQ thì 4 bảng trước vẫn nguyên bản cũ.
