@@ -154,12 +154,14 @@ def test_section_order_matches_original():
                    "Overdue Amount by Debt Groups", "Overdue Amount by Product Groups",
                    "Overdue Ratio by Product Groups", "Overdue Ratio by Branches - Top5"]
     dep = titles("retail_deposit.lvdash.json")
-    assert dep == ["Ending Balance", "Monthly Avg Balance", "Retail Customers",
-                   "Ending Balance vs Last Day / Month / Year", "All Products Target (%)",
-                   "CASA Target (%)", "TDA/ISA Target (%)", "Ending Balance - Last 30 Days",
-                   "Monthly Average Balance (MoM)", "Regional Deposit Distribution",
-                   "Deposit by Term and IR (in Month)", "CASA Customer Distribution",
-                   "Edu-Save New open Account_ Accumulate by Month", "Balance by Product"]
+    # bảng không tiêu đề (frame title rỗng) nằm ngay dưới KPI / dưới tiêu đề mục
+    assert [t for t in dep if t] == [
+        "Ending Balance (K USD)", "Monthly Avg Balance (K USD)", "Retail Customers",
+        "All Products Target (%)", "CASA Target (%)", "TDA/ISA Target (%)",
+        "Ending Balance - Last 30 Days (K USD)",
+        "Monthly Average Balance - This Year vs Last Year (K USD)",
+        "Regional Deposit Distribution", "Deposit by Term (K USD) and Avg Interest (%)",
+        "CASA Customer Distribution", "Edu-Save New Accounts - Accumulated by Month"]
 
 
 def test_bundle_files_up_to_date():
