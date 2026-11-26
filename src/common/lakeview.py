@@ -144,21 +144,18 @@ class Dash:
 
     def table(self, ds: str, title: str, cols: list[tuple[str, str, str]], x: int, y: int,
               w: int, h: int) -> None:
-        """cols: (cột, tiêu đề, định dạng: text | int | num | pct)."""
-        enc = []
-        for i, (c, t, f) in enumerate(cols):
-            e = {"fieldName": c, "displayName": t, "title": t, "order": 100000 + i,
-                 "type": "string" if f == "text" else "float",
-                 "displayAs": "string" if f == "text" else "number", "alignContent":
-                 "left" if f == "text" else "right", "visible": True}
-            if f != "text":
-                e["numberFormat"] = {"int": "#,##0", "num": "#,##0.00", "pct": "0.00"}[f]
-            enc.append(e)
+        """cols: (cột, tiêu đề, định dạng: text | int | num | pct).
+
+        Spec bảng version 2 (định dạng Databricks hiện tại): mỗi cột chỉ cần fieldName +
+        displayName. Spec version 1 cũ đòi nhiều trường bắt buộc -> "Invalid widget definition".
+        Định dạng số làm ở SQL (round) thay vì trong spec.
+        """
+        enc = [{"fieldName": c, "displayName": t or c} for c, t, _ in cols]
         self.place({"name": self._wid("table"),
                     "queries": self._query(ds, [(c, f"`{c}`") for c, _, _ in cols], agg=False),
-                    "spec": {"version": 1, "widgetType": "table",
+                    "spec": {"version": 2, "widgetType": "table",
                              "encodings": {"columns": enc},
-                             "frame": {"showTitle": True, "title": title}}}, x, y, w, h)
+                             "frame": {"showTitle": bool(title), "title": title}}}, x, y, w, h)
 
     def param_filter(self, keyword: str, title: str, kind: str, x: int, y: int, w: int = 1,
                      h: int = 2, options_ds: str | None = None,
@@ -229,16 +226,23 @@ USD_RATE = ("(SELECT max_by(rate_to_vnd, rate_date) FROM {silver}.ref_fx_rates "
 
 
 # ============================================================ 1. CARD BUSINESS
-CARD_COLORS = {   # reference/dashboards/card/dashboard.js
-    "kpi": ["#166534", "#604A7B", "#943126", "#2E86C1", "#138D75"],
-    "smart_credit": "#20538D", "branches": "#8DB4E2", "termination": "#A5A5A5",
-    "base": "#7B8AD7", "using": "#D586BD", "balance": "#20558A", "revolving": "#E2B13C",
-    "volume": "#3B82F6", "ticket": "#5B9D4A",
-    "sector": {"Purchasing": "#5B8FC4", "Installment": "#EDD07A", "Cash Advance": "#FFB366",
-               "Flexi": "#E5CA6A"},
-    "location": {"Domestic": "#9BA8E8", "X-Border": "#E4A8D0"},
-    "channel": {"POS (Offline)": "#5B8FC4", "Online": "#8BC47A"},
+CARD_COLORS = {   # reference/dashboards/card: card_dashboard_final.html (Dashboard_CARD_v4)
+    "kpi": ["#1F2937", "#2F5597", "#C55A11", "#2F5597", "#5B9BD5"],
+    "smart_credit": "#4472C4", "branches": "#B4C7E7", "new_issuance": "#2F5597",
+    "termination": "#A5A5A5",
+    "base": "#B4C7E7", "using": "#A5A5A5", "balance": "#4472C4", "revolving": "#BF9000",
+    "volume": "#4472C4", "ticket": "#70AD47", "risk": "#2F5597",
+    "sector": {"Purchasing": "#2F5597", "Installment": "#BF9000", "Cash Advance": "#7F7F7F",
+               "Flexi": "#B4C7E7"},
+    "location": {"Domestic": "#2F5597", "X-Border": "#BF9000"},
+    "channel": {"POS (Offline)": "#2F5597", "Online": "#BF9000"},
 }
+
+
+def _arrow_pct(expr: str, unit: str = "%") -> str:
+    """Số thay đổi -> chuỗi '▲ 1.2%' / '▼ 0.9%' (bảng v2 không tự định dạng số)."""
+    return (f"CASE WHEN {expr} IS NULL THEN '-' ELSE concat(CASE WHEN {expr} >= 0 THEN '▲ ' "
+            f"ELSE '▼ ' END, format_number(abs({expr}), 1), '{unit}') END")
 
 
 def card_dashboard(catalog: str) -> dict:
@@ -262,12 +266,12 @@ day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,
                sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,
                sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl
         FROM f GROUP BY as_of_date),
-mon AS (SELECT date_format(as_of_date, 'yyyy-MM') AS ym, max(as_of_date) AS last_d,
+mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,
                sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend
         FROM day GROUP BY 1),
 m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev
        FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p
-       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyy-MM'))
+       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))
 """
     ds_kpi = d.dataset("card_kpi", "Overview KPI", base + """
 , cur AS (
@@ -321,26 +325,43 @@ k AS (
   FROM v c, v lm, v ly, ytd WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'
   UNION ALL SELECT 5, 'Balance (K USD)', c.bal, lm.bal, ly.bal, NULL, NULL
   FROM v c, v lm, v ly WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly')
-SELECT k.ord, k.kpi,
-  (k.cur - k.lm) / nullif(k.lm, 0) * 100 AS vs_last_month_pct,
-  (k.cur - k.ly) / nullif(k.ly, 0) * 100 AS vs_last_year_pct,
-  k.cur / nullif(tm.target, 0) * 100 AS month_target_pct,
-  k.ytd_val / nullif(ty.target, 0) * 100 AS year_target_pct
-FROM k
-LEFT JOIN t tm ON tm.metric_code = k.code AND tm.period_type = 'MONTH'
-LEFT JOIN t ty ON ty.metric_code = k.code AND ty.period_type = 'YEAR'
-ORDER BY k.ord
-""", ["report_date", "customer_type"])
+, r AS (
+  SELECT k.ord,
+    (k.cur - k.lm) / nullif(k.lm, 0) * 100 AS mom,
+    (k.cur - k.ly) / nullif(k.ly, 0) * 100 AS yoy,
+    k.cur / nullif(tm.target, 0) * 100 AS tgt_m,
+    k.ytd_val / nullif(ty.target, 0) * 100 AS tgt_y
+  FROM k
+  LEFT JOIN t tm ON tm.metric_code = k.code AND tm.period_type = 'MONTH'
+  LEFT JOIN t ty ON ty.metric_code = k.code AND ty.period_type = 'YEAR'),
+cmp_rows AS (
+  SELECT x.line, x.compare, r.ord, x.val FROM r
+  LATERAL VIEW inline(array(
+    named_struct('line', 1, 'compare', 'vs Last Month', 'val', {{mom}}),
+    named_struct('line', 2, 'compare', 'vs Last Year', 'val', {{yoy}}),
+    named_struct('line', 3, 'compare', '% of Month Target', 'val',
+                 CASE WHEN tgt_m IS NULL THEN '-' ELSE concat(format_number(tgt_m, 0), '%') END),
+    named_struct('line', 4, 'compare', '% of Year Target', 'val',
+                 CASE WHEN tgt_y IS NULL THEN '-' ELSE concat(format_number(tgt_y, 0), '%') END)
+  )) x)
+SELECT compare,
+  max(CASE WHEN ord = 1 THEN val END) AS new_acquisition,
+  max(CASE WHEN ord = 2 THEN val END) AS customer_base,
+  max(CASE WHEN ord = 3 THEN val END) AS using_customer,
+  max(CASE WHEN ord = 4 THEN val END) AS sales_volume,
+  max(CASE WHEN ord = 5 THEN val END) AS balance
+FROM cmp_rows GROUP BY line, compare ORDER BY line
+""".format(mom=_arrow_pct("mom"), yoy=_arrow_pct("yoy")), ["report_date", "customer_type"])
 
     ds_new = d.dataset("card_new_acq", "New Acquisition by channel", f"""
 WITH p AS (SELECT {_report_day(f'{G}.card_mart_kpi_daily')} AS d)
-SELECT date_format(k.as_of_date, 'yyyy-MM') AS month,
+SELECT date_format(k.as_of_date, 'yyyyMM') AS month,
        CASE k.acquisition_channel WHEN 'SMART_CREDIT' THEN 'Smart Credit'
             ELSE 'Branches' END AS channel,
        sum(k.new_members) AS cards
 FROM {G}.card_mart_kpi_daily k CROSS JOIN p
 WHERE k.as_of_date <= p.d
-  AND date_format(k.as_of_date, 'yyyy-MM') > date_format(add_months(p.d, -7), 'yyyy-MM')
+  AND date_format(k.as_of_date, 'yyyyMM') > date_format(add_months(p.d, -7), 'yyyyMM')
   AND (:customer_type = 'all'
        OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)
 GROUP BY 1, 2
@@ -379,62 +400,89 @@ all_mix AS (
   UNION ALL SELECT 'channel', 'Online', online FROM x)
 SELECT slice, amount FROM all_mix WHERE donut = '{donut}'
 """, ["report_date", "customer_type"])
+    ds_risk = d.dataset("card_risk_compare", "Delinquency vs last day / month", base + """
+, pk AS (SELECT p.d AS cur,
+                (SELECT max(as_of_date) FROM day, p WHERE as_of_date < p.d) AS d1,
+                (SELECT max(as_of_date) FROM day, p
+                 WHERE as_of_date <= last_day(add_months(p.d, -1))) AS m1 FROM p),
+rt AS (SELECT as_of_date, dpd1 / nullif(bal, 0) * 100 AS r1, dpd10 / nullif(bal, 0) * 100 AS r10,
+              dpd30 / nullif(bal, 0) * 100 AS r30, npl / nullif(bal, 0) * 100 AS rn FROM day),
+v AS (SELECT c.r1 - d.r1 AS d_r1, c.r10 - d.r10 AS d_r10, c.r30 - d.r30 AS d_r30,
+             c.rn - d.rn AS d_rn, c.r1 - m.r1 AS m_r1, c.r10 - m.r10 AS m_r10,
+             c.r30 - m.r30 AS m_r30, c.rn - m.rn AS m_rn
+      FROM pk JOIN rt c ON c.as_of_date = pk.cur
+      LEFT JOIN rt d ON d.as_of_date = pk.d1 LEFT JOIN rt m ON m.as_of_date = pk.m1)
+SELECT 1 AS line, 'vs Last Day' AS compare, {d1} AS dpd_1p, {d10} AS dpd_10p,
+       {d30} AS dpd_30p, {dn} AS npl FROM v
+UNION ALL
+SELECT 2, 'vs Last Month', {m1}, {m10}, {m30}, {mn} FROM v
+ORDER BY line
+""".format(d1=_arrow_pct("d_r1", " pp"), d10=_arrow_pct("d_r10", " pp"),
+           d30=_arrow_pct("d_r30", " pp"), dn=_arrow_pct("d_rn", " pp"),
+           m1=_arrow_pct("m_r1", " pp"), m10=_arrow_pct("m_r10", " pp"),
+           m30=_arrow_pct("m_r30", " pp"), mn=_arrow_pct("m_rn", " pp")),
+        ["report_date", "customer_type"])
     ds_ct = d.dataset("card_customer_types", "Customer type options", """
 SELECT explode(array('consumer', 'corporate', 'all')) AS customer_type
 """, [])
 
     c = CARD_COLORS
-    # ---- header + bộ lọc (header gốc: tiêu đề trái, ngày + loại KH phải)
-    d.text("# CARD BUSINESS DASHBOARD | Performance & Growth", 0, 0, 4, 2)
-    # ---- Overview: 5 thẻ KPI (repeat(5, 1fr))
-    d.text("## Overview", 0, 2)
+    # Bố cục theo card_dashboard_final.html: header + bộ lọc, Overview (5 thẻ KPI + dòng so
+    # sánh ngay dưới), New Issuance vs. Termination, Sales Performance (2x2), Spending
+    # Distribution (3 donut), Delinquency (4 chỉ số + thay đổi). Lưới Lakeview = 6 cột.
+    d.text("# CARD BUSINESS DASHBOARD\n**Performance & Growth**", 0, 0, 4, 2)
+    d.text("### 🟧 Overview", 0, 2)
     for i, (col, title, fmt) in enumerate([
             ("new_acquisition", "New Acquisition", "int"),
             ("customer_base", "Customer Base", "int"),
             ("using_customer", "Using Customer", "int"),
-            ("sales_volume_k_usd", "Sales Volume (K USD)", "compact"),
-            ("balance_k_usd", "Balance (K USD)", "compact")]):
+            ("sales_volume_k_usd", "Sales Volume (K USD)", "int"),
+            ("balance_k_usd", "Balance (K USD)", "int")]):
         d.counter(ds_kpi, col, title, i, 3, color=c["kpi"][i], fmt=fmt)
-    d.table(ds_cmp, "vs Last Month / Last Year / Target", [
-        ("kpi", "KPI", "text"), ("vs_last_month_pct", "vs Last Month (%)", "pct"),
-        ("vs_last_year_pct", "vs Last Year (%)", "pct"),
-        ("month_target_pct", "% of Month Target", "pct"),
-        ("year_target_pct", "% of Year Target", "pct")], 0, 6, 6, 4)
-    # ---- New Issuance vs. Termination (chart-grid-2)
-    y = 10
-    d.text("## New Issuance vs. Termination", 0, y)
-    d.chart("bar", ds_new, "New Acquisition", 0, y + 1, 3, 6, cat="month", series="channel",
+    d.text("**Report scope**\n\nMoM / YoY và % chỉ tiêu ở bảng bên dưới; "
+           "lọc Consumer / Corporate / Total ở góc phải.", 5, 3, 1, 3)
+    d.table(ds_cmp, "", [
+        ("compare", "", "text"), ("new_acquisition", "New Acquisition", "text"),
+        ("customer_base", "Customer Base", "text"), ("using_customer", "Using Customer", "text"),
+        ("sales_volume", "Sales Volume", "text"), ("balance", "Balance", "text")], 0, 6, 6, 3)
+
+    y = 9
+    d.text("### 🟧 New Issuance vs. Termination", 0, y)
+    d.chart("bar", ds_new, "New Acquisition", 0, y + 1, 3, 7, cat="month", series="channel",
             val="cards", layout="stack",
             colors={"Smart Credit": c["smart_credit"], "Branches": c["branches"]})
-    d.chart("bar", ds_inout, "In & Out", 3, y + 1, 3, 6, cat="month", series="series",
+    d.chart("bar", ds_inout, "In & Out", 3, y + 1, 3, 7, cat="month", series="series",
             val="cards", layout="group",
-            colors={"New Issuance": c["smart_credit"], "Termination": c["termination"]})
-    # ---- Sales Performance (2 hàng chart-grid-2)
+            colors={"New Issuance": c["new_issuance"], "Termination": c["termination"]})
+
     y = 17
-    d.text("## Sales Performance", 0, y)
-    d.chart("bar", ds_base, "Customer Base & Using Mem", 0, y + 1, 3, 6, cat="month",
-            series="series", val="members", layout="group",
+    d.text("### 🟧 Sales Performance", 0, y)
+    d.chart("bar", ds_base, "Customer Base & Using Mem", 0, y + 1, 3, 7, cat="month",
+            series="series", val="members", layout="group", labels=False,
             colors={"Customer Base": c["base"], "Using Mem": c["using"]})
-    d.chart("bar", ds_bal, "Balance (K USD)", 3, y + 1, 3, 6, cat="month", series="series",
-            val="k_usd", layout="group",
+    d.chart("bar", ds_bal, "Balance (K USD)", 3, y + 1, 3, 7, cat="month", series="series",
+            val="k_usd", layout="stack", labels=False,
             colors={"Balance": c["balance"], "Revolving": c["revolving"]})
-    d.chart("bar", ds_vol, "Sales Volume (K USD)", 0, y + 7, 3, 6, cat="month", val="k_usd",
-            single_color=c["volume"])
-    d.chart("line", ds_spend, "Spend per cus (USD)", 3, y + 7, 3, 6, cat="month",
-            val="ticket_size", single_color=c["ticket"])
-    # ---- Spending Distribution (donut-grid repeat(3, 1fr))
-    y = 31
-    d.text("## Spending Distribution", 0, y)
+    d.chart("bar", ds_vol, "Sales Volume (K USD)", 0, y + 8, 3, 7, cat="month", val="k_usd",
+            single_color=c["volume"], labels=False)
+    d.chart("line", ds_spend, "Spend per cus (USD)", 3, y + 8, 3, 7, cat="month",
+            val="ticket_size", single_color=c["ticket"], labels=False)
+
+    y = 33
+    d.text("### 🟧 Spending Distribution", 0, y)
     for i, (donut, title) in enumerate([("sector", "By Sectors"), ("location", "By Locations"),
                                         ("channel", "By Channels")]):
         d.chart("pie", mix[donut], title, 2 * i, y + 1, 2, 6, cat="slice", val="amount",
                 colors=c[donut])
-    # ---- Delinquency (delinquency-grid repeat(4, 1fr)) - căn giữa trên lưới 6 cột
-    y = 38
-    d.text("## Delinquency", 0, y)
+
+    y = 40
+    d.text("### 🟧 Delinquency", 0, y)
     for i, (col, title) in enumerate([("dpd_1p", "DPD 1+ (%)"), ("dpd_10p", "DPD 10+ (%)"),
                                       ("dpd_30p", "DPD 30+ (%)"), ("npl", "NPL (%)")]):
-        d.counter(ds_kpi, col, title, 1 + i, y + 1, fmt="pct")
+        d.counter(ds_kpi, col, title, 1 + i, y + 1, color=c["risk"], fmt="pct")
+    d.table(ds_risk, "", [
+        ("compare", "", "text"), ("dpd_1p", "DPD 1+", "text"), ("dpd_10p", "DPD 10+", "text"),
+        ("dpd_30p", "DPD 30+", "text"), ("npl", "NPL", "text")], 1, y + 4, 4, 2)
     # ---- bộ lọc (đặt sau khi có đủ dataset)
     d.param_filter("report_date", "Report date", "filter-date-picker", 4, 0)
     d.param_filter("customer_type", "Customer type", "filter-single-select", 5, 0,
@@ -594,22 +642,16 @@ DEP_COLORS = {   # reference/dashboards/deposit/dashboardv2.js, api_server.py
     "casa": {"Non-CASA": "#223A5E", "Active": "#009688", "Dormant": "#b0b0b0"},
     "kstudy": "#223A5E",
 }
-DEP_PRODUCTS = ["ALL", "1-CASA", "2-TD", "3-ISA"]   # ô "Product" của 2 biểu đồ (2-TIME gốc = 2-TD)
 
 
 def deposit_dashboard(catalog: str) -> dict:
-    """2 trang như 2 tab của bản gốc: Overview & Performance / Customer & Product Insights.
-    Bộ lọc chung Date, Region, Branch (mỗi trang một bộ); Product riêng cho biểu đồ 30 ngày và
-    biểu đồ vùng; Currency + Nationality cho bảng Balance by Product. Số dư: nghìn USD."""
+    """1 trang, cùng kiểu với Card: header + bộ lọc (Date, Region, Branch) bên phải, các mục
+    có tiêu đề 🟧. Số dư: nghìn USD (như bản gốc 'Unit: USD 1,000')."""
     G, S = _q(catalog, "gold"), _q(catalog, "silver")
     d = Dash("retail_deposit", "Retail Deposit Performance")
     d.param("report_date", "Report date", "DATE", "now/d")
     d.param("region", "Region", "STRING", "all")
     d.param("branch", "Branch", "STRING", "all")
-    d.param("daily_product", "Product", "STRING", "ALL")
-    d.param("region_product", "Product", "STRING", "ALL")
-    d.param("currency", "Currency", "STRING", "all")
-    d.param("nationality", "Nationality", "STRING", "all")
     usd = USD_RATE.format(silver=S)
     loc = ["report_date", "region", "branch"]
     br_ok = "(:branch = 'all' OR {c} = :branch)"
@@ -642,14 +684,12 @@ SELECT bal AS ending_balance, mavg AS monthly_avg_balance, retail AS retail_cust
 FROM v WHERE ord = 0
 """, loc)
     ds_cmp = d.dataset("dep_compare", "Tickers vs last day / month / year", base + """
-SELECT c.ord, c.cmp,
-       cur.bal - c.bal AS bal_diff, (cur.bal - c.bal) / nullif(c.bal, 0) * 100 AS bal_pct,
-       cur.mavg - c.mavg AS mavg_diff,
-       (cur.mavg - c.mavg) / nullif(c.mavg, 0) * 100 AS mavg_pct,
-       cur.retail - c.retail AS cust_diff,
-       (cur.retail - c.retail) / nullif(c.retail, 0) * 100 AS cust_pct
+SELECT c.ord, c.cmp AS compare,
+       {bal} AS ending_balance, {mavg} AS monthly_avg_balance, {cust} AS retail_customers
 FROM v c CROSS JOIN (SELECT * FROM v WHERE ord = 0) cur WHERE c.ord > 0 ORDER BY c.ord
-""", loc)
+""".format(bal=_arrow_pct("(cur.bal - c.bal) / nullif(c.bal, 0) * 100"),
+           mavg=_arrow_pct("(cur.mavg - c.mavg) / nullif(c.mavg, 0) * 100"),
+           cust=_arrow_pct("(cur.retail - c.retail) / nullif(c.retail, 0) * 100")), loc)
     ds_gauge = d.dataset("dep_gauges", "Target gauges", base + f"""
 , cur AS (
   SELECT sum(balance_vnd) AS all_bal,
@@ -672,9 +712,8 @@ FROM cur CROSS JOIN t
     ds_daily = d.dataset("dep_daily30", "Ending Balance - Last 30 Days", base + """
 SELECT date_format(f.as_of_date, 'MM-dd') AS day, sum(f.balance_vnd) / p.usd / 1000 AS balance
 FROM f, p WHERE f.as_of_date BETWEEN date_sub(p.d, 29) AND p.d
-  AND (:daily_product = 'ALL' OR f.group_class = :daily_product)
 GROUP BY 1, p.usd
-""", loc + ["daily_product"])
+""", loc)
     ds_mom = d.dataset("dep_mom", "Monthly Average Balance (MoM)", base + """
 , m AS (SELECT year(as_of_date) AS yr, month(as_of_date) AS mn, group_class,
                avg(bal) AS avg_bal
@@ -689,9 +728,8 @@ FROM m, p WHERE m.yr IN (year(p.d), year(p.d) - 1) AND make_date(m.yr, m.mn, 1) 
 """, loc)
     ds_reg = d.dataset("dep_region", "Regional Deposit Distribution", base + """
 SELECT f.region, sum(f.balance_vnd) / p.usd / 1000 AS balance FROM f, p
-WHERE f.as_of_date = p.d AND (:region_product = 'ALL' OR f.group_class = :region_product)
-GROUP BY 1, p.usd
-""", loc + ["region_product"])
+WHERE f.as_of_date = p.d GROUP BY 1, p.usd
+""", loc)
     # kỳ hạn gom nhóm như cột TENNOR của bang5 (nhãn sắp xếp được theo chữ)
     ds_term = d.dataset("dep_term", "Deposit by Term and IR (in Month)", f"""
 WITH p AS (SELECT {_report_day(f'{G}.dep_mart_by_tenor')} AS d, {usd} AS usd)
@@ -729,10 +767,8 @@ GROUP BY 1
 """, loc)
     # bảng phân cấp như /api/account-group-table: dòng lớp (1-CASA ...), các nhóm TK, GRAND TOTAL
     ds_prod = d.dataset("dep_by_product", "Balance by Product", base + """
-, ff AS (SELECT * FROM f WHERE (:currency = 'all' OR currencycd = :currency)
-                           AND (:nationality = 'all' OR nationality = :nationality)),
-g AS (SELECT as_of_date, group_class, account_group, sum(balance_vnd) bal
-      FROM ff GROUP BY 1, 2, 3),
+, g AS (SELECT as_of_date, group_class, account_group, sum(balance_vnd) bal
+      FROM f GROUP BY 1, 2, 3),
 pk AS (SELECT max(CASE WHEN ord = 1 THEN dd END) AS d1, max(CASE WHEN ord = 2 THEN dd END) AS m1,
               max(CASE WHEN ord = 3 THEN dd END) AS y1 FROM pick),
 r AS (
@@ -751,92 +787,72 @@ lv AS (
          sum(b_m1) b_m1, sum(b_y1) b_y1 FROM r GROUP BY group_class
   UNION ALL SELECT group_class, 1, concat('    ', account_group), bal, b_d1, b_m1, b_y1 FROM r
   UNION ALL SELECT 'zz', 2, 'GRAND TOTAL', sum(bal), sum(b_d1), sum(b_m1), sum(b_y1) FROM r)
-SELECT lv.product, lv.bal / p.usd / 1000 AS ending_balance,
-       lv.bal / nullif(sum(CASE WHEN lv.lvl = 2 THEN lv.bal END) OVER (), 0) * 100 AS portion,
-       (lv.bal - lv.b_d1) / p.usd / 1000 AS diff_last_day,
-       (lv.bal - lv.b_m1) / p.usd / 1000 AS diff_last_month,
-       (lv.bal - lv.b_y1) / p.usd / 1000 AS diff_last_year
+SELECT lv.product, format_number(lv.bal / p.usd / 1000, 0) AS ending_balance,
+       concat(format_number(lv.bal / nullif(sum(CASE WHEN lv.lvl = 2 THEN lv.bal END) OVER (),
+                                            0) * 100, 1), '%') AS portion,
+       format_number((lv.bal - lv.b_d1) / p.usd / 1000, 0) AS diff_last_day,
+       format_number((lv.bal - lv.b_m1) / p.usd / 1000, 0) AS diff_last_month,
+       format_number((lv.bal - lv.b_y1) / p.usd / 1000, 0) AS diff_last_year
 FROM lv CROSS JOIN p ORDER BY lv.k, lv.lvl, lv.product
-""", loc + ["currency", "nationality"])
+""", loc)
     ds_rg = d.dataset("dep_region_options", "Region options", f"""
 SELECT 'all' AS region UNION ALL SELECT DISTINCT region FROM {G}.dim_branch
 """, [])
     ds_br = d.dataset("dep_branch_options", "Branch options", f"""
 SELECT 'all' AS branch UNION ALL SELECT DISTINCT branchnbr FROM {G}.dim_branch
 """, [])
-    ds_prd = d.dataset("dep_product_options", "Product options", "\nUNION ALL ".join(
-        f"SELECT '{x}' AS product" for x in DEP_PRODUCTS), [])
-    ds_cur = d.dataset("dep_currency_options", "Currency options", f"""
-SELECT 'all' AS currency UNION ALL SELECT DISTINCT currencycd FROM {G}.dep_mart_trend
-""", [])
-    ds_nat = d.dataset("dep_nationality_options", "Nationality options", f"""
-SELECT 'all' AS nationality UNION ALL SELECT DISTINCT nationality FROM {G}.dep_mart_trend
-""", [])
 
     c = DEP_COLORS
-
-    def header_filters() -> None:
-        d.param_filter("report_date", "Date", "filter-date-picker", 3, 0)
-        d.param_filter("region", "Region", "filter-single-select", 4, 0,
-                       options_ds=ds_rg, options_col="region")
-        d.param_filter("branch", "Branch", "filter-single-select", 5, 0,
-                       options_ds=ds_br, options_col="branch")
-
-    # ---------------- trang 1: Overview & Performance
-    d.page("overview", "Overview & Performance")
     d.text("# Retail Deposit Performance\nUnit: USD 1,000", 0, 0, 3, 2)
-    # ticker-row: mỗi ô = số chính + bảng vs Last Day / Month / Year ngay bên dưới
-    for i, (col, title, key, diff, pct, fmt, dfmt) in enumerate([
-            ("ending_balance", "Ending Balance", "bal", "bal_diff", "bal_pct", "compact", "num"),
-            ("monthly_avg_balance", "Monthly Avg Balance", "mavg", "mavg_diff", "mavg_pct",
-             "compact", "num"),
-            ("retail_customers", "Retail Customers", "cust", "cust_diff", "cust_pct", "int",
-             "int")]):
-        d.counter(ds_tick, col, title, 2 * i, 2, w=2, h=3, color=c["ticker"][key], fmt=fmt)
-        d.table(ds_cmp, f"{title} vs Last Day / Month / Year", [
-            ("cmp", "", "text"), (diff, "+/-", dfmt), (pct, "+/- %", "pct")], 2 * i, 5, 2, 3)
-    # gauge-row: 3 đồng hồ -> counter % (Lakeview không có gauge)
+    d.param_filter("report_date", "Report date", "filter-date-picker", 3, 0)
+    d.param_filter("region", "Region", "filter-single-select", 4, 0,
+                   options_ds=ds_rg, options_col="region")
+    d.param_filter("branch", "Branch", "filter-single-select", 5, 0,
+                   options_ds=ds_br, options_col="branch")
+
+    d.text("### Overview", 0, 2)
+    for i, (col, title, key, fmt) in enumerate([
+            ("ending_balance", "Ending Balance", "bal", "int"),
+            ("monthly_avg_balance", "Monthly Avg Balance", "mavg", "int"),
+            ("retail_customers", "Retail Customers", "cust", "int")]):
+        d.counter(ds_tick, col, title, 2 * i, 3, w=2, color=c["ticker"][key], fmt=fmt)
+    d.table(ds_cmp, "", [
+        ("compare", "", "text"), ("ending_balance", "Ending Balance", "text"),
+        ("monthly_avg_balance", "Monthly Avg Balance", "text"),
+        ("retail_customers", "Retail Customers", "text")], 0, 6, 6, 3)
+
+    d.text("### Target Achievement", 0, 9)
     for i, (col, title, key) in enumerate([("all_pct", "All Products Target (%)", "all"),
                                            ("casa_pct", "CASA Target (%)", "casa"),
                                            ("tda_pct", "TDA/ISA Target (%)", "tda")]):
-        d.counter(ds_gauge, col, title, 2 * i, 8, w=2, color=c["gauge"][key], fmt="pct")
-    # Ending Balance 30 ngày + ô Product bên phải tiêu đề (như #product-filter)
-    d.chart("bar", ds_daily, "Ending Balance - Last 30 Days", 0, 11, 6, 7, cat="day",
+        d.counter(ds_gauge, col, title, 2 * i, 10, w=2, color=c["gauge"][key], fmt="pct")
+
+    d.text("### Balance Trend", 0, 13)
+    d.chart("bar", ds_daily, "Ending Balance - Last 30 Days", 0, 14, 6, 7, cat="day",
             val="balance", single_color=c["daily"], labels=False, cat_title="Date",
             val_title="Balance (K USD)")
-    d.chart("bar", ds_mom, "Monthly Average Balance (MoM)", 0, 18, 6, 8, cat="month",
+    d.chart("bar", ds_mom, "Monthly Average Balance (MoM)", 0, 21, 6, 8, cat="month",
             series="series", val="avg_bal", layout="group", colors=c["mom"], labels=False,
             cat_title="Month", val_title="Avg Balance (K USD)")
-    # triple-table-row 1fr 2fr -> 2 + 4
-    d.chart("pie", ds_reg, "Regional Deposit Distribution", 0, 28, 2, 7, cat="region",
+
+    d.text("### Deposit Mix", 0, 29)
+    d.chart("pie", ds_reg, "Regional Deposit Distribution", 0, 30, 2, 7, cat="region",
             val="balance", colors=c["region"], cat_title="Region", val_title="Balance (K USD)")
-    d.combo(ds_term, "Deposit by Term and IR (in Month)", 2, 26, 4, 9, cat="tenor",
+    d.combo(ds_term, "Deposit by Term and IR (in Month)", 2, 30, 4, 7, cat="tenor",
             bar="balance", line="avg_interest", bar_title="Balance (K USD)",
             line_title="Avg Interest (%)", bar_color=c["term_bar"], line_color=c["term_line"])
-    header_filters()
-    d.param_filter("daily_product", "Product (Last 30 Days)", "filter-single-select", 0, 26,
-                   w=1, options_ds=ds_prd, options_col="product")
-    d.param_filter("region_product", "Product (Region)", "filter-single-select", 1, 26,
-                   w=1, options_ds=ds_prd, options_col="product")
 
-    # ---------------- trang 2: Customer & Product Insights
-    d.page("insights", "Customer & Product Insights")
-    d.text("# Customer & Product Insights\nUnit: USD 1,000", 0, 0, 3, 2)
-    d.chart("pie", ds_casa, "CASA Customer Distribution", 0, 2, 2, 8, cat="segment",
+    d.text("### Customer & Product Insights", 0, 37)
+    d.chart("pie", ds_casa, "CASA Customer Distribution", 0, 38, 2, 7, cat="segment",
             val="customers", colors=c["casa"], cat_title="Segment", val_title="Customers")
-    d.chart("bar", ds_ks, "K-Study New open Account_ Accumulate by Month", 2, 2, 4, 8,
+    d.chart("bar", ds_ks, "K-Study New open Account_ Accumulate by Month", 2, 38, 4, 7,
             cat="month", val="cumulative_accounts", single_color=c["kstudy"],
             cat_title="Month", val_title="Accounts")
-    d.table(ds_prod, "Balance by Product", [
+    d.table(ds_prod, "Balance by Product (K USD)", [
         ("product", "Balance by Product", "text"), ("ending_balance", "Ending Balance", "num"),
-        ("portion", "Portion", "pct"), ("diff_last_day", "+/- Last Day", "num"),
+        ("portion", "Portion", "text"), ("diff_last_day", "+/- Last Day", "num"),
         ("diff_last_month", "+/- Last Month", "num"),
-        ("diff_last_year", "+/- Last Year", "num")], 0, 12, 6, 10)
-    header_filters()
-    d.param_filter("currency", "Currency", "filter-single-select", 4, 10,
-                   options_ds=ds_cur, options_col="currency")
-    d.param_filter("nationality", "Nationality", "filter-single-select", 5, 10,
-                   options_ds=ds_nat, options_col="nationality")
+        ("diff_last_year", "+/- Last Year", "num")], 0, 45, 6, 9)
     return d.to_json()
 
 
