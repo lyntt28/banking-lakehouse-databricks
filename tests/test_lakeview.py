@@ -31,7 +31,8 @@ def tables(spark, results):
         "gold_card_mart_kpi_daily": gc.build_mart_card_kpi_daily(
             r["card_master"], r["card_transactions_hist"], r["card_statements_hist"], AS_OF),
         "gold_dep_mart_trend": gd.build_mart_deposit_trend(
-            r["core_accounts"], dim_product, r["ref_fx_rates"], r["ref_branches"], AS_OF),
+            r["core_accounts"], dim_product, r["ref_fx_rates"], r["ref_branches"], AS_OF,
+            customers=dim_customer),
         "gold_dep_mart_by_tenor": gd.build_mart_deposit_by_tenor(
             r["core_accounts"], dim_product, r["ref_fx_rates"], AS_OF),
         "gold_dep_mart_casa_customer": gd.build_mart_casa_customer(
@@ -80,6 +81,11 @@ PARAMS = [{"report_date": "DATE'2026-11-01'", "customer_type": "'consumer'", "br
            "region": "'all'"},
           {"report_date": "DATE'2026-12-31'", "customer_type": "'all'", "branch": "'101'",
            "region": "'North'"}]
+
+
+def _items(body):
+    """Mọi widget của mọi trang."""
+    return [i for pg in body["pages"] for i in pg["layout"]]
 ALL_DS = [(f, ds) for f, body in DASHES.items() for ds in body["datasets"]]
 
 
@@ -102,7 +108,7 @@ def test_widget_fields_exist_in_dataset(spark, tables):
     for _, body in DASHES.items():
         cols = {ds["name"]: set(spark.sql(_local_sql(ds, PARAMS[0])).columns)
                 for ds in body["datasets"]}
-        for item in body["pages"][0]["layout"]:
+        for item in _items(body):
             for q in item["widget"].get("queries", []):
                 query = q["query"]
                 for f in query.get("fields", []):
@@ -115,29 +121,30 @@ def test_widget_fields_exist_in_dataset(spark, tables):
 
 def test_layout_fits_grid_without_overlap():
     for name, body in DASHES.items():
-        cells = set()
-        for item in body["pages"][0]["layout"]:
-            p = item["position"]
-            assert p["x"] >= 0 and p["x"] + p["width"] <= 6, name
-            for x in range(p["x"], p["x"] + p["width"]):
-                for y in range(p["y"], p["y"] + p["height"]):
-                    assert (x, y) not in cells, (name, item["widget"]["name"], x, y)
-                    cells.add((x, y))
+        for pg in body["pages"]:
+            cells = set()
+            for item in pg["layout"]:
+                p = item["position"]
+                assert p["x"] >= 0 and p["x"] + p["width"] <= 6, name
+                for x in range(p["x"], p["x"] + p["width"]):
+                    for y in range(p["y"], p["y"] + p["height"]):
+                        assert (x, y) not in cells, (name, item["widget"]["name"], x, y)
+                        cells.add((x, y))
 
 
 def test_widget_names_unique_and_specs_present():
     for body in DASHES.values():
-        names = [i["widget"]["name"] for i in body["pages"][0]["layout"]]
+        names = [i["widget"]["name"] for i in _items(body)]
         assert len(names) == len(set(names))
-        for i in body["pages"][0]["layout"]:
+        for i in _items(body):
             w = i["widget"]
             assert "spec" in w or "multilineTextboxSpec" in w
 
 
 def test_section_order_matches_original():
     """Thứ tự tiêu đề widget từ trên xuống phải theo đúng dashboard gốc."""
-    def titles(name):
-        items = sorted(DASHES[name]["pages"][0]["layout"],
+    def titles(name, page=0):
+        items = sorted(DASHES[name]["pages"][page]["layout"],
                        key=lambda i: (i["position"]["y"], i["position"]["x"]))
         return [i["widget"]["spec"]["frame"]["title"] for i in items
                 if "spec" in i["widget"] and not i["widget"]["spec"]["widgetType"]
@@ -158,15 +165,13 @@ def test_section_order_matches_original():
                    "Overdue Trend (Last 5 Days)", "Overdue Trend (Monthly)",
                    "Overdue Amount by Debt Groups", "Overdue Amount by Product Groups",
                    "Overdue Ratio by Product Groups"]
-    dep = titles("retail_deposit.lvdash.json")
-    # bảng không tiêu đề (frame title rỗng) nằm ngay dưới KPI / dưới tiêu đề mục
-    assert [t for t in dep if t] == [
-        "Ending Balance (K USD)", "Monthly Avg Balance (K USD)", "Retail Customers",
-        "All Products Target (%)", "CASA Target (%)", "TDA/ISA Target (%)",
-        "Ending Balance - Last 30 Days (K USD)",
-        "Monthly Average Balance - This Year vs Last Year (K USD)",
-        "Regional Deposit Distribution", "Deposit by Term (K USD) and Avg Interest (%)",
-        "CASA Customer Distribution", "K-Study New Accounts - Accumulated by Month"]
+    assert len(DASHES["retail_deposit.lvdash.json"]["pages"]) == 1
+    assert titles("retail_deposit.lvdash.json") == [
+        "Ending Balance", "Monthly Avg Balance", "Retail Customers", "", "All Products Target (%)",
+        "CASA Target (%)", "TDA/ISA Target (%)", "Ending Balance - Last 30 Days",
+        "Monthly Average Balance (MoM)", "Regional Deposit Distribution",
+        "Deposit by Term and IR (in Month)", "CASA Customer Distribution",
+        "K-Study New open Account_ Accumulate by Month", "Balance by Product (K USD)"]
 
 
 def test_bundle_files_up_to_date():
@@ -184,7 +189,7 @@ def test_card_colors_from_original_palette():
     """Màu theo card_dashboard_final.html (Dashboard_CARD_v4): xanh navy / xanh nhạt / vàng."""
     body = DASHES["card_business.lvdash.json"]
     maps = {}
-    for i in body["pages"][0]["layout"]:
+    for i in _items(body):
         spec = i["widget"].get("spec", {})
         for m in spec.get("encodings", {}).get("color", {}).get("scale", {}).get("mappings", []):
             maps[(spec["frame"]["title"], m["value"])] = m["color"]
