@@ -231,13 +231,10 @@
         "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
         "\n",
         ", m AS (SELECT date_format(as_of_date, 'yyyy-MM') AS month, max(as_of_date) AS last_d\n",
-        "        FROM gold.card_mart_overdue_daily, p WHERE as_of_date <= p.d\n",
-        "          AND as_of_date > last_day(add_months(p.d, -6)) GROUP BY 1)\n",
-        "\n",
-        "SELECT m.month, f.del_grp AS debt_group, sum(f.ovd_bal) / p.usd / 1000 AS overdue_k_usd\n",
-        "FROM m JOIN f ON f.as_of_date = m.last_d CROSS JOIN p\n",
-        "WHERE f.del_grp IN ('1-10', '11-90', '91-180', '181-360', '361+')\n",
-        "GROUP BY m.month, f.del_grp, p.usd\n"
+        "        FROM gold.card_mart_overdue_daily, p WHERE as_of_date <= p.d AND year(as_of_date) = year(p.d) GROUP BY 1)\n",
+        "SELECT m.month, coalesce(x.ovd, 0) / p.usd / 1000 AS overdue_k_usd,\n",
+        "       coalesce(x.ovd / nullif(x.port, 0) * 100, 0) AS overdue_ratio\n",
+        "FROM m CROSS JOIN p LEFT JOIN day x ON x.as_of_date = m.last_d\n"
       ],
       "parameters": [
         {
@@ -330,56 +327,6 @@
         "         coalesce(sum(f.ovd_bal) / nullif(sum(f.port_bal), 0) * 100, 0) AS overdue_ratio\n",
         "  FROM f, p WHERE f.as_of_date = p.d GROUP BY 1)\n",
         "ORDER BY overdue_ratio DESC LIMIT 5\n"
-      ],
-      "parameters": [
-        {
-          "displayName": "Report date",
-          "keyword": "report_date",
-          "dataType": "DATE",
-          "defaultSelection": {
-            "values": {
-              "dataType": "DATE",
-              "values": [
-                {
-                  "value": "now/d"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "displayName": "Branch",
-          "keyword": "branch",
-          "dataType": "STRING",
-          "defaultSelection": {
-            "values": {
-              "dataType": "STRING",
-              "values": [
-                {
-                  "value": "all"
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "ovd_branch_top5",
-      "displayName": "Overdue Ratio by Branches - Top5",
-      "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (SELECT * FROM gold.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
-        "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
-        "\n",
-        ", b AS (SELECT f.mng_br, coalesce(max(db.br_name), f.mng_br) AS branch,\n",
-        "               sum(f.ovd_bal) / nullif(sum(f.port_bal), 0) * 100 AS ratio,\n",
-        "               sum(f.ovd_bal) / max(p.usd) AS overdue_usd\n",
-        "        FROM f CROSS JOIN p LEFT JOIN gold.dim_branch db ON db.branchnbr = f.mng_br\n",
-        "        WHERE f.as_of_date = p.d AND f.mng_br NOT IN ('8125') GROUP BY f.mng_br)\n",
-        "SELECT concat('#', rn) AS rank, concat('#', rn, ' ', upper(branch)) AS branch, ratio\n",
-        "FROM (SELECT *, row_number() OVER (ORDER BY ratio DESC) AS rn FROM b\n",
-        "      WHERE overdue_usd > 10000) WHERE rn <= 5\n"
       ],
       "parameters": [
         {
@@ -894,7 +841,7 @@
         },
         {
           "widget": {
-            "name": "bar_09",
+            "name": "combo_09",
             "queries": [
               {
                 "name": "main_query",
@@ -906,12 +853,12 @@
                       "expression": "`month`"
                     },
                     {
-                      "name": "debt_group",
-                      "expression": "`debt_group`"
-                    },
-                    {
                       "name": "sum(overdue_k_usd)",
                       "expression": "SUM(`overdue_k_usd`)"
+                    },
+                    {
+                      "name": "sum(overdue_ratio)",
+                      "expression": "SUM(`overdue_ratio`)"
                     }
                   ],
                   "disaggregated": false
@@ -919,8 +866,8 @@
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
+              "version": 1,
+              "widgetType": "combo",
               "encodings": {
                 "x": {
                   "fieldName": "month",
@@ -930,40 +877,40 @@
                   "displayName": "month"
                 },
                 "y": {
-                  "fieldName": "sum(overdue_k_usd)",
                   "scale": {
                     "type": "quantitative"
                   },
-                  "displayName": "1000 USD"
+                  "primary": {
+                    "fields": [
+                      {
+                        "fieldName": "sum(overdue_k_usd)",
+                        "displayName": "Overdue Amount (1000 USD)"
+                      }
+                    ]
+                  },
+                  "secondary": {
+                    "fields": [
+                      {
+                        "fieldName": "sum(overdue_ratio)",
+                        "displayName": "Overdue Ratio (%)"
+                      }
+                    ]
+                  }
                 },
                 "color": {
-                  "fieldName": "debt_group",
                   "scale": {
                     "type": "categorical",
                     "mappings": [
                       {
-                        "value": "1-10",
-                        "color": "#BBDEFB"
+                        "value": "Overdue Amount (1000 USD)",
+                        "color": "#3498DB"
                       },
                       {
-                        "value": "11-90",
-                        "color": "#90CAF9"
-                      },
-                      {
-                        "value": "91-180",
-                        "color": "#64B5F6"
-                      },
-                      {
-                        "value": "181-360",
-                        "color": "#42A5F5"
-                      },
-                      {
-                        "value": "361+",
-                        "color": "#1E88E5"
+                        "value": "Overdue Ratio (%)",
+                        "color": "#E67E22"
                       }
                     ]
-                  },
-                  "displayName": "Series"
+                  }
                 },
                 "label": {
                   "show": true
@@ -972,9 +919,6 @@
               "frame": {
                 "showTitle": true,
                 "title": "Overdue Amount by Debt Groups"
-              },
-              "mark": {
-                "layout": "stack"
               }
             }
           },
@@ -1109,100 +1053,7 @@
         },
         {
           "widget": {
-            "name": "bar_12",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "ovd_branch_top5",
-                  "fields": [
-                    {
-                      "name": "branch",
-                      "expression": "`branch`"
-                    },
-                    {
-                      "name": "rank",
-                      "expression": "`rank`"
-                    },
-                    {
-                      "name": "sum(ratio)",
-                      "expression": "SUM(`ratio`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "sum(ratio)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "ratio"
-                },
-                "y": {
-                  "fieldName": "branch",
-                  "scale": {
-                    "type": "categorical",
-                    "sort": {
-                      "by": "x-reversed"
-                    }
-                  },
-                  "displayName": "branch"
-                },
-                "color": {
-                  "fieldName": "rank",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "#1",
-                        "color": "#3498DB"
-                      },
-                      {
-                        "value": "#2",
-                        "color": "#1976D2"
-                      },
-                      {
-                        "value": "#3",
-                        "color": "#2196F3"
-                      },
-                      {
-                        "value": "#4",
-                        "color": "#42A5F5"
-                      },
-                      {
-                        "value": "#5",
-                        "color": "#64B5F6"
-                      }
-                    ]
-                  },
-                  "displayName": "Series"
-                },
-                "label": {
-                  "show": true
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Overdue Ratio by Branches - Top5"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 29,
-            "width": 6,
-            "height": 6
-          }
-        },
-        {
-          "widget": {
-            "name": "filter_13",
+            "name": "filter_12",
             "queries": [
               {
                 "name": "param_ovd_fx_report_date",
@@ -1307,19 +1158,6 @@
                   ],
                   "disaggregated": false
                 }
-              },
-              {
-                "name": "param_ovd_branch_top5_report_date",
-                "query": {
-                  "datasetName": "ovd_branch_top5",
-                  "parameters": [
-                    {
-                      "name": "report_date",
-                      "keyword": "report_date"
-                    }
-                  ],
-                  "disaggregated": false
-                }
               }
             ],
             "spec": {
@@ -1358,10 +1196,6 @@
                   {
                     "parameterName": "report_date",
                     "queryName": "param_ovd_product_ratio_report_date"
-                  },
-                  {
-                    "parameterName": "report_date",
-                    "queryName": "param_ovd_branch_top5_report_date"
                   }
                 ]
               },
@@ -1380,7 +1214,7 @@
         },
         {
           "widget": {
-            "name": "filter_14",
+            "name": "filter_13",
             "queries": [
               {
                 "name": "options",
@@ -1485,19 +1319,6 @@
                   ],
                   "disaggregated": false
                 }
-              },
-              {
-                "name": "param_ovd_branch_top5_branch",
-                "query": {
-                  "datasetName": "ovd_branch_top5",
-                  "parameters": [
-                    {
-                      "name": "branch",
-                      "keyword": "branch"
-                    }
-                  ],
-                  "disaggregated": false
-                }
               }
             ],
             "spec": {
@@ -1537,10 +1358,6 @@
                   {
                     "parameterName": "branch",
                     "queryName": "param_ovd_product_ratio_branch"
-                  },
-                  {
-                    "parameterName": "branch",
-                    "queryName": "param_ovd_branch_top5_branch"
                   }
                 ]
               },

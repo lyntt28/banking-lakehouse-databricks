@@ -93,7 +93,7 @@ def test_dataset_runs(spark, tables, item, params):
 def test_core_datasets_return_rows(spark, tables):
     for _, ds in ALL_DS:
         if ds["name"] in ("ovd_last5", "card_kpi", "ovd_tickers", "dep_tickers",
-                          "dep_by_product", "card_mix_sector", "ovd_branch_top5"):
+                          "dep_by_product", "card_mix_sector", "ovd_debt_groups"):
             rows = spark.sql(_local_sql(ds, PARAMS[0])).collect()
             assert rows, ds["name"]
 
@@ -154,7 +154,7 @@ def test_section_order_matches_original():
     assert ovd == ["FX (VND/USD)", "Overdue Ratio", "Overdue Balance (USD)", "Ending Balance (USD)",
                    "Comparison", "Overdue Trend (Last 5 Days)", "Overdue Trend (Monthly)",
                    "Overdue Amount by Debt Groups", "Overdue Amount by Product Groups",
-                   "Overdue Ratio by Product Groups", "Overdue Ratio by Branches - Top5"]
+                   "Overdue Ratio by Product Groups"]
     dep = titles("retail_deposit.lvdash.json")
     assert dep == ["Ending Balance", "Monthly Avg Balance", "Retail Customers",
                    "Ending Balance vs Last Day / Month / Year", "All Products Target (%)",
