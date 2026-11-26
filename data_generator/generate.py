@@ -16,6 +16,8 @@ Bảng chi tiết (Bronze -> Silver -> Gold):
 File tổng hợp để đối soát (tính từ bản ghi hợp lệ):
     card_kpi                   : 9 file KPI thẻ dạng dọc (tab, số có dấu phẩy, tỷ lệ %)
     deposit_summary            : số dư tiền gửi theo nhóm TK x chi nhánh (layout bang1247)
+    card_overdue               : nợ quá hạn thẻ theo nhóm SP x chi nhánh x nhóm nợ
+                                 (layout credit_card_overdue_YYYYMMDD.txt, dashboard Overdue)
 
 Lỗi cài cố ý (~2% mỗi loại, dưới ngưỡng dừng Job 5%): xem docstring từng module.
 
@@ -158,6 +160,9 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
             path("deposit_summary", f"bang1247_{as_of:%Y%m%d}.txt"), sm.DEPOSIT_HEADER,
             sm.deposit_summary(accounts, acc_failed, as_of, dep_prev, dep_month),
             delimiter="\t"))
+        add("card_overdue", write_csv(
+            path("card_overdue", f"credit_card_overdue_{as_of:%Y%m%d}.txt"),
+            sm.CARD_OVERDUE_HEADER, sm.card_overdue(cards, as_of), delimiter="\t"))
     return counts
 
 
