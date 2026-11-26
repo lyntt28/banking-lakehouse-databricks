@@ -85,11 +85,19 @@
         "  UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p\n",
         "         WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),\n",
         "cur AS (SELECT x.* FROM day x, p WHERE x.as_of_date = p.d)\n",
-        "SELECT pk.ord, pk.cmp,\n",
+        "SELECT pk.ord, pk.cmp, v.ratio_pp, v.overdue_usd, v.ending_usd,\n",
+        "  -- như dashboard gốc: ▲ / ▼ / ▪ + trị tuyệt đối (USD làm tròn, % 2 số lẻ)\n",
+        "  concat(CASE WHEN v.ratio_pp > 0 THEN '▲ ' WHEN v.ratio_pp < 0 THEN '▼ ' ELSE '▪ ' END,\n",
+        "         format_number(abs(v.ratio_pp), 2), '%') AS ratio_txt,\n",
+        "  concat(CASE WHEN v.overdue_usd > 0 THEN '▲ ' WHEN v.overdue_usd < 0 THEN '▼ ' ELSE '▪ ' END,\n",
+        "         format_number(abs(v.overdue_usd), 0)) AS overdue_txt,\n",
+        "  concat(CASE WHEN v.ending_usd > 0 THEN '▲ ' WHEN v.ending_usd < 0 THEN '▼ ' ELSE '▪ ' END,\n",
+        "         format_number(abs(v.ending_usd), 0)) AS ending_txt\n",
+        "FROM pick pk CROSS JOIN cur CROSS JOIN p LEFT JOIN day c ON c.as_of_date = pk.dd\n",
+        "LATERAL VIEW inline(array(struct(\n",
         "  round((cur.ovd / nullif(cur.port, 0) - c.ovd / nullif(c.port, 0)) * 100, 2) AS ratio_pp,\n",
         "  round((cur.ovd - c.ovd) / p.usd, 0) AS overdue_usd,\n",
-        "  round((cur.port - c.port) / p.usd, 0) AS ending_usd\n",
-        "FROM pick pk CROSS JOIN cur CROSS JOIN p LEFT JOIN day c ON c.as_of_date = pk.dd\n",
+        "  round((cur.port - c.port) / p.usd, 0) AS ending_usd))) v\n",
         "ORDER BY pk.ord\n"
       ],
       "parameters": [
@@ -607,16 +615,8 @@
                       "expression": "`cmp`"
                     },
                     {
-                      "name": "ratio_pp",
-                      "expression": "`ratio_pp`"
-                    },
-                    {
-                      "name": "overdue_usd",
-                      "expression": "`overdue_usd`"
-                    },
-                    {
-                      "name": "ending_usd",
-                      "expression": "`ending_usd`"
+                      "name": "ratio_txt",
+                      "expression": "`ratio_txt`"
                     }
                   ],
                   "disaggregated": true
@@ -633,35 +633,127 @@
                     "displayName": "Compare"
                   },
                   {
-                    "fieldName": "ratio_pp",
-                    "displayName": "Overdue Ratio (pp)"
-                  },
-                  {
-                    "fieldName": "overdue_usd",
-                    "displayName": "Overdue Balance (USD)"
-                  },
-                  {
-                    "fieldName": "ending_usd",
-                    "displayName": "Ending Balance (USD)"
+                    "fieldName": "ratio_txt",
+                    "displayName": "Change"
                   }
                 ]
               },
               "frame": {
                 "showTitle": true,
-                "title": "Comparison"
+                "title": "Overdue Ratio vs Last Day / Month / Year"
               }
             }
           },
           "position": {
             "x": 0,
             "y": 5,
-            "width": 6,
+            "width": 2,
             "height": 3
           }
         },
         {
           "widget": {
-            "name": "combo_07",
+            "name": "table_07",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_compare",
+                  "fields": [
+                    {
+                      "name": "cmp",
+                      "expression": "`cmp`"
+                    },
+                    {
+                      "name": "overdue_txt",
+                      "expression": "`overdue_txt`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "cmp",
+                    "displayName": "Compare"
+                  },
+                  {
+                    "fieldName": "overdue_txt",
+                    "displayName": "Change"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Overdue Balance (USD) vs Last Day / Month / Year"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 5,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "table_08",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_compare",
+                  "fields": [
+                    {
+                      "name": "cmp",
+                      "expression": "`cmp`"
+                    },
+                    {
+                      "name": "ending_txt",
+                      "expression": "`ending_txt`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "cmp",
+                    "displayName": "Compare"
+                  },
+                  {
+                    "fieldName": "ending_txt",
+                    "displayName": "Change"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ending Balance (USD) vs Last Day / Month / Year"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 5,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "combo_09",
             "queries": [
               {
                 "name": "main_query",
@@ -751,7 +843,7 @@
         },
         {
           "widget": {
-            "name": "combo_08",
+            "name": "combo_10",
             "queries": [
               {
                 "name": "main_query",
@@ -841,7 +933,7 @@
         },
         {
           "widget": {
-            "name": "combo_09",
+            "name": "combo_11",
             "queries": [
               {
                 "name": "main_query",
@@ -931,7 +1023,7 @@
         },
         {
           "widget": {
-            "name": "pie_10",
+            "name": "pie_12",
             "queries": [
               {
                 "name": "main_query",
@@ -988,7 +1080,7 @@
         },
         {
           "widget": {
-            "name": "bar_11",
+            "name": "bar_13",
             "queries": [
               {
                 "name": "main_query",
@@ -1053,7 +1145,7 @@
         },
         {
           "widget": {
-            "name": "filter_12",
+            "name": "filter_14",
             "queries": [
               {
                 "name": "param_ovd_fx_report_date",
@@ -1214,7 +1306,7 @@
         },
         {
           "widget": {
-            "name": "filter_13",
+            "name": "filter_15",
             "queries": [
               {
                 "name": "options",
