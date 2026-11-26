@@ -1,8 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # 00.5 - Backfill Silver + Gold
-# MAGIC Silver/Gold tự xử lý mọi ngày sau watermark (`ops.pipeline_runs`), nên backfill chỉ cần
-# MAGIC gọi 2 notebook 1 lần, không truyền ngày.
+# MAGIC Gọi `02_silver/00_daily_silver_gold` 1 lần: xử lý mọi ngày sau watermark
+# MAGIC (`ops.pipeline_runs`), mỗi ngày Silver rồi Gold.
 # MAGIC - `reset=true` (CHỈ dev/test): xoá bảng Silver + Gold + trạng thái batch rồi dựng lại từ đầu.
 # MAGIC   Bị chặn trên catalog prod: prod dùng quy trình staging -> gate -> publish (docs/runbook.md),
 # MAGIC   không drop bảng mà người dùng đang đọc. Sau reset phải chạy lại governance (mask/filter
@@ -41,7 +41,7 @@ if reset:
 
 # COMMAND ----------
 
-args = {"catalog": catalog, "as_of_date": ""}
-dbutils.notebook.run("../02_silver/01_silver_transform", 7200, args)
-dbutils.notebook.run("../03_gold/01_gold_build", 7200, args)
+# Silver + Gold xen kẽ từng ngày (bắt buộc: Silver snapshot là MERGE, xem pipelines/daily.py)
+dbutils.notebook.run("../02_silver/00_daily_silver_gold", 14400,
+                     {"catalog": catalog, "as_of_date": ""})
 display(spark.table(f"{catalog}.ops.pipeline_runs").orderBy("as_of_date", "layer", "started_at"))

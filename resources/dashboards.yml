@@ -24,3 +24,11 @@ resources:
       warehouse_id: ${var.warehouse_id}
       dataset_catalog: ${var.catalog}
       embed_credentials: false
+
+    # Dashboard vận hành cho Data Engineer (đọc bảng ops.*)
+    ops_monitor:
+      display_name: Lakehouse Operations Monitor
+      file_path: ../dashboards/ops_monitor.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
+      embed_credentials: false
