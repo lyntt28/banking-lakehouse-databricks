@@ -84,6 +84,7 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
     cards = cd.base_cards(rnd, customers, start)
     policies = cd.base_insurance(rnd, customers, cards, start)
     dep_prev: dict = {}
+    seen_cust: set[str] = set()   # KH đã vào Silver ở các ngày trước (FK Silver dùng cả lịch sử)
     dep_month: dict = {}
 
     for d, as_of in enumerate(dates):
@@ -126,8 +127,10 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
         add("customers", write_csv(path("customers", "customers.csv"),
                                    core.HEADERS["customers"], cust_rows))
         acc_rows, acc_failed = core.snap_accounts(rnd, accounts)
-        # KH bị NULL id hôm nay -> TK của KH đó cũng rơi vào quarantine (FK) ở Silver
-        cust_ok = {r[0] for r in cust_rows}
+        # KH bị NULL id hôm nay -> TK của KH đó rơi vào quarantine (FK) ở Silver, TRỪ KHI
+        # KH đã có trong Silver từ ngày trước (Silver lấy khóa FK = silver hiện có + lô hôm nay)
+        seen_cust |= {r[0] for r in cust_rows if r[0]}
+        cust_ok = seen_cust
         acc_failed |= {a["account_id"] for a in accounts if a["customer_id"] not in cust_ok}
         add("accounts", write_csv(path("accounts", "accounts.csv"),
                                   core.HEADERS["accounts"], acc_rows))
