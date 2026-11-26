@@ -40,8 +40,8 @@ Câu trả lời gợi ý ngắn (nói 30–60 giây), luôn gắn với project
     (segment, chi nhánh của KH).
 13. **SCD2 bằng 1 MERGE thế nào?** Staging nhân đôi bản ghi đổi: 1 dòng khớp khóa để đóng bản cũ,
     1 dòng `merge_key = NULL` để chèn bản mới; so `row_hash` để phát hiện thay đổi.
-14. ⭐ **Fact vs dimension, grain?** `fact_loan_daily` grain = 1 khoản vay / ngày (snapshot);
-    `fact_transaction` grain = 1 giao dịch. Dimension: customer (SCD2), branch, product, date.
+14. ⭐ **Fact vs dimension, grain?** `loan_fact_daily` grain = 1 khoản vay / ngày (snapshot);
+    `core_fact_transaction` grain = 1 giao dịch. Dimension: customer (SCD2), branch, product, date.
 15. **Periodic snapshot vs transaction fact?** Dư nợ là snapshot cuối ngày (cộng theo ngày
     không có nghĩa), giao dịch là transaction fact (cộng được).
 

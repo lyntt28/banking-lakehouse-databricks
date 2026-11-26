@@ -40,13 +40,14 @@ def silver_days(spark, tmp_path_factory):
     res = {}
     for d in DATES:
         day = {t: br[t].filter(F.col("_as_of_date") == d) for t in br}
-        cust = prepare_silver(day["customers"], TABLES["customers"])
-        acc = prepare_silver(day["accounts"], TABLES["accounts"], cust.known_keys("customer_id"))
+        cust = prepare_silver(day["customers"], TABLES["core_customers"])
+        acc = prepare_silver(day["accounts"], TABLES["core_accounts"],
+                             cust.known_keys("customer_id"))
         res[d] = {"customers": cust.valid, "accounts": acc.valid,
-                  "fx": prepare_silver(day["fx_rates"], TABLES["fx_rates"]).valid}
+                  "fx": prepare_silver(day["fx_rates"], TABLES["ref_fx_rates"]).valid}
     first = {t: br[t].filter(F.col("_as_of_date") == DATES[0]) for t in ["branches", "products"]}
-    res["products"] = prepare_silver(first["products"], TABLES["products"]).valid
-    res["branches"] = prepare_silver(first["branches"], TABLES["branches"]).valid
+    res["products"] = prepare_silver(first["products"], TABLES["ref_products"]).valid
+    res["branches"] = prepare_silver(first["branches"], TABLES["ref_branches"]).valid
     return res
 
 

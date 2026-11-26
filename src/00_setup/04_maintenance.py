@@ -41,7 +41,7 @@ from common.maintenance import (  # noqa: E402
 
 existing = {t for t in CLUSTERING if spark.catalog.tableExists(f"{catalog}.{t}")}
 if not day:
-    day = str(spark.table(f"{catalog}.gold.fact_loan_daily").agg(F.max("as_of_date")).first()[0])
+    day = str(spark.table(f"{catalog}.gold.loan_fact_daily").agg(F.max("as_of_date")).first()[0])
 day = check_date(day)
 try:
     spark.conf.set("spark.databricks.io.cache.enabled", "false")

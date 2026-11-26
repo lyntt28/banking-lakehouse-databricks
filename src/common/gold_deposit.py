@@ -1,10 +1,10 @@
 """Gold cho dashboard Tiền gửi bán lẻ (DEPOSIT) - xem docs/gold_dashboards.md mục 3.
 
-    mart_deposit_trend          ngày x nhóm TK x lớp (CASA/TD/ISA) x tiền tệ x vùng: số dư VND,
+    dep_mart_trend          ngày x nhóm TK x lớp (CASA/TD/ISA) x tiền tệ x vùng: số dư VND,
                                 so với D-1, cuối tháng trước (M-1), cuối năm trước (Y-1)
-    mart_deposit_by_tenor       TD / ISA theo kỳ hạn: số dư, số TK, lãi suất min/max/bình quân
-    mart_casa_customer          chi nhánh: KH cá nhân, KH có CASA, CASA hoạt động / ngủ đông
-    mart_deposit_new_accounts   tháng mở x chi nhánh x sản phẩm: TK mở mới + luỹ kế trong năm
+    dep_mart_by_tenor       TD / ISA theo kỳ hạn: số dư, số TK, lãi suất min/max/bình quân
+    dep_mart_casa_customer          chi nhánh: KH cá nhân, KH có CASA, CASA hoạt động / ngủ đông
+    dep_mart_new_accounts   tháng mở x chi nhánh x sản phẩm: TK mở mới + luỹ kế trong năm
                                 (dashboard lọc product_type = 'EDUSAVE')
 """
 

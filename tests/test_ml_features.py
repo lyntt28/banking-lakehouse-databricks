@@ -19,8 +19,8 @@ from common.silver import TABLES, prepare_silver
 from data_generator.generate import Sizes, generate
 
 AS_OF = "2026-11-01"
-NEED = ["customers", "accounts", "loans", "cards", "card_transactions", "insurance_policies",
-        "fx_rates"]
+NEED = ["core_customers", "core_accounts", "loan_snapshots", "card_master",
+        "card_transactions_hist", "ins_policies", "ref_fx_rates"]
 
 
 @pytest.fixture(scope="module")
@@ -30,9 +30,10 @@ def silver(spark, tmp_path_factory):
     srcs = {s.table: s for s in SOURCES}
     res = {}
     for t in NEED:
-        s = srcs[t]
-        df = (spark.read.option("primitivesAsString", "true").json(str(out / t))
-              if s.fmt == "json" else spark.read.options(**s.options).csv(str(out / t)))
+        s = srcs[TABLES[t].bronze]
+        p = str(out / TABLES[t].bronze)
+        df = (spark.read.option("primitivesAsString", "true").json(p)
+              if s.fmt == "json" else spark.read.options(**s.options).csv(p))
         df = add_bronze_metadata(df, F.input_file_name())
         spec = TABLES[t]
         ref = None
@@ -45,13 +46,14 @@ def silver(spark, tmp_path_factory):
 @pytest.fixture(scope="module")
 def features(silver):
     s = silver
-    return build_customer_features(AS_OF, s["customers"], s["accounts"], s["loans"], s["cards"],
-                                   s["card_transactions"], s["fx_rates"]).cache()
+    return build_customer_features(AS_OF, s["core_customers"], s["core_accounts"],
+                                   s["loan_snapshots"], s["card_master"],
+                                   s["card_transactions_hist"], s["ref_fx_rates"]).cache()
 
 
 def test_feature_grain_and_columns(features, silver):
     assert features.groupBy("customer_id").count().filter("count > 1").count() == 0
-    n_cn = silver["customers"].filter("cust_type = 'CN'").count()
+    n_cn = silver["core_customers"].filter("cust_type = 'CN'").count()
     assert features.count() == n_cn
     assert set(NUMERIC_FEATURES) <= set(features.columns)
     # không có cột lấy từ bảng bảo hiểm (tránh rò rỉ nhãn)
@@ -79,7 +81,7 @@ def test_labels_modes(spark):
 
 
 def test_model_learns_signal(features, silver):
-    ts = training_set(features, build_labels(silver["insurance_policies"], AS_OF))
+    ts = training_set(features, build_labels(silver["ins_policies"], AS_OF))
     pdf = ts.toPandas()
     assert 0.02 < pdf["label"].mean() < 0.5
     _, m = train_model(pdf)

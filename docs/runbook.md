@@ -53,8 +53,8 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
 - **MỤC ĐÍCH:** chạy `02_silver/01_silver_transform` rồi `03_gold/01_gold_build` cho từng ngày
   theo thứ tự thời gian (SCD2 và so sánh D-1/M-1/Y-1 cần đúng thứ tự).
 - **Widget:** `catalog = bank_dev`, `from_date` để trống
-- **Lưu ý SCD2:** `silver.customers` từ chối nạp ngày cũ hơn bản hiện hành (báo lỗi
-  "thứ tự ngày"). Muốn chạy lại backfill từ ngày cũ: `DROP TABLE <catalog>.silver.customers`
+- **Lưu ý SCD2:** `silver.core_customers` từ chối nạp ngày cũ hơn bản hiện hành (báo lỗi
+  "thứ tự ngày"). Muốn chạy lại backfill từ ngày cũ: `DROP TABLE <catalog>.silver.core_customers`
   (và `gold.dim_customer`) trước, rồi chạy lại từ đầu.
 - **KIỂM TRA:**
   ```sql
@@ -66,14 +66,14 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
   GROUP BY 1, 2 ORDER BY 3 DESC;
   -- SCD2: KH có nhiều phiên bản
   SELECT customer_id, province, segment, valid_from, valid_to, is_current
-  FROM bank_dev.silver.customers WHERE customer_id IN
-    (SELECT customer_id FROM bank_dev.silver.customers GROUP BY 1 HAVING count(*) > 1)
+  FROM bank_dev.silver.core_customers WHERE customer_id IN
+    (SELECT customer_id FROM bank_dev.silver.core_customers GROUP BY 1 HAVING count(*) > 1)
   ORDER BY customer_id, valid_from LIMIT 20;
   -- đối soát với file nguồn: phải toàn MATCH
   SELECT status, count(*) FROM bank_dev.ops.recon_card_kpi GROUP BY 1;
   SELECT status, count(*) FROM bank_dev.ops.recon_deposit GROUP BY 1;
   -- NPL theo ngày
-  SELECT * FROM bank_dev.gold.mart_npl_daily ORDER BY as_of_date DESC LIMIT 10;
+  SELECT * FROM bank_dev.gold.loan_mart_npl_daily ORDER BY as_of_date DESC LIMIT 10;
   ```
   Đúng: fail_pct các rule FAIL < 5%; NPL ~3%; recon toàn `MATCH`.
 - **NẾU LỖI:**
@@ -93,12 +93,12 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
 - **NẾU LỖI:** `PRINCIPAL_DOES_NOT_EXIST` → đang chạy `dry_run = false` mà chưa có group.
 
 ## 7. `src/04_ml/01_insurance_cross_sell`
-- **MỤC ĐÍCH:** feature table `gold.feature_customer_insurance`, train model, log MLflow,
-  chấm điểm KH chưa có bảo hiểm → `gold.insurance_propensity_scores`.
+- **MỤC ĐÍCH:** feature table `gold.ins_feature_customer`, train model, log MLflow,
+  chấm điểm KH chưa có bảo hiểm → `gold.ins_propensity_scores`.
 - **Widget:** `label_mode = holder`, `register = false` nếu Free Edition báo lỗi registry.
 - **KIỂM TRA:** metrics in ra (roc_auc > 0.7 là có tín hiệu); Experiments → `insurance_cross_sell`;
   ```sql
-  SELECT score_decile, count(*), avg(score) FROM bank_dev.gold.insurance_propensity_scores
+  SELECT score_decile, count(*), avg(score) FROM bank_dev.gold.ins_propensity_scores
   GROUP BY 1 ORDER BY 1;
   ```
 
@@ -131,3 +131,25 @@ databricks bundle run banking_lakehouse_daily -t dev
 | Generator, Bronze, Silver, Gold, views, governance SQL, ML features | ✅ | ⬜ |
 | MERGE / SCD2 / replaceWhere trên Delta (local) | ✅ (PR #13) | ⬜ |
 | Bundle validate / deploy, CD | ⬜ (chưa có secret) | ⬜ |
+
+## Quy ước tên bảng (tiền tố theo nghiệp vụ)
+
+Tiền tố: `ref_` danh mục, `core_` khách hàng/TK/giao dịch, `loan_` tín dụng, `dep_` tiền gửi,
+`card_` thẻ, `ins_` bảo hiểm, `cust_` khách hàng 360. Bronze giữ tên thư mục landing (= tên file
+nguồn); Silver map qua `SilverTable.source`. Dimension dùng chung giữ `dim_*`; `ops.*` giữ nguyên.
+
+| Tầng | Tên cũ | Tên mới |
+|---|---|---|
+| silver | branches / products / fx_rates / targets | ref_branches / ref_products / ref_fx_rates / ref_targets |
+| silver | customers / accounts / transactions | core_customers / core_accounts / core_transactions |
+| silver | loans | loan_snapshots |
+| silver | cards / card_transactions / card_statements / card_kpi | card_master / card_transactions_hist / card_statements_hist / card_kpi_source |
+| silver | deposit_summary / insurance_policies | dep_summary_source / ins_policies |
+| gold | fact_loan_daily / mart_loan_overdue_daily / mart_npl_daily | loan_fact_daily / loan_mart_overdue_daily / loan_mart_npl_daily |
+| gold | fact_transaction / mart_customer_360 | core_fact_transaction / cust_mart_360 |
+| gold | mart_deposit_daily / _trend / _by_tenor / mart_casa_customer / mart_deposit_new_accounts | dep_mart_daily / dep_mart_trend / dep_mart_by_tenor / dep_mart_casa_customer / dep_mart_new_accounts |
+| gold | mart_card_kpi_daily / _monthly / mart_card_spend_mix | card_mart_kpi_daily / card_mart_kpi_monthly / card_mart_spend_mix |
+| gold | feature_customer_insurance / insurance_propensity_scores / model insurance_propensity | ins_feature_customer / ins_propensity_scores / ins_propensity_model |
+
+Sau khi đổi tên: deploy lại bundle, chạy lại `05_backfill` (Silver/Gold tạo bảng mới), chạy
+`02_dashboard_views` và import lại dashboard. Bảng tên cũ không còn dùng, xoá bằng `DROP TABLE` khi đã kiểm tra.

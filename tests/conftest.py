@@ -44,7 +44,7 @@ def bronze(spark, tmp_path_factory):
     from pyspark.sql import functions as F
 
     from common.bronze import SOURCES, add_bronze_metadata
-    from common.silver import ORDER
+    from common.silver import ORDER, TABLES
     from data_generator.generate import Sizes, generate
 
     out = tmp_path_factory.mktemp("landing")
@@ -52,8 +52,8 @@ def bronze(spark, tmp_path_factory):
     srcs = {s.table: s for s in SOURCES}
     res = {}
     for t in ORDER:
-        s = srcs[t]
-        path = str(out / t)
+        s = srcs[TABLES[t].bronze]
+        path = str(out / TABLES[t].bronze)
         if s.fmt == "json":
             df = spark.read.option("primitivesAsString", "true").json(path)
         else:

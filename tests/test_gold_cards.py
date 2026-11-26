@@ -20,13 +20,14 @@ AS_OF = "2026-11-01"
 
 @pytest.fixture(scope="module")
 def card_daily(results):
-    return build_mart_card_kpi_daily(results["cards"].valid, results["card_transactions"].valid,
-                                     results["card_statements"].valid, AS_OF).cache()
+    return build_mart_card_kpi_daily(results["card_master"].valid,
+                                     results["card_transactions_hist"].valid,
+                                     results["card_statements_hist"].valid, AS_OF).cache()
 
 
 @pytest.fixture(scope="module")
 def recon(results, card_daily):
-    return reconcile(card_kpi_metrics(card_daily), results["card_kpi"].valid).cache()
+    return reconcile(card_kpi_metrics(card_daily), results["card_kpi_source"].valid).cache()
 
 
 def test_card_daily_one_row_per_dims(card_daily):
@@ -68,7 +69,7 @@ def test_reconcile_flags_mismatch(spark):
 
 
 def test_spend_mix_sums_to_daily(results, card_daily):
-    mix = build_mart_card_spend_mix(results["card_transactions"].valid, AS_OF)
+    mix = build_mart_card_spend_mix(results["card_transactions_hist"].valid, AS_OF)
     a = mix.agg(F.sum("amount")).first()[0]
     b = card_daily.agg(F.sum("spend_amt")).first()[0]
     assert a == b
@@ -77,9 +78,9 @@ def test_spend_mix_sums_to_daily(results, card_daily):
 def test_deposit_reconciles_with_bang1247(results):
     from data_generator.common import DEPOSIT_ALL
 
-    mart = build_mart_deposit_daily(results["accounts"].valid, AS_OF)
-    r = deposit_reconciliation(mart, results["deposit_summary"].valid,
-                               results["fx_rates"].valid,
+    mart = build_mart_deposit_daily(results["core_accounts"].valid, AS_OF)
+    r = deposit_reconciliation(mart, results["dep_summary_source"].valid,
+                               results["ref_fx_rates"].valid,
                                {p[0]: p[1] for p in DEPOSIT_ALL})
     st = r.groupBy("status").count().collect()
     assert {x.status for x in st} == {"MATCH"}, r.filter("status <> 'MATCH'").limit(5).collect()

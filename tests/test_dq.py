@@ -40,7 +40,7 @@ def test_quarantine_keeps_reason(spark):
 
 
 def test_summary_and_stop_threshold(spark):
-    summary = dq_summary(_df(spark), RULES, "silver.loans")
+    summary = dq_summary(_df(spark), RULES, "silver.loan_snapshots")
     by_rule = {r.rule_name: r for r in summary.collect()}
     assert by_rule["balance_non_negative"].failed_rows == 1
     assert by_rule["balance_non_negative"].fail_pct == 25.0

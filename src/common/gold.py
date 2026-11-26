@@ -4,15 +4,15 @@ Dimension
     dim_date        1 dòng / ngày (date_key = yyyyMMdd)
     dim_branch      chi nhánh
     dim_product     sản phẩm vay / tiền gửi
-    dim_customer    lịch sử SCD2 từ silver.customers, khóa thay thế customer_sk
+    dim_customer    lịch sử SCD2 từ silver.core_customers, khóa thay thế customer_sk
 Fact
-    fact_loan_daily     snapshot dư nợ theo ngày x khoản vay (grain: as_of_date, acctnbr)
-    fact_transaction    giao dịch tài khoản (grain: txn_id)
+    loan_fact_daily     snapshot dư nợ theo ngày x khoản vay (grain: as_of_date, acctnbr)
+    core_fact_transaction    giao dịch tài khoản (grain: txn_id)
 Mart (mỗi visual = 1 SELECT đơn giản, xem docs/gold_dashboards.md)
-    mart_loan_overdue_daily     dư nợ / nợ quá hạn theo ngày x chi nhánh x sản phẩm x nhóm nợ
-    mart_npl_daily              tỷ lệ nợ xấu toàn hàng, kèm so sánh D-1 / M-1 / Y-1
-    mart_deposit_daily          số dư tiền gửi theo ngày x chi nhánh x sản phẩm x tiền tệ
-    mart_customer_360           1 dòng / khách hàng hiện hành: vay, tiền gửi, giao dịch
+    loan_mart_overdue_daily     dư nợ / nợ quá hạn theo ngày x chi nhánh x sản phẩm x nhóm nợ
+    loan_mart_npl_daily              tỷ lệ nợ xấu toàn hàng, kèm so sánh D-1 / M-1 / Y-1
+    dep_mart_daily          số dư tiền gửi theo ngày x chi nhánh x sản phẩm x tiền tệ
+    cust_mart_360           1 dòng / khách hàng hiện hành: vay, tiền gửi, giao dịch
 
 Hàm ở đây thuần Spark (test local); notebook src/03_gold ghi ra Delta.
 """
@@ -60,7 +60,7 @@ CUSTOMER_COLS = ["customer_id", "cust_type", "full_name", "id_no", "dob", "gende
 
 
 def build_dim_customer(customers_scd2: DataFrame) -> DataFrame:
-    """silver.customers (SCD2) -> dim_customer có khóa thay thế ổn định giữa các lần chạy."""
+    """silver.core_customers (SCD2) -> dim_customer có khóa thay thế ổn định giữa các lần chạy."""
     return customers_scd2.select(
         F.xxhash64("customer_id", "valid_from").alias("customer_sk"),
         *CUSTOMER_COLS, "valid_from", "valid_to", "is_current",
@@ -228,6 +228,6 @@ GOLD_KEYS = {
     "dim_date": ["date_key"],
     "dim_branch": ["branchnbr"],
     "dim_product": ["prodcode"],
-    "fact_loan_daily": ["as_of_date", "acctnbr"],
-    "fact_transaction": ["txn_id"],
+    "loan_fact_daily": ["as_of_date", "acctnbr"],
+    "core_fact_transaction": ["txn_id"],
 }
