@@ -10,7 +10,7 @@ resources:
       parameters:
         - name: catalog
           default: ${var.catalog}
-        - name: as_of_date        # trống = ngày mới nhất có trong bronze
+        - name: as_of_date        # trống = mọi ngày chưa xử lý sau watermark (ops.pipeline_runs)
           default: ""
 
       tasks:
@@ -89,6 +89,8 @@ resources:
           default: ${var.catalog}
         - name: label_mode
           default: holder
+        - name: max_gold_age_days   # Gold publish gần nhất cũ hơn -> dừng, không train dữ liệu cũ
+          default: "2"
       tasks:
         - task_key: train_and_score
           notebook_task:
