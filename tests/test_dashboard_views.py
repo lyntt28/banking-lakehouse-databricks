@@ -37,7 +37,7 @@ def marts(spark, results):
         "dep_mart_casa_customer": gd.build_mart_casa_customer(r["core_accounts"], dim_product,
                                                           dim_customer, AS_OF),
         "dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"]),
-        "targets": r["ref_targets"],
+        "ref_targets": r["ref_targets"],
     }
     for name, df in m.items():
         df.createOrReplaceTempView(name)
