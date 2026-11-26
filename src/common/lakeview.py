@@ -212,7 +212,7 @@ def _report_day(table: str, col: str = "as_of_date") -> str:
     return f"(SELECT max({col}) FROM {table} WHERE {col} <= :report_date)"
 
 
-USD_RATE = ("(SELECT max_by(rate_to_vnd, rate_date) FROM {silver}.fx_rates "
+USD_RATE = ("(SELECT max_by(rate_to_vnd, rate_date) FROM {silver}.ref_fx_rates "
             "WHERE currencycd = 'USD' AND rate_date <= :report_date)")
 
 
@@ -290,7 +290,7 @@ v AS (
   FROM pick pk LEFT JOIN day x ON x.as_of_date = pk.dd),
 t AS (
   SELECT metric_code, period_type, sum(target_value) AS target
-  FROM {_q(catalog, "silver")}.targets, p
+  FROM {_q(catalog, "silver")}.ref_targets, p
   WHERE (period_type = 'MONTH' AND period = date_format(p.d, 'yyyy-MM'))
      OR (period_type = 'YEAR' AND period = CAST(year(p.d) AS STRING))
   GROUP BY 1, 2),
@@ -627,7 +627,7 @@ t AS (
   SELECT sum(CASE WHEN metric_code = 'DEPOSIT_BALANCE' THEN target_value END) AS all_t,
          sum(CASE WHEN metric_code = 'DEPOSIT_CASA' THEN target_value END) AS casa_t,
          sum(CASE WHEN metric_code = 'DEPOSIT_TD_ISA' THEN target_value END) AS tda_t
-  FROM {_q(catalog, "silver")}.targets tg CROSS JOIN p
+  FROM {_q(catalog, "silver")}.ref_targets tg CROSS JOIN p
   LEFT JOIN {G}.dim_branch b ON b.branchnbr = tg.branchnbr
   WHERE tg.period_type = 'YEAR' AND tg.period = CAST(year(p.d) AS STRING)
     AND (:region = 'all' OR b.region = :region))
