@@ -106,3 +106,36 @@ def test_overwrite_date_replaces_only_that_day(spark, tbl):
     rows = {(str(r.as_of_date), r.branchnbr): r.balance for r in spark.table(tbl).collect()}
     assert rows == {("2026-11-01", "1"): 10.0, ("2026-11-02", "1"): 25.0,
                     ("2026-11-02", "2"): 5.0}
+
+
+def test_scd2_same_day_corrections_never_overlap(spark, tbl):
+    """Đổi 2 lần trong cùng ngày: vẫn 1 phiên bản / ngày, không chồng lấn, sk duy nhất."""
+    from pyspark.sql import functions as F
+
+    scd2_upsert(_cust(spark, [("C1", "HA NOI", "MASS")]), tbl, "customer_id", TRACKED,
+                "2026-11-01")
+    scd2_upsert(_cust(spark, [("C1", "HUE", "MASS")]), tbl, "customer_id", TRACKED,
+                "2026-11-02")
+    scd2_upsert(_cust(spark, [("C1", "DA NANG", "MASS")]), tbl, "customer_id", TRACKED,
+                "2026-11-02")                                       # sửa lại cùng ngày
+    scd2_upsert(_cust(spark, [("C1", "DA NANG", "MASS")]), tbl, "customer_id", TRACKED,
+                "2026-11-02")                                       # chạy lại: không đổi
+    rows = spark.table(tbl).orderBy("valid_from").collect()
+    assert [(str(r.valid_from), r.valid_to and str(r.valid_to), r.province, r.is_current)
+            for r in rows] == [("2026-11-01", "2026-11-01", "HA NOI", False),
+                               ("2026-11-02", None, "DA NANG", True)]
+    # as-of join ngày 2026-11-02 chỉ khớp đúng 1 phiên bản
+    hit = spark.table(tbl).filter(
+        "valid_from <= DATE'2026-11-02' AND (valid_to IS NULL OR valid_to >= DATE'2026-11-02')")
+    assert hit.count() == 1
+    sk = spark.table(tbl).select(F.xxhash64("customer_id", "valid_from").alias("sk"))
+    assert sk.distinct().count() == sk.count()
+
+
+def test_scd2_change_on_first_day_is_corrected_in_place(spark, tbl):
+    scd2_upsert(_cust(spark, [("C1", "HA NOI", "MASS")]), tbl, "customer_id", TRACKED,
+                "2026-11-01")
+    scd2_upsert(_cust(spark, [("C1", "HUE", "MASS")]), tbl, "customer_id", TRACKED,
+                "2026-11-01")
+    rows = spark.table(tbl).collect()
+    assert len(rows) == 1 and rows[0].province == "HUE" and rows[0].is_current

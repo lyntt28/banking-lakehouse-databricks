@@ -1,14 +1,20 @@
 name: CD
 
-# main -> test (tự động, chạy job + kiểm tra) -> prod (cần người duyệt)
+# main -> test (deploy + smoke test bắt buộc) -> prod (Required reviewers)
 #
-# Cấu hình 1 lần trong GitHub (Settings -> Environments):
-#   - environment `test`: secret DATABRICKS_HOST (+ DATABRICKS_CLIENT_ID nếu dùng OIDC,
-#     hoặc DATABRICKS_TOKEN nếu dùng token)
-#   - environment `prod`: như trên + "Required reviewers" (người bấm duyệt deploy prod)
-# Auth ưu tiên OIDC (không lưu secret dài hạn): tạo federation policy cho service principal
-# với issuer https://token.actions.githubusercontent.com, subject repo:<owner>/<repo>:environment:<env>.
-# Chưa có secret -> job chỉ ghi warning và bỏ qua (không fail).
+# Bật CD: repo variable CD_ENABLED = 'true'. Chưa bật -> deploy-test / deploy-prod hiện
+# "skipped" (chế độ demo, rõ ràng là KHÔNG deploy). Đã bật mà thiếu cấu hình -> FAIL,
+# không bao giờ "xanh" khi smoke test chưa chạy, và prod chỉ chạy khi deploy-test THÀNH CÔNG.
+#
+# Mỗi environment (`test`, `prod`) cần secret:
+#   DATABRICKS_HOST       workspace URL
+#   DATABRICKS_CLIENT_ID  application ID của service principal DEPLOY (OIDC)
+#   DATABRICKS_RUN_AS_SP  application ID của service principal CHẠY job (runtime, khác deploy)
+# Chỉ dùng OIDC (không PAT): federation policy trên SP deploy với
+#   issuer  https://token.actions.githubusercontent.com
+#   subject repo:<owner>/<repo>:environment:test   (và ...:environment:prod)
+# Kiểm tra subject thật trong log bước "Show OIDC subject" trước khi tạo policy.
+# Environment `prod` phải bật Required reviewers (Settings -> Environments -> prod).
 
 on:
   push:
@@ -16,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       as_of_date:
-        description: "Ngày dữ liệu chạy smoke test trên test (YYYY-MM-DD, trống = mới nhất)"
+        description: "Ngày dữ liệu chạy smoke test trên test (YYYY-MM-DD, trống = mọi ngày chờ xử lý)"
         required: false
         default: ""
 
@@ -25,8 +31,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
-  id-token: write   # OIDC
+  contents: read      # id-token chỉ cấp cho job deploy
 
 jobs:
   tests:
@@ -44,33 +49,43 @@ jobs:
       - run: ruff check .
       - run: pytest -q
 
+  cd-disabled:
+    needs: tests
+    if: vars.CD_ENABLED != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::notice title=CD disabled::CD_ENABLED != 'true' - không deploy test/prod (demo mode)."
+          echo "## CD disabled: nothing was deployed (set repo variable CD_ENABLED=true)" >> "$GITHUB_STEP_SUMMARY"
+
   deploy-test:
     needs: tests
+    if: vars.CD_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: test
+    permissions:
+      contents: read
+      id-token: write   # OIDC
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      RUN_AS_SP: ${{ secrets.DATABRICKS_RUN_AS_SP }}
     steps:
       - uses: actions/checkout@v4
       - uses: databricks/setup-cli@v1.28.0
-      - name: Skip (secrets missing)
-        if: env.DATABRICKS_HOST == ''
-        run: echo "::warning title=CD skipped::Environment 'test' has no DATABRICKS_HOST secret."
-      - name: Auth mode
-        if: env.DATABRICKS_HOST != ''
+      - name: Require OIDC config (fail, không skip)
         run: |
-          if [ -n "$DATABRICKS_CLIENT_ID" ]; then
-            echo "DATABRICKS_AUTH_TYPE=github-oidc" >> "$GITHUB_ENV"
-          fi
+          for v in DATABRICKS_HOST DATABRICKS_CLIENT_ID RUN_AS_SP; do
+            [ -n "${!v}" ] || { echo "::error::environment 'test' thiếu $v"; exit 1; }
+          done
+          echo "DATABRICKS_AUTH_TYPE=github-oidc" >> "$GITHUB_ENV"
+      - name: Show OIDC subject
+        run: echo "subject = repo:${GITHUB_REPOSITORY}:environment:test"
       - name: Validate + deploy bundle (test)
-        if: env.DATABRICKS_HOST != ''
         run: |
-          databricks bundle validate -t test
-          databricks bundle deploy -t test
-      - name: Smoke test - run the daily job on test
-        if: env.DATABRICKS_HOST != ''
+          databricks bundle validate -t test --var run_as_sp="$RUN_AS_SP"
+          databricks bundle deploy -t test --var run_as_sp="$RUN_AS_SP"
+      - name: Smoke test - run the daily job on test (bắt buộc)
         env:
           AS_OF_DATE: ${{ inputs.as_of_date }}   # qua env, không chèn thẳng vào script
         run: |
@@ -79,36 +94,35 @@ jobs:
             [[ "$AS_OF_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "bad date"; exit 1; }
             params="--params as_of_date=$AS_OF_DATE"
           fi
-          # Job fail (DQ gate, đối soát lệch...) -> lệnh trả mã lỗi -> không lên prod
-          databricks bundle run banking_lakehouse_daily -t test $params
+          # Job fail (thiếu file, DQ gate, gate đối soát Gold...) -> mã lỗi -> không lên prod
+          databricks bundle run banking_lakehouse_daily -t test --var run_as_sp="$RUN_AS_SP" $params
 
   deploy-prod:
-    needs: deploy-test
+    needs: deploy-test           # skipped/failed -> prod không chạy
+    if: vars.CD_ENABLED == 'true' && needs.deploy-test.result == 'success'
     runs-on: ubuntu-latest
-    environment: prod   # Required reviewers -> chờ người duyệt
+    environment: prod            # Required reviewers -> chờ người duyệt
+    permissions:
+      contents: read
+      id-token: write
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      RUN_AS_SP: ${{ secrets.DATABRICKS_RUN_AS_SP }}
     steps:
       - uses: actions/checkout@v4
       - uses: databricks/setup-cli@v1.28.0
-      - name: Skip (secrets missing)
-        if: env.DATABRICKS_HOST == ''
-        run: echo "::warning title=CD skipped::Environment 'prod' has no DATABRICKS_HOST secret."
-      - name: Auth mode
-        if: env.DATABRICKS_HOST != ''
+      - name: Require OIDC config (fail, không skip)
         run: |
-          if [ -n "$DATABRICKS_CLIENT_ID" ]; then
-            echo "DATABRICKS_AUTH_TYPE=github-oidc" >> "$GITHUB_ENV"
-          fi
+          for v in DATABRICKS_HOST DATABRICKS_CLIENT_ID RUN_AS_SP; do
+            [ -n "${!v}" ] || { echo "::error::environment 'prod' thiếu $v"; exit 1; }
+          done
+          echo "DATABRICKS_AUTH_TYPE=github-oidc" >> "$GITHUB_ENV"
       - name: Validate + deploy bundle (prod)
-        if: env.DATABRICKS_HOST != ''
         run: |
-          databricks bundle validate -t prod
-          databricks bundle deploy -t prod
+          databricks bundle validate -t prod --var run_as_sp="$RUN_AS_SP"
+          databricks bundle deploy -t prod --var run_as_sp="$RUN_AS_SP"
       - name: Summary
-        if: env.DATABRICKS_HOST != ''
         run: |
           echo "## Deployed to prod" >> "$GITHUB_STEP_SUMMARY"
-          echo "Commit \`${GITHUB_SHA::7}\`. The job runs on its own schedule; not triggered here." >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit \`${GITHUB_SHA::7}\`, smoke test passed on test. Job runs on its schedule." >> "$GITHUB_STEP_SUMMARY"

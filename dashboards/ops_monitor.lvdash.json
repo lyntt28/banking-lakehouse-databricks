@@ -1,0 +1,857 @@
+{
+  "datasets": [
+    {
+      "name": "ops_kpi",
+      "displayName": "Current state",
+      "queryLines": [
+        "WITH pub AS (SELECT max(as_of_date) AS d FROM ops.published_batches),\n",
+        "last_run AS (SELECT * FROM (SELECT *, row_number() OVER (PARTITION BY as_of_date, layer\n",
+        "                                        ORDER BY started_at DESC, status DESC) AS rn\n",
+        "                             FROM ops.pipeline_runs) WHERE rn = 1)\n",
+        "SELECT pub.d AS serving_batch,\n",
+        "       datediff(current_date(), pub.d) AS serving_age_days,\n",
+        "       (SELECT count(*) FROM last_run WHERE status = 'FAILED') AS open_failures,\n",
+        "       (SELECT round(avg(CASE WHEN status = 'SUCCESS' THEN 100.0 ELSE 0 END), 1)\n",
+        "        FROM ops.pipeline_runs WHERE status <> 'RUNNING'\n",
+        "          AND started_at >= current_timestamp() - INTERVAL 30 DAYS) AS success_rate_30d\n",
+        "FROM pub\n"
+      ],
+      "parameters": []
+    },
+    {
+      "name": "ops_status",
+      "displayName": "Batch status (last 14 days)",
+      "queryLines": [
+        "SELECT as_of_date, layer, status, run_id, started_at, finished_at, message\n",
+        "FROM (SELECT *, row_number() OVER (PARTITION BY as_of_date, layer\n",
+        "                                   ORDER BY started_at DESC, status DESC) AS rn\n",
+        "      FROM ops.pipeline_runs WHERE as_of_date >= date_sub(current_date(), 14))\n",
+        "WHERE rn = 1\n",
+        "ORDER BY as_of_date DESC, layer\n"
+      ],
+      "parameters": []
+    },
+    {
+      "name": "ops_steps",
+      "displayName": "Failed steps",
+      "queryLines": [
+        "SELECT logged_at, as_of_date, layer, step, rows_in, rows_out, duration_s, error, run_id\n",
+        "FROM ops.task_runs WHERE status = 'FAILED' ORDER BY logged_at DESC LIMIT 50\n"
+      ],
+      "parameters": []
+    },
+    {
+      "name": "ops_duration",
+      "displayName": "Processing time per day (minutes)",
+      "queryLines": [
+        "SELECT date_format(as_of_date, 'yyyy-MM-dd') AS day, layer, sum(duration_s) / 60 AS minutes\n",
+        "FROM ops.task_runs WHERE status = 'SUCCESS' AND as_of_date >= date_sub(current_date(), 30)\n",
+        "GROUP BY 1, 2\n"
+      ],
+      "parameters": []
+    },
+    {
+      "name": "ops_files",
+      "displayName": "Source files not normal",
+      "queryLines": [
+        "SELECT as_of_date, table_name, status, file_count, rows, first_loaded_at\n",
+        "FROM ops.file_manifest\n",
+        "WHERE status IN ('MISSING', 'MULTIPLE_FILES') AND as_of_date >= date_sub(current_date(), 14)\n",
+        "ORDER BY as_of_date DESC, table_name\n"
+      ],
+      "parameters": []
+    },
+    {
+      "name": "ops_dq",
+      "displayName": "DQ failed rows per day",
+      "queryLines": [
+        "SELECT date_format(run_ts, 'yyyy-MM-dd') AS day, severity, sum(failed_rows) AS failed_rows\n",
+        "FROM ops.dq_results WHERE run_ts >= current_timestamp() - INTERVAL 30 DAYS AND failed_rows > 0\n",
+        "GROUP BY 1, 2\n"
+      ],
+      "parameters": []
+    },
+    {
+      "name": "ops_recon",
+      "displayName": "Reconciliation issues",
+      "queryLines": [
+        "SELECT as_of_date, 'card_kpi' AS check, metric_code AS item, status, diff\n",
+        "FROM ops.recon_card_kpi WHERE status NOT IN ('MATCH', 'WITHIN_TOLERANCE')\n",
+        "UNION ALL\n",
+        "SELECT as_of_date, 'deposit', concat_ws('/', account_group, currencycd, branchnbr), status, diff\n",
+        "FROM ops.recon_deposit WHERE status <> 'MATCH'\n",
+        "ORDER BY as_of_date DESC LIMIT 100\n"
+      ],
+      "parameters": []
+    }
+  ],
+  "pages": [
+    {
+      "name": "ops",
+      "displayName": "Lakehouse Operations Monitor",
+      "layout": [
+        {
+          "widget": {
+            "name": "text_01",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# LAKEHOUSE OPERATIONS MONITOR\nBatch status, failures, source files, DQ and reconciliation. Gold only serves batches that passed the reconciliation gate."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_02",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ops_kpi",
+                  "fields": [
+                    {
+                      "name": "serving_batch",
+                      "expression": "`serving_batch`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "serving_batch",
+                  "displayName": "Gold serving batch"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Gold serving batch"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_03",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ops_kpi",
+                  "fields": [
+                    {
+                      "name": "serving_age_days",
+                      "expression": "`serving_age_days`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "serving_age_days",
+                  "displayName": "Serving age (days)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Serving age (days)"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_04",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ops_kpi",
+                  "fields": [
+                    {
+                      "name": "open_failures",
+                      "expression": "`open_failures`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "open_failures",
+                  "displayName": "Open failures",
+                  "style": {
+                    "color": "#D62728"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Open failures"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_05",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ops_kpi",
+                  "fields": [
+                    {
+                      "name": "success_rate_30d",
+                      "expression": "`success_rate_30d`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "success_rate_30d",
+                  "displayName": "Success rate 30d (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Success rate 30d (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "table_06",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ops_status",
+                  "fields": [
+                    {
+                      "name": "as_of_date",
+                      "expression": "`as_of_date`"
+                    },
+                    {
+                      "name": "layer",
+                      "expression": "`layer`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "message",
+                      "expression": "`message`"
+                    },
+                    {
+                      "name": "run_id",
+                      "expression": "`run_id`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "as_of_date",
+                    "displayName": "Data date",
+                    "title": "Data date",
+                    "order": 100000,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "layer",
+                    "displayName": "Layer",
+                    "title": "Layer",
+                    "order": 100001,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "status",
+                    "displayName": "Status",
+                    "title": "Status",
+                    "order": 100002,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "message",
+                    "displayName": "Message",
+                    "title": "Message",
+                    "order": 100003,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "run_id",
+                    "displayName": "Run ID",
+                    "title": "Run ID",
+                    "order": 100004,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Batch status (last 14 days)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "table_07",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ops_steps",
+                  "fields": [
+                    {
+                      "name": "as_of_date",
+                      "expression": "`as_of_date`"
+                    },
+                    {
+                      "name": "layer",
+                      "expression": "`layer`"
+                    },
+                    {
+                      "name": "step",
+                      "expression": "`step`"
+                    },
+                    {
+                      "name": "error",
+                      "expression": "`error`"
+                    },
+                    {
+                      "name": "duration_s",
+                      "expression": "`duration_s`"
+                    },
+                    {
+                      "name": "run_id",
+                      "expression": "`run_id`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "as_of_date",
+                    "displayName": "Data date",
+                    "title": "Data date",
+                    "order": 100000,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "layer",
+                    "displayName": "Layer",
+                    "title": "Layer",
+                    "order": 100001,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "step",
+                    "displayName": "Step",
+                    "title": "Step",
+                    "order": 100002,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "error",
+                    "displayName": "Error",
+                    "title": "Error",
+                    "order": 100003,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "duration_s",
+                    "displayName": "Duration (s)",
+                    "title": "Duration (s)",
+                    "order": 100004,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "#,##0.00"
+                  },
+                  {
+                    "fieldName": "run_id",
+                    "displayName": "Run ID",
+                    "title": "Run ID",
+                    "order": 100005,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Failed steps (latest 50)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_08",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ops_duration",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "layer",
+                      "expression": "`layer`"
+                    },
+                    {
+                      "name": "sum(minutes)",
+                      "expression": "SUM(`minutes`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "day",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "day"
+                },
+                "y": {
+                  "fieldName": "sum(minutes)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "minutes"
+                },
+                "color": {
+                  "fieldName": "layer",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Series"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Processing time per day (minutes)"
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 17,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_09",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ops_dq",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "severity",
+                      "expression": "`severity`"
+                    },
+                    {
+                      "name": "sum(failed_rows)",
+                      "expression": "SUM(`failed_rows`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "day",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "day"
+                },
+                "y": {
+                  "fieldName": "sum(failed_rows)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "rows"
+                },
+                "color": {
+                  "fieldName": "severity",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Series"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "DQ failed rows per day"
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 17,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "table_10",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ops_files",
+                  "fields": [
+                    {
+                      "name": "as_of_date",
+                      "expression": "`as_of_date`"
+                    },
+                    {
+                      "name": "table_name",
+                      "expression": "`table_name`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "file_count",
+                      "expression": "`file_count`"
+                    },
+                    {
+                      "name": "rows",
+                      "expression": "`rows`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "as_of_date",
+                    "displayName": "Data date",
+                    "title": "Data date",
+                    "order": 100000,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "table_name",
+                    "displayName": "Table",
+                    "title": "Table",
+                    "order": 100001,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "status",
+                    "displayName": "Status",
+                    "title": "Status",
+                    "order": 100002,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "file_count",
+                    "displayName": "Files",
+                    "title": "Files",
+                    "order": 100003,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "#,##0"
+                  },
+                  {
+                    "fieldName": "rows",
+                    "displayName": "Rows",
+                    "title": "Rows",
+                    "order": 100004,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "#,##0"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Source files missing / sent more than once (14 days)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 23,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "table_11",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ops_recon",
+                  "fields": [
+                    {
+                      "name": "as_of_date",
+                      "expression": "`as_of_date`"
+                    },
+                    {
+                      "name": "check",
+                      "expression": "`check`"
+                    },
+                    {
+                      "name": "item",
+                      "expression": "`item`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "diff",
+                      "expression": "`diff`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "as_of_date",
+                    "displayName": "Data date",
+                    "title": "Data date",
+                    "order": 100000,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "check",
+                    "displayName": "Check",
+                    "title": "Check",
+                    "order": 100001,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "item",
+                    "displayName": "Item",
+                    "title": "Item",
+                    "order": 100002,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "status",
+                    "displayName": "Status",
+                    "title": "Status",
+                    "order": 100003,
+                    "type": "string",
+                    "displayAs": "string",
+                    "alignContent": "left",
+                    "visible": true
+                  },
+                  {
+                    "fieldName": "diff",
+                    "displayName": "Diff",
+                    "title": "Diff",
+                    "order": 100004,
+                    "type": "float",
+                    "displayAs": "number",
+                    "alignContent": "right",
+                    "visible": true,
+                    "numberFormat": "#,##0.00"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Reconciliation issues"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 23,
+            "width": 3,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "CENTER"
+    }
+  }
+}

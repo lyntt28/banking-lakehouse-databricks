@@ -11,7 +11,9 @@ from pathlib import Path
 import pytest
 from pyspark.sql import functions as F
 
-ROOT = Path(__file__).resolve().parents[1]
+pytestmark = pytest.mark.integration
+
+ROOT = Path(__file__).resolve().parents[2]
 CATALOG = "spark_catalog"
 DAYS = ["2026-10-31", "2026-11-02", "2026-11-03"]   # cuối tháng + 2 ngày liên tiếp
 
@@ -91,7 +93,7 @@ def pipeline(spark, tmp_path_factory):
 
     spark.conf.set("spark.sql.sources.default", "delta")   # như Databricks
     spark.conf.set("spark.databricks.delta.snapshotPartitions", "1")   # nhanh hơn khi local
-    for schema in ["bronze", "silver", "gold", "ops"]:
+    for schema in ["bronze", "silver", "silver_stage", "gold", "gold_stage", "ops"]:
         spark.sql(f"DROP SCHEMA IF EXISTS {CATALOG}.{schema} CASCADE")
     run_notebook(_SetupSpark(spark), "src/00_setup/01_create_catalog_schema.py", catalog=CATALOG)
 

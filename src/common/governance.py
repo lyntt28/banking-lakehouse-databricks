@@ -6,8 +6,14 @@ unit test kiểm tra nội dung câu lệnh và logic che/lọc (chạy biểu t
 Nhóm (tạo ở Account Console / SCIM, code chỉ GRANT):
     bank_admins       toàn quyền catalog
     data_engineers    đọc/ghi bronze, silver, gold, ops; thấy PII
-    risk_analysts     đọc silver, gold; PII bị che; thấy mọi chi nhánh
-    branch_users      đọc gold; PII bị che; chỉ thấy chi nhánh của mình (ops.user_branch)
+    risk_analysts     đọc silver, gold; PII bị che; thấy mọi chi nhánh; ở ops chỉ đọc bảng
+                      kết quả DQ / đối soát / batch (KHÔNG đọc dq_quarantine - record_json
+                      chứa PII gốc chưa che)
+    branch_users      chỉ đọc các bảng gold CÓ row filter chi nhánh + dim không nhạy cảm
+                      (cấp theo bảng, không cấp SELECT cả schema gold)
+
+Least privilege: SELECT cấp theo BẢNG ở TABLE_GRANTS, schema chỉ cấp USE SCHEMA cho nhóm
+đọc giới hạn. Bảng mới thêm vào gold/ops mặc định KHÔNG lộ cho branch_users / risk_analysts.
 """
 
 from __future__ import annotations
@@ -26,10 +32,28 @@ SCHEMA_GRANTS: dict[str, dict[str, list[str]]] = {
                "risk_analysts": ["USE SCHEMA", "SELECT"]},
     "gold": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"],
              "risk_analysts": ["USE SCHEMA", "SELECT"],
-             "branch_users": ["USE SCHEMA", "SELECT"]},
+             "branch_users": ["USE SCHEMA"]},
+    "silver_stage": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"]},
+    "gold_stage": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"]},
     "ops": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE",
                                "READ VOLUME", "WRITE VOLUME"],
-            "risk_analysts": ["USE SCHEMA", "SELECT"]},
+            "risk_analysts": ["USE SCHEMA"]},
+}
+
+# bảng nhạy cảm: không nhóm đọc giới hạn nào được cấp (kiểm tra bằng test)
+RESTRICTED_TABLES = ["ops.dq_quarantine", "ops.user_branch"]
+
+# bảng gold có cột branchnbr -> lọc dòng theo chi nhánh cho branch_users
+BRANCH_FILTERED = ["gold.loan_fact_daily", "gold.core_fact_transaction", "gold.dim_customer",
+                   "gold.loan_mart_overdue_daily", "gold.dep_mart_daily",
+                   "gold.cust_mart_360", "gold.card_mart_kpi_daily"]
+
+# group -> bảng được SELECT (cấp theo bảng)
+TABLE_GRANTS: dict[str, list[str]] = {
+    "risk_analysts": ["ops.dq_results", "ops.recon_card_kpi", "ops.recon_deposit",
+                      "ops.pipeline_runs", "ops.published_batches", "ops.task_runs",
+                      "ops.file_manifest"],
+    "branch_users": BRANCH_FILTERED + ["gold.dim_date", "gold.dim_branch", "gold.dim_product"],
 }
 
 
@@ -75,10 +99,6 @@ PII_COLUMNS: dict[str, dict[str, str]] = {
     "gold.cust_mart_360": {"full_name": "name", "monthly_income": "income"},
 }
 
-# bảng có cột branchnbr -> lọc dòng theo chi nhánh cho branch_users
-BRANCH_FILTERED = ["gold.loan_fact_daily", "gold.core_fact_transaction", "gold.dim_customer",
-                   "gold.loan_mart_overdue_daily", "gold.dep_mart_daily",
-                   "gold.cust_mart_360", "gold.card_mart_kpi_daily"]
 
 
 def _members(groups: list[str]) -> str:
@@ -140,12 +160,17 @@ def statements(catalog: str) -> list[str]:
     for table in BRANCH_FILTERED:
         out.append(f"ALTER TABLE {catalog}.{table} "
                    f"SET ROW FILTER {catalog}.ops.branch_filter ON (branchnbr)")
+    # SELECT theo bảng: cấp SAU khi mask/row filter đã gắn -> không có khoảnh khắc lộ dữ liệu
+    for group, tables in TABLE_GRANTS.items():
+        for table in tables:
+            out.append(f"GRANT SELECT ON TABLE {catalog}.{table} TO `{group}`")
     return out
 
 
 def target_tables() -> set[str]:
     """Bảng mà governance cần tồn tại trước khi chạy (để notebook bỏ qua bảng chưa có)."""
-    return set(PII_COLUMNS) | set(BRANCH_FILTERED)
+    return set(PII_COLUMNS) | set(BRANCH_FILTERED) | {t for ts in TABLE_GRANTS.values()
+                                                          for t in ts}
 
 
 def assert_pipeline_identity(spark, catalog: str) -> None:
