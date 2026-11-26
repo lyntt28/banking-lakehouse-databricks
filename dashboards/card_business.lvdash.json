@@ -1070,63 +1070,29 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "kpi",
-                    "displayName": "KPI",
-                    "title": "KPI",
-                    "order": 100000,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "KPI"
                   },
                   {
                     "fieldName": "vs_last_month_pct",
-                    "displayName": "vs Last Month (%)",
-                    "title": "vs Last Month (%)",
-                    "order": 100001,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "0.00"
+                    "displayName": "vs Last Month (%)"
                   },
                   {
                     "fieldName": "vs_last_year_pct",
-                    "displayName": "vs Last Year (%)",
-                    "title": "vs Last Year (%)",
-                    "order": 100002,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "0.00"
+                    "displayName": "vs Last Year (%)"
                   },
                   {
                     "fieldName": "month_target_pct",
-                    "displayName": "% of Month Target",
-                    "title": "% of Month Target",
-                    "order": 100003,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "0.00"
+                    "displayName": "% of Month Target"
                   },
                   {
                     "fieldName": "year_target_pct",
-                    "displayName": "% of Year Target",
-                    "title": "% of Year Target",
-                    "order": 100004,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "0.00"
+                    "displayName": "% of Year Target"
                   }
                 ]
               },

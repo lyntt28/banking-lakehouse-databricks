@@ -586,52 +586,25 @@
               }
             ],
             "spec": {
-              "version": 1,
+              "version": 2,
               "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
                     "fieldName": "cmp",
-                    "displayName": "",
-                    "title": "",
-                    "order": 100000,
-                    "type": "string",
-                    "displayAs": "string",
-                    "alignContent": "left",
-                    "visible": true
+                    "displayName": "cmp"
                   },
                   {
                     "fieldName": "ratio_pp",
-                    "displayName": "Overdue Ratio (pp)",
-                    "title": "Overdue Ratio (pp)",
-                    "order": 100001,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "0.00"
+                    "displayName": "Overdue Ratio (pp)"
                   },
                   {
                     "fieldName": "overdue_usd",
-                    "displayName": "Overdue Balance (USD)",
-                    "title": "Overdue Balance (USD)",
-                    "order": 100002,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "#,##0.00"
+                    "displayName": "Overdue Balance (USD)"
                   },
                   {
                     "fieldName": "ending_usd",
-                    "displayName": "Ending Balance (USD)",
-                    "title": "Ending Balance (USD)",
-                    "order": 100003,
-                    "type": "float",
-                    "displayAs": "number",
-                    "alignContent": "right",
-                    "visible": true,
-                    "numberFormat": "#,##0.00"
+                    "displayName": "Ending Balance (USD)"
                   }
                 ]
               },
