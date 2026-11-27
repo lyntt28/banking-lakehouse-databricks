@@ -40,18 +40,40 @@ Gold chỉ ghi sau gate. Nếu lỗi ở `gold:publish` (hạ tầng giữa ch�
 ## 5. Lỗi giữa `silver:publish` / `gold:publish` (lỗi hạ tầng sau khi đã qua mọi gate)
 Silver và Gold đều **stage → kiểm tra tất cả → publish**: lỗi DQ / đối soát không bao giờ để lại
 bảng ghi dở. Chỉ lỗi hạ tầng trong chính bước publish mới có thể làm một số bảng đã ghi, số khác chưa.
-- Job TỰ rollback: mọi bảng Silver / Gold đã ghi trong lần publish lỗi được `RESTORE` về version
-  trước publish (log `silver_rolled_back` / `gold_rolled_back`, `pipeline_runs.message` có "rollback N bảng"). Dashboard chỉ đọc
-  tới ngày trong `ops.published_batches` nên không thấy dữ liệu dở dang.
+- **Silver**: lỗi giữa `silver:publish` -> job TỰ `RESTORE` mọi bảng Silver đã ghi về version
+  trước publish (log `silver_rolled_back`, message có "rollback N bảng").
+Gold publish ghi THÊM dòng của batch mới (`batch_id` = run_id) rồi mới kích hoạt bằng 1 dòng vào
+`ops.published_batches`. Người đọc chỉ đọc `gold_serving` (view lọc batch đã kích hoạt), nên batch
+dở dang luôn vô hình. Xem `pipeline_runs.message` để biết lỗi xảy ra trước hay sau kích hoạt:
+- **Trước kích hoạt** (message có "rollback N bảng"): job TỰ `RESTORE` các bảng Gold đã ghi về
+  version trước publish (log `gold_rolled_back`) để dọn dòng batch lỗi. Người đọc vẫn ở batch cũ.
+- **Sau kích hoạt** (message có "batch ĐÃ kích hoạt, không rollback"): batch mới đầy đủ và đang
+  được dùng; job KHÔNG RESTORE (RESTORE lúc này sẽ để con trỏ trỏ vào batch đã bị xoá). Kiểm tra
+  `SELECT * FROM <c>.ops.published_batches ORDER BY published_at DESC LIMIT 1`, đối chiếu số liệu,
+  rồi chạy lại job để ghi SUCCESS (tạo batch mới cùng nội dung).
+- **View gold_serving lỗi** (`ServingViewsInvalid`, message có "view gold_serving cần sửa"): batch
+  đã kích hoạt nhưng view thiếu / không truy vấn được (vd: bảng mới, cột đổi kiểu). Sửa nguyên nhân
+  rồi chạy `03_gold/02_dashboard_views` hoặc chạy lại job.
 - `message` có "ROLLBACK FAILED": rollback tự động cũng lỗi -> làm tay theo Cách 2.
-- Cách 1 (thường dùng): chạy lại job. Publish idempotent (MERGE / replaceWhere / overwrite từ
-  bản stage đã đạt) nên kết quả hội tụ.
+- Cách 1 (thường dùng): chạy lại job. Publish idempotent (batch mới thay batch cũ, dòng batch cũ
+  được dọn sau kích hoạt) nên kết quả hội tụ.
 - Cách 2 (cần quay lại ngay): version trước publish được lưu ở `ops.publish_versions`:
   ```sql
   SELECT table_name, version_before FROM <c>.ops.publish_versions WHERE run_id = '<run_id>';
   RESTORE TABLE <table_name> TO VERSION AS OF <version_before>;   -- từng bảng
   ```
   `version_before` NULL = bảng được tạo trong lần chạy đó → DROP nếu cần.
+
+## 5b. `WriterBusy` (khoá ghi `ops.writer_lock`)
+Mọi job ghi (daily, chạy tay Silver / Gold, backfill reset, bảo trì OPTIMIZE / VACUUM) giữ chung
+1 khoá. Job thứ 2 dừng ngay với `WriterBusy`, không ghi gì.
+- Có job khác đang chạy thật: chờ nó xong rồi chạy lại.
+- Khoá treo (job trước bị kill, không nhả khoá): khoá tự hết hạn sau 6 giờ (`expires_at`). Cần
+  gỡ sớm, sau khi CHẮC CHẮN không còn job nào chạy:
+  ```sql
+  SELECT * FROM <c>.ops.writer_lock;
+  DELETE FROM <c>.ops.writer_lock WHERE owner = '<owner>';
+  ```
 
 ## 6. Correction / backfill ngày cũ (prod)
 Job daily tự nhận diện file sửa: Bronze có file nạp SAU lần Silver SUCCESS của ngày đó.

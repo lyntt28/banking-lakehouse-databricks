@@ -36,6 +36,7 @@ from common.batch import (
 )
 from common.delta_io import merge_upsert, overwrite, overwrite_date, scd2_upsert
 from common.dq import dq_summary, should_stop
+from common.lock import writer_lock
 from common.names import fq
 from common.ops_log import StepRecorder, log
 from common.silver import CUSTOMER_TRACKED, ORDER, TABLES, prepare_silver, quarantine_records
@@ -223,6 +224,11 @@ def process_day(spark: SparkSession, cfg: SilverConfig, day: str, rec: StepRecor
 
 def run(spark: SparkSession, cfg: SilverConfig) -> list[str]:
     """Xử lý các ngày chờ, tăng dần. Trả về danh sách ngày đã SUCCESS. Lỗi -> raise."""
+    with writer_lock(spark, cfg.catalog, "silver"):
+        return _run(spark, cfg)
+
+
+def _run(spark: SparkSession, cfg: SilverConfig) -> list[str]:
     ensure_tables(spark, cfg)
     bronze_dates = [r[0] for r in spark.table(cfg.t("bronze", "loans"))
                     .select("_as_of_date").distinct().collect()]

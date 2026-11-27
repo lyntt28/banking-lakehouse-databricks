@@ -108,7 +108,8 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [x] 3 AI/BI dashboards (Card, Overdue, Deposit) rebuilt from the original Chart.js dashboards: same order, chart types and colours (`dashboards/`, deployed by the bundle) — not yet opened on a workspace
 - [x] Gold ML feature table + insurance cross-sell propensity model (MLflow, UC registry, scored list) — run on Databricks pending
 - [x] CD: main → test (deploy + run job as smoke test) → manual approval → prod, OIDC or token auth (needs GitHub environments + secrets)
-- [x] Unity Catalog governance as code: RBAC grants, PII column masks + tags, branch row filter (dry-run on Free Edition)
+- [x] Unity Catalog governance as code: RBAC grants (readers only see `gold_serving` views), PII column masks + tags, branch row filter (dry-run on Free Edition)
+- [x] Atomic Gold publish: batch IDs + activation pointer (`ops.published_batches`), serving views, rollback only before activation, shared writer lock across jobs (ADR-012) — integration-tested on local Delta, run on Databricks pending
 - [x] Performance tuning code: liquid clustering, OPTIMIZE/VACUUM weekly job, before/after benchmark notebook (numbers pending a Databricks run)
 - [ ] Azure Databricks deployment (ADLS Gen2, Terraform, service principal)
 - [ ] Streaming AML alerts

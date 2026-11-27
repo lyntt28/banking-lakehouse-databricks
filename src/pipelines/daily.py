@@ -18,6 +18,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
 from common.batch import corrected_days, pending_dates, watermark
+from common.lock import writer_lock
 from common.ops_log import log
 from common.silver import ORDER, TABLES
 from pipelines import gold, silver
@@ -45,6 +46,12 @@ def find_corrections(spark: SparkSession, cfg: silver.SilverConfig) -> list[str]
 
 
 def run(spark: SparkSession, cfg: silver.SilverConfig) -> list[str]:
+    # 1 khoá cho cả lần chạy: job bảo trì / backfill / chạy tay không chen giữa Silver và Gold
+    with writer_lock(spark, cfg.catalog, "daily"):
+        return _run(spark, cfg)
+
+
+def _run(spark: SparkSession, cfg: silver.SilverConfig) -> list[str]:
     silver.ensure_tables(spark, cfg)
     if cfg.as_of_date:
         days = [cfg.as_of_date]

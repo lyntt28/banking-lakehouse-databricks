@@ -131,8 +131,12 @@ databricks bundle run banking_lakehouse_daily -t dev
 **Bảng trạng thái**
 - `ops.pipeline_runs`: mỗi ngày dữ liệu × layer (silver/gold) × lần chạy: RUNNING → SUCCESS/FAILED.
   Watermark = ngày SUCCESS lớn nhất. Lần đầu nâng cấp (chưa có bảng) → suy từ dữ liệu sẵn có.
-- `ops.published_batches`: ngày Gold đã qua gate đối soát (kèm số liệu kiểm tra dạng JSON).
-  Consumer (ML) chỉ dùng ngày trong bảng này và dừng nếu batch mới nhất cũ hơn `max_gold_age_days`.
+- `ops.published_batches`: con trỏ kích hoạt batch Gold (as_of_date, run_id, published_at, số
+  liệu gate dạng JSON). Batch đang dùng của ngày D = dòng `published_at` mới nhất của D.
+  Consumer (dashboard, ML) đọc schema `gold_serving` (view chỉ thấy batch đang dùng, không đọc
+  bảng `gold` trực tiếp) và ML dừng nếu batch mới nhất cũ hơn `max_gold_age_days`.
+- `ops.writer_lock`: khoá ghi dùng chung cho daily / backfill / bảo trì / chạy tay
+  (`max_concurrent_runs: 1` chỉ chặn trong 1 job). Job thứ 2 dừng với `WriterBusy`.
 
 **Luồng** (task `silver_gold` → `src/pipelines/daily.py`): với từng ngày chờ, chạy Silver
 rồi Gold ngay, sau đó mới sang ngày sau. Bắt buộc xen kẽ vì Silver snapshot (TK, thẻ) là MERGE
@@ -147,9 +151,11 @@ chỉ giữ trạng thái mới nhất: Gold ngày D phải dựng trước khi 
    `ref_targets`) → FAILED, dừng; các ngày sau **không** chạy (SCD2 cần đúng thứ tự).
 2. Gold: tính mart dùng để đối soát → ghi `gold_stage` → đối soát (dư nợ Silver–Gold, KPI thẻ,
    tiền gửi bang1247) → lệch thì dừng, **bảng Gold mà dashboard đọc không bị đụng tới**;
-   đạt thì mới publish vào `gold` và ghi `ops.published_batches`.
-   Lưu ý: publish ghi nhiều bảng lần lượt (Delta atomic theo từng bảng). Nếu lỗi giữa chừng
-   (hạ tầng), chạy lại ngày đó: mọi bước publish idempotent (replaceWhere / MERGE / overwrite).
+   đạt thì mới publish: ghi THÊM dòng của batch mới (`batch_id`) vào `gold` (vô hình với người
+   đọc), rồi kích hoạt bằng 1 dòng vào `ops.published_batches` (1 commit = nguyên tử: người đọc
+   thấy toàn bộ batch mới hoặc toàn bộ batch cũ), rồi dọn dòng batch cũ và kiểm tra view
+   `gold_serving`. Lỗi trước kích hoạt → RESTORE dọn batch lỗi; lỗi sau kích hoạt → không
+   rollback, run FAILED để kiểm tra (`docs/incident_runbook.md` mục 5).
 
 | Tình huống | Làm gì | Cơ chế |
 |---|---|---|

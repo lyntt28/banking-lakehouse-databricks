@@ -6,11 +6,16 @@ unit test kiểm tra nội dung câu lệnh và logic che/lọc (chạy biểu t
 Nhóm (tạo ở Account Console / SCIM, code chỉ GRANT):
     bank_admins       toàn quyền catalog
     data_engineers    đọc/ghi bronze, silver, gold, ops; thấy PII
-    risk_analysts     đọc silver, gold; PII bị che; thấy mọi chi nhánh; ở ops chỉ đọc bảng
-                      kết quả DQ / đối soát / batch (KHÔNG đọc dq_quarantine - record_json
-                      chứa PII gốc chưa che)
-    branch_users      chỉ đọc các bảng gold CÓ row filter chi nhánh + dim không nhạy cảm
-                      (cấp theo bảng, không cấp SELECT cả schema gold)
+    risk_analysts     đọc silver, gold_serving + view dashboard gold.v_*; PII bị che; thấy mọi
+                      chi nhánh; ở ops chỉ đọc bảng kết quả DQ / đối soát / batch (KHÔNG đọc
+                      dq_quarantine - record_json chứa PII gốc chưa che)
+    branch_users      chỉ đọc view gold_serving của bảng CÓ row filter chi nhánh + dim không
+                      nhạy cảm (cấp theo view, không cấp SELECT cả schema)
+
+Người đọc KHÔNG đọc bảng `gold` trực tiếp: bảng gold chứa cả dòng của batch đang ghi / batch cũ
+chưa dọn (common/serving.py). Chỉ view gold_serving lọc đúng batch đã kích hoạt. View Unity
+Catalog chạy bằng quyền chủ view, còn row filter / column mask trên bảng gốc vẫn tính theo
+người đang truy vấn -> lọc chi nhánh + che PII vẫn áp dụng khi đọc qua view.
 
 Least privilege: SELECT cấp theo BẢNG ở TABLE_GRANTS, schema chỉ cấp USE SCHEMA cho nhóm
 đọc giới hạn. Bảng mới thêm vào gold/ops mặc định KHÔNG lộ cho branch_users / risk_analysts.
@@ -19,6 +24,8 @@ Least privilege: SELECT cấp theo BẢNG ở TABLE_GRANTS, schema chỉ cấp U
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from common.dashboard_views import VIEWS
 
 GROUPS = ["bank_admins", "data_engineers", "risk_analysts", "branch_users"]
 PII_READERS = ["bank_admins", "data_engineers"]      # thấy dữ liệu gốc
@@ -30,9 +37,9 @@ SCHEMA_GRANTS: dict[str, dict[str, list[str]]] = {
     "bronze": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"]},
     "silver": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"],
                "risk_analysts": ["USE SCHEMA", "SELECT"]},
+    # risk_analysts: chỉ USE SCHEMA để đọc view dashboard gold.v_* (cấp theo view bên dưới)
     "gold": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"],
-             "risk_analysts": ["USE SCHEMA", "SELECT"],
-             "branch_users": ["USE SCHEMA"]},
+             "risk_analysts": ["USE SCHEMA"]},
     # view batch đang dùng (common.serving): dashboard / người đọc chỉ đọc ở đây
     "gold_serving": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"],
                      "risk_analysts": ["USE SCHEMA", "SELECT"],
@@ -57,9 +64,19 @@ TABLE_GRANTS: dict[str, list[str]] = {
     "risk_analysts": ["ops.dq_results", "ops.recon_card_kpi", "ops.recon_deposit",
                       "ops.pipeline_runs", "ops.published_batches", "ops.task_runs",
                       "ops.file_manifest"],
-    "branch_users": BRANCH_FILTERED + ["gold.dim_date", "gold.dim_branch", "gold.dim_product"]
-    + [t.replace("gold.", "gold_serving.", 1) for t in BRANCH_FILTERED
-       + ["gold.dim_date", "gold.dim_branch", "gold.dim_product"]],
+    "branch_users": [t.replace("gold.", "gold_serving.", 1) for t in BRANCH_FILTERED
+                     + ["gold.dim_date", "gold.dim_branch", "gold.dim_product"]],
+}
+# view dashboard (common.dashboard_views) nằm ở schema gold nhưng đọc gold_serving
+TABLE_GRANTS["risk_analysts"] += [f"gold.{name}" for _, _, name, _, _ in VIEWS]
+
+# Quyền bản cũ từng cấp (đọc thẳng bảng gold): thu hồi để chạy lại governance là sạch.
+# REVOKE quyền chưa từng cấp là no-op.
+SCHEMA_REVOKES: dict[str, dict[str, list[str]]] = {
+    "gold": {"risk_analysts": ["SELECT"]},
+}
+TABLE_REVOKES: dict[str, list[str]] = {
+    "branch_users": BRANCH_FILTERED + ["gold.dim_date", "gold.dim_branch", "gold.dim_product"],
 }
 
 
@@ -170,6 +187,12 @@ def statements(catalog: str) -> list[str]:
     for group, tables in TABLE_GRANTS.items():
         for table in tables:
             out.append(f"GRANT SELECT ON TABLE {catalog}.{table} TO `{group}`")
+    for schema, revokes in SCHEMA_REVOKES.items():
+        for group, privs in revokes.items():
+            out.append(f"REVOKE {', '.join(privs)} ON SCHEMA {catalog}.{schema} FROM `{group}`")
+    for group, tables in TABLE_REVOKES.items():
+        for table in tables:
+            out.append(f"REVOKE SELECT ON TABLE {catalog}.{table} FROM `{group}`")
     return out
 
 

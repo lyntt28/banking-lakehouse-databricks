@@ -27,7 +27,7 @@ Each decision: context → decision → alternatives considered → consequences
 - **Consequences:** Reconciliation is `bronze = silver + quarantine + exact duplicates`, checked in every run.
 
 ## ADR-006: Idempotent writes
-- **Decision:** Silver and Gold facts use `MERGE` on the business key (transactions insert-only). Customers use SCD2 (ADR-003). Gold marts are recomputed for the whole day and written with `replaceWhere as_of_date = <day>`. Small dimensions are overwritten.
+- **Decision:** Silver and Gold facts use `MERGE` on the business key (transactions insert-only). Customers use SCD2 (ADR-003). Gold marts are recomputed for the whole day and published as a new batch (ADR-012). Silver small dimensions are overwritten.
 - **Consequences:** Re-running any day gives the same tables. Late data for a past day needs that day re-run.
 
 ## ADR-007: Reconcile Gold against the source system's own summary files
@@ -37,7 +37,7 @@ Each decision: context → decision → alternatives considered → consequences
 
 ## ADR-008: Governance as code (Unity Catalog)
 - **Context:** Customer PII (name, ID number, phone, email, address, date of birth, income) must not be visible to analysts or branch staff, and branch staff must only see their own branch.
-- **Decision:** `src/common/governance.py` generates all SQL: catalog/schema GRANTs per group (least privilege), column masks as SQL functions in `ops` (keep last 3-4 digits, first letter of each name word, year of birth only, income hidden), `pii` column tags, and a row filter on `branchnbr` driven by `ops.user_branch`. The `governance` job task re-applies everything after Gold (Gold overwrites some tables).
+- **Decision:** `src/common/governance.py` generates all SQL: catalog/schema GRANTs per group (least privilege), column masks as SQL functions in `ops` (keep last 3-4 digits, first letter of each name word, year of birth only, income hidden), `pii` column tags, and a row filter on `branchnbr` driven by `ops.user_branch`. The `governance` job task re-applies everything after Gold. Read-only groups get `gold_serving` views (and the dashboard views `gold.v_*`), never raw `gold` tables, which also hold unpublished batches; old raw-table grants are revoked. Row filters and masks stay on the base tables and still apply through the views.
 - **Pipeline identity:** once governance is on, Silver/Gold refuse to run unless the job identity is in `bank_admins` or `data_engineers`; otherwise SCD2 would hash masked values and Gold would read row-filtered tables.
 - **Free Edition:** account groups are not available, so `governance_dry_run` defaults to `true` (prints SQL only). Set it to `false` on a workspace with groups.
 
@@ -55,3 +55,8 @@ Each decision: context → decision → alternatives considered → consequences
 - **Context:** The generator plants a buying pattern (income, card grade, travel / health / education spend, segment). A short daily history has few new purchases, so "will buy in the next 90 days" has too few positives at first.
 - **Decision:** Default label `holder` (customer already holds an in-force policy) trains a look-alike propensity model; `future` (new policy within `horizon_days` after `as_of`, existing holders removed) is ready for when history is long enough. Features are point-in-time (customer SCD2 version valid at `as_of`, transactions ≤ `as_of`) and never read insurance tables. Model: scikit-learn HistGradientBoosting (balanced classes), tracked in MLflow, registered in Unity Catalog, scores written for non-holders with deciles.
 - **Consequences:** Metrics reported: ROC-AUC, PR-AUC, lift in the top 10%. On generated data the test asserts ROC-AUC > 0.65 and lift > 1.5.
+
+## ADR-012: Atomic Gold publish with batch IDs and one writer at a time
+- **Context:** Gold publish writes 18 tables one after another. Overwriting them in place let a reader see some new and some old tables, and a correction for a day already published could not be told apart from the old version.
+- **Decision:** Every Gold row carries `batch_id` (= Gold run_id). Publish only appends the new batch; activation is one append to `ops.published_batches` (one Delta commit). Readers use `gold_serving` views that pick the active batch per day; old batch rows are deleted after activation. A failure before activation is cleaned by `RESTORE`; a failure after activation is NOT rolled back (the pointer already targets the new batch) and the run is marked FAILED. Serving views are validated after each publish and a broken view fails the run. All writing jobs (daily, manual Silver/Gold, backfill reset, maintenance) share a lease lock in `ops.writer_lock`, because `max_concurrent_runs: 1` only covers one job.
+- **Consequences:** Readers never see a half-written batch. Gold tables briefly hold two batches per day (storage until cleanup). A crashed job's lock expires after 6 hours, or an operator deletes it (incident runbook 5b).
