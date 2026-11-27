@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -40,7 +41,7 @@ from common.batch import (
 )
 from common.dates import check_date
 from common.delta_io import overwrite, overwrite_date
-from common.lock import writer_lock
+from common.lock import LockLost, ensure_held, writer_lock
 from common.names import fq
 from common.ops_log import StepRecorder, log
 
@@ -98,6 +99,15 @@ def assert_reproducible(day: str, silver_watermark: str | None) -> None:
         raise NotReproducible(
             f"Không dựng Gold {day}: Silver đã ở {silver_watermark}. Dựng lại ngày cũ = replay "
             "Silver + Gold từ ngày đó (dev/test: 05_backfill reset=true), xem docs/runbook.md")
+
+
+def as_money(v) -> Decimal:
+    """Tổng tiền từ Spark (Decimal / None) -> Decimal. Không đi qua float."""
+    if v is None:
+        return Decimal(0)
+    if isinstance(v, float):
+        raise TypeError("Số tiền phải là DECIMAL, không phải float/double (mất độ chính xác)")
+    return Decimal(v)
 
 
 def gate_errors(checks: dict) -> list[str]:
@@ -179,9 +189,11 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         overwrite_date(recon_dep, ops("recon_deposit"), "as_of_date", day_s)
 
         checks = {
-            "silver_balance": float(loans_day.agg(
-                F.sum(F.coalesce("ducuoiqd", "ducuoi"))).first()[0] or 0),
-            "gold_balance": float(overdue_day.agg(F.sum("portfolio_balance")).first()[0] or 0),
+            # Decimal (không float): tổng dư nợ VND có thể > 2^53, float sẽ mất đơn vị lẻ và
+            # so sánh bằng nhau không còn chính xác
+            "silver_balance": as_money(loans_day.agg(
+                F.sum(F.coalesce("ducuoiqd", "ducuoi"))).first()[0]),
+            "gold_balance": as_money(overdue_day.agg(F.sum("portfolio_balance")).first()[0]),
             "recon_card_bad": spark.table(ops("recon_card_kpi"))
             .filter((F.col("as_of_date") == day)
                     & ~F.col("status").isin("MATCH", "WITHIN_TOLERANCE")).count(),
@@ -206,6 +218,7 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         return sv.candidate(spark, cat, table, day_s, batch)
 
     with rec.step("gold:publish") as s:
+        ensure_held(spark, cfg.catalog)   # mất khoá ghi -> dừng trước khi ghi Gold
         record_versions(spark, cfg.catalog, rec.run_id, day_s, "gold",
                         [G(t) for t in PUBLISHED_TABLES])
         put(dim_date, "dim_date")
@@ -251,9 +264,10 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
             .withColumn("as_of_date", day), "dep_mart_new_accounts")
 
         s.rows_out = fact_loan_day.count()
+        ensure_held(spark, cfg.catalog)   # mất khoá giữa chừng -> KHÔNG kích hoạt (rollback)
         # KÍCH HOẠT batch: từ commit này người đọc gold_serving thấy toàn bộ batch mới.
         # Là câu lệnh CUỐI của bước publish; mọi lỗi sau đây không được rollback Gold.
-        (spark.createDataFrame([(day_s, rec.run_id, json.dumps(checks))],
+        (spark.createDataFrame([(day_s, rec.run_id, json.dumps(checks, default=str))],
                                "as_of_date string, run_id string, checks string")
          .select(F.col("as_of_date").cast("date"), "run_id",
                  F.current_timestamp().alias("published_at"), "checks")
@@ -299,6 +313,14 @@ def _run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
             build_and_publish(spark, cfg, day, rec, state)
         except Exception as e:
             msg = f"{type(e).__name__}: {e}"
+            if isinstance(e, LockLost):
+                # job khác đang giữ khoá: RESTORE lúc này có thể xoá dữ liệu của job đó.
+                # Batch này chưa kích hoạt -> vô hình; lần publish sau của ngày này dọn nó.
+                msg += " | mất khoá ghi, không rollback (batch chưa kích hoạt, vô hình)"
+                log("gold_lock_lost", as_of_date=day, run_id=rec.run_id, error=str(e))
+                rec.flush(spark, cfg.t("ops", "task_runs"))
+                record_run(spark, cfg.catalog, day, "gold", rec.run_id, "FAILED", msg)
+                raise
             if failure_action(state.activated) == "keep_active":
                 # con trỏ đã trỏ batch mới, dữ liệu batch đầy đủ -> KHÔNG RESTORE (sẽ làm
                 # gold_serving trỏ vào batch đã bị xoá). Báo FAILED để người vận hành kiểm tra.

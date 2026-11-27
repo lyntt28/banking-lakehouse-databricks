@@ -135,7 +135,7 @@ def test_rerun_last_day_is_idempotent(pipeline):
     def counts():
         return {t: pipeline.table(f"{CATALOG}.{t}").count()
                 for t in ["silver.core_customers", "silver.core_accounts",
-                          "gold.loan_fact_daily", "gold.dep_mart_daily"]}
+                          "gold_serving.loan_fact_daily", "gold_serving.dep_mart_daily"]}
 
     before = counts()
     d = DAYS[-1]

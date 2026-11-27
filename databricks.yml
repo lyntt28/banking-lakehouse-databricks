@@ -17,7 +17,10 @@ variables:
     default: alerts@example.com
 
   warehouse_id:
-    description: SQL warehouse chạy 3 dashboard AI/BI (Free Edition có sẵn "Serverless Starter Warehouse")
+    description: >
+      SQL warehouse chạy dashboard AI/BI. Mặc định tra theo tên warehouse có sẵn của Free
+      Edition; workspace khác truyền ID khi deploy: --var warehouse_id=<id>
+      (hoặc biến môi trường BUNDLE_VAR_warehouse_id trong CD), không cần sửa file.
     lookup:
       warehouse: Serverless Starter Warehouse
   governance_dry_run:

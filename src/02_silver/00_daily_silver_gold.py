@@ -14,6 +14,8 @@ dbutils.widgets.text("max_fail_pct", "5")
 dbutils.widgets.text("expected_lag_days", "")   # "" = tắt ngày dự kiến / SLA
 dbutils.widgets.text("sla_hour", "9")
 dbutils.widgets.text("daily_from", "")          # "" = tự suy ra
+# smoke test CD: true = không xử lý ngày nào thì FAIL (job xanh phải chứng minh có xử lý)
+dbutils.widgets.text("require_progress", "false")
 
 # COMMAND ----------
 
@@ -25,12 +27,15 @@ src_dir = str(Path(os.getcwd()).parents[0])
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
+from common.batch import watermark
 from common.dates import check_date
 from common.governance import assert_pipeline_identity
 from pipelines import daily
 from pipelines.silver import SilverConfig
 
 as_of = dbutils.widgets.get("as_of_date").strip()
+if as_of == "latest":   # smoke test: chạy lại ngày Silver mới nhất
+    as_of = daily.resolve_as_of(as_of, watermark(spark, dbutils.widgets.get("catalog"), "silver"))
 cfg = SilverConfig(catalog=dbutils.widgets.get("catalog"),
                    as_of_date=check_date(as_of) if as_of else "",
                    max_fail_pct=float(dbutils.widgets.get("max_fail_pct")),
@@ -40,4 +45,6 @@ cfg = SilverConfig(catalog=dbutils.widgets.get("catalog"),
                    daily_from=dbutils.widgets.get("daily_from").strip())
 assert_pipeline_identity(spark, cfg.catalog)
 days = daily.run(spark, cfg)
+if dbutils.widgets.get("require_progress").strip() == "true":
+    daily.assert_progress(days)
 print("processed:", days)

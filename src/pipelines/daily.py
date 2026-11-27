@@ -28,6 +28,27 @@ class CorrectionNeedsReplay(RuntimeError):
     """File sửa cho ngày cũ hơn watermark Silver: phải replay từ ngày đó, không tự xử lý."""
 
 
+class NoProgress(RuntimeError):
+    """Smoke test: job xanh nhưng không xử lý ngày nào -> không chứng minh được gì."""
+
+
+def resolve_as_of(value: str, silver_watermark: str | None) -> str:
+    """`latest` = chạy lại ngày Silver mới nhất (idempotent): smoke test luôn đi qua đủ
+    Silver -> gate -> publish Gold, kể cả khi không có file mới."""
+    if value != "latest":
+        return value
+    if not silver_watermark:
+        raise NoProgress("as_of_date=latest nhưng chưa có ngày Silver SUCCESS nào: nạp dữ liệu "
+                         "và chạy job lần đầu trước khi smoke test")
+    return silver_watermark
+
+
+def assert_progress(days: list[str]) -> None:
+    if not days:
+        raise NoProgress("require_progress=true nhưng job không xử lý ngày nào "
+                         "(không có ngày chờ / file chưa về)")
+
+
 def find_corrections(spark: SparkSession, cfg: silver.SilverConfig) -> list[str]:
     """Ngày Silver SUCCESS mà Bronze nhận thêm file sau thời điểm đó."""
     runs = cfg.t("ops", "pipeline_runs")

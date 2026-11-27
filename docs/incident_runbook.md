@@ -64,10 +64,15 @@ dở dang luôn vô hình. Xem `pipeline_runs.message` để biết lỗi xảy 
   ```
   `version_before` NULL = bảng được tạo trong lần chạy đó → DROP nếu cần.
 
-## 5b. `WriterBusy` (khoá ghi `ops.writer_lock`)
+## 5b. `WriterBusy` / `LockLost` (khoá ghi `ops.writer_lock`)
 Mọi job ghi (daily, chạy tay Silver / Gold, backfill reset, bảo trì OPTIMIZE / VACUUM) giữ chung
 1 khoá. Job thứ 2 dừng ngay với `WriterBusy`, không ghi gì.
 - Có job khác đang chạy thật: chờ nó xong rồi chạy lại.
+- `LockLost`: job chạy quá hạn khoá (hoặc ai đó xoá khoá) và job khác đã lấy khoá. Job dừng ngay
+  trước commit tiếp theo (publish Silver / kích hoạt batch Gold), KHÔNG rollback (RESTORE lúc này
+  có thể xoá dữ liệu của job đang giữ khoá). Dòng batch Gold chưa kích hoạt vô hình với người
+  đọc và được dọn ở lần publish sau. Chờ job kia xong rồi chạy lại. Job chạy lâu bình thường
+  không bị mất khoá: mỗi commit quan trọng gia hạn khoá thêm 6 giờ.
 - Khoá treo (job trước bị kill, không nhả khoá): khoá tự hết hạn sau 6 giờ (`expires_at`). Cần
   gỡ sớm, sau khi CHẮC CHẮN không còn job nào chạy:
   ```sql

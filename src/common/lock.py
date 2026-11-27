@@ -12,6 +12,11 @@ Hai job MERGE cùng lúc: Delta optimistic concurrency cho 1 commit thắng, com
 đột -> cũng là WriterBusy. Nhả khoá = DELETE dòng của chính mình.
 
 Re-entrant trong cùng process: daily -> silver.run / gold.run không tự khoá lại chính mình.
+
+Fencing: khoá có hạn (TTL). Job chạy quá hạn có thể đã bị job khác lấy khoá. Trước mỗi commit
+quan trọng (publish Silver, kích hoạt batch Gold) job gọi `ensure_held`: gia hạn khoá nếu còn là
+chủ, ngược lại dừng với `LockLost` -> không bao giờ ghi khi đã mất khoá. Gọi ở đầu mỗi ngày dữ
+liệu cũng là heartbeat: job chạy nhiều ngày liên tiếp không bị hết hạn giữa chừng.
 """
 
 from __future__ import annotations
@@ -34,11 +39,16 @@ CREATE TABLE IF NOT EXISTS {table} (
 ) USING DELTA
 """
 
-_held: dict[tuple[str, str], int] = {}   # (catalog, lock_name) -> độ sâu re-entrant
+# (catalog, lock_name) -> [độ sâu re-entrant, owner, ttl_hours]
+_held: dict[tuple[str, str], list] = {}
 
 
 class WriterBusy(RuntimeError):
     """Job ghi khác đang giữ khoá: dừng, không ghi chồng (runbook: chờ / kiểm tra khoá treo)."""
+
+
+class LockLost(RuntimeError):
+    """Khoá đã hết hạn / bị job khác lấy trong lúc job này còn chạy: dừng trước khi ghi."""
 
 
 def _table(catalog: str) -> str:
@@ -76,19 +86,42 @@ def release(spark, catalog: str, owner: str, lock_name: str = LOCK_NAME) -> None
               f"AND owner = '{owner}'")
 
 
+def renew(spark, catalog: str, owner: str, ttl_hours: int = DEFAULT_TTL_HOURS,
+          lock_name: str = LOCK_NAME) -> None:
+    """Gia hạn khoá nếu mình vẫn là chủ và khoá chưa hết hạn; ngược lại LockLost."""
+    t = _table(catalog)
+    spark.sql(f"UPDATE {t} SET expires_at = current_timestamp() + INTERVAL {int(ttl_hours)} HOURS "
+              f"WHERE lock_name = '{lock_name}' AND owner = '{owner}' "
+              "AND expires_at >= current_timestamp()")
+    row = spark.sql(f"SELECT owner, job, expires_at, expires_at >= current_timestamp() AS valid "
+                    f"FROM {t} WHERE lock_name = '{lock_name}'").first()
+    if row is None or row.owner != owner or not row.valid:
+        holder = f"job '{row.job}'" if row is not None and row.owner != owner else "không ai"
+        raise LockLost(f"Mất khoá {lock_name} (hiện do {holder} giữ): dừng, không ghi tiếp. "
+                       "Kiểm tra job đang chạy rồi chạy lại (docs/incident_runbook.md mục 5b)")
+
+
+def ensure_held(spark, catalog: str, lock_name: str = LOCK_NAME) -> None:
+    """Gọi ngay trước commit quan trọng. Không giữ khoá trong process (vd: unit test gọi thẳng
+    hàm publish) -> bỏ qua."""
+    held = _held.get((catalog, lock_name))
+    if held:
+        renew(spark, catalog, held[1], held[2], lock_name)
+
+
 @contextlib.contextmanager
 def writer_lock(spark, catalog: str, job: str, ttl_hours: int = DEFAULT_TTL_HOURS,
                 lock_name: str = LOCK_NAME):
     key = (catalog, lock_name)
     if _held.get(key):
-        _held[key] += 1
+        _held[key][0] += 1
         try:
             yield
         finally:
-            _held[key] -= 1
+            _held[key][0] -= 1
         return
     owner = acquire(spark, catalog, job, ttl_hours, lock_name)
-    _held[key] = 1
+    _held[key] = [1, owner, ttl_hours]
     try:
         yield
     finally:

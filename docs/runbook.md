@@ -26,7 +26,7 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
 - **NẾU LỖI:** không có quyền tạo catalog → Catalog → + → Create catalog `bank_dev`, chạy lại.
 
 ## 2. `src/00_setup/02_generate_sample_data`
-- **MỤC ĐÍCH:** giả lập hệ thống nguồn đẩy file mỗi ngày (13 bảng, có lỗi cố ý) +
+- **MỤC ĐÍCH:** giả lập hệ thống nguồn đẩy file mỗi ngày (15 nguồn, có lỗi cố ý) +
   `history_months` snapshot cuối tháng để có MoM / YoY.
 - **Widget:** `catalog = bank_dev`, `start_date = 2026-11-01`, `days = 3`, `history_months = 13`
 - **KIỂM TRA:**
