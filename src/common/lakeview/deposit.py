@@ -24,7 +24,7 @@ DEP_COLORS = {   # reference/dashboards/deposit/dashboardv2.js, api_server.py
 def deposit_dashboard(catalog: str) -> dict:
     """1 trang, cùng kiểu với Card: header + bộ lọc (Date, Region, Branch) bên phải, các mục
     có tiêu đề 🟧. Số dư: nghìn USD (như bản gốc 'Unit: USD 1,000')."""
-    G, S = _q(catalog, "gold"), _q(catalog, "silver")
+    G, S = _q(catalog, "gold_serving"), _q(catalog, "silver")
     d = Dash("retail_deposit", "Retail Deposit Performance")
     d.param("report_date", "Report date", "DATE", "now/d")
     d.param("region", "Region", "STRING", "all")

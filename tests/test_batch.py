@@ -75,3 +75,41 @@ def test_corrected_days_detects_files_loaded_after_silver_success():
               "2026-11-26": "2026-11-27 00:30"}     # chưa có Silver -> ngày mới, không phải sửa
     assert corrected_days(loaded, done) == ["2026-11-25"]
     assert corrected_days(loaded, {}) == []
+
+
+# ---- lịch lịch sử (cuối tháng) vs lịch hằng ngày; ngày dự kiến + SLA
+def test_history_month_ends_do_not_require_mid_month_days():
+    from common.batch import daily_start
+
+    hist = ["2025-10-31", "2025-11-30", "2025-12-31", "2026-01-31"]
+    daily = ["2026-02-01", "2026-02-02", "2026-02-03"]
+    assert daily_start(hist + daily) == "2026-01-31"
+    # backfill lịch sử từ đầu: chỉ các ngày cuối tháng, rồi từng ngày
+    assert pending_dates(hist + daily, None) == hist + daily
+    # đang giữa lịch sử: ngày kế tiếp là cuối tháng sau, không phải 01/12
+    assert pending_dates(hist + daily, "2025-11-30") == hist[2:] + daily
+    # trong giai đoạn hằng ngày vẫn bắt được ngày thiếu
+    assert pending_dates(hist + ["2026-02-01", "2026-02-03"], "2026-01-31") == daily
+    # chỉ định rõ ngày bắt đầu hằng ngày
+    assert pending_dates(["2026-01-31", "2026-02-02"], None, daily_from="2026-02-01") == \
+        ["2026-01-31", "2026-02-01", "2026-02-02"]
+
+
+def test_expected_until_detects_today_without_any_file():
+    # file mới nhất là 25/11, sáng 27/11 phải có file 26/11 -> 26/11 nằm trong danh sách chờ
+    assert pending_dates(["2026-11-24", "2026-11-25"], "2026-11-25",
+                         expected_until="2026-11-26") == ["2026-11-26"]
+    assert pending_dates(["2026-11-24", "2026-11-25"], "2026-11-25") == []
+    assert pending_dates(["2026-11-26"], "2026-11-26", expected_until="2026-11-26") == []
+
+
+def test_expected_processing_date_and_sla():
+    from datetime import datetime
+
+    from common.batch import expected_processing_date, missing_status, sla_deadline
+
+    assert expected_processing_date(datetime(2026, 11, 27, 6, 30), 1) == "2026-11-26"
+    assert sla_deadline("2026-11-26", 1, 9) == datetime(2026, 11, 27, 9, 0)
+    assert missing_status("2026-11-26", datetime(2026, 11, 27, 6, 30), 1, 9) == "WAITING"
+    assert missing_status("2026-11-26", datetime(2026, 11, 27, 9, 30), 1, 9) == "LATE"
+    assert missing_status("2026-11-20", datetime(2026, 11, 27, 6, 30), 1, 9) == "LATE"

@@ -74,6 +74,7 @@ def tables(spark, results):
 
 def _local_sql(ds: dict, params: dict) -> str:
     sql = "".join(ds["queryLines"])
+    sql = re.sub(r"\bgold_serving\.", "gold_", sql)
     sql = re.sub(r"\bgold\.", "gold_", sql)
     sql = re.sub(r"\bsilver\.", "silver_", sql)
     sql = re.sub(r"\bops\.", "ops_", sql)

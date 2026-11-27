@@ -52,7 +52,8 @@ def run(spark: SparkSession, cfg: silver.SilverConfig) -> list[str]:
         bronze_dates = [r[0] for r in spark.table(cfg.t("bronze", "loans"))
                         .select("_as_of_date").distinct().collect()]
         silver_wm = watermark(spark, cfg.catalog, "silver")
-        days = pending_dates(bronze_dates, silver_wm)
+        days = pending_dates(bronze_dates, silver_wm, daily_from=cfg.daily_from or None,
+                             expected_until=cfg.expected_until())
         corrections = find_corrections(spark, cfg)
         too_old = [d for d in corrections if silver_wm and d < silver_wm]
         if too_old:
@@ -70,7 +71,10 @@ def run(spark: SparkSession, cfg: silver.SilverConfig) -> list[str]:
             # logic / hạ tầng) -> dựng lại Gold từ Silver hiện có
             gold.run(spark, gold.GoldConfig(catalog=cfg.catalog, as_of_date=silver_wm))
     log("daily_pending", catalog=cfg.catalog, days=days)
+    done = []
     for d in days:
-        silver.run(spark, replace(cfg, as_of_date=d))
+        if not silver.run(spark, replace(cfg, as_of_date=d)):
+            break   # WAITING: file chưa về, chưa tới hạn SLA -> dừng, lần chạy sau làm tiếp
         gold.run(spark, gold.GoldConfig(catalog=cfg.catalog, as_of_date=d))
-    return days
+        done.append(d)
+    return done

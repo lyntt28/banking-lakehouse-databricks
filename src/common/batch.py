@@ -155,29 +155,91 @@ def business_dates(start: str, end: str, holidays: frozenset[str] = frozenset())
     return out
 
 
+def daily_start(received: list[str]) -> str | None:
+    """Ngày bắt đầu lịch gửi HẰNG NGÀY, suy ra từ ngày đã nhận: ngày đầu tiên KHÔNG phải cuối
+    tháng, hoặc ngày kế tiếp cũng có file. Trước đó là lịch sử chỉ có snapshot CUỐI THÁNG
+    (generator --history-months, nguồn cấp lịch sử theo tháng) -> không đòi các ngày giữa tháng.
+    Chỉ có ngày cuối tháng rời rạc -> lịch hằng ngày bắt đầu từ ngày nhận mới nhất."""
+    from datetime import date, timedelta
+
+    days = sorted({check_date(str(d)) for d in received})
+    have = set(days)
+    for d in days:
+        if not _is_month_end(d) or \
+                (date.fromisoformat(d) + timedelta(days=1)).isoformat() in have:
+            return d
+    return days[-1] if days else None
+
+
+def _is_month_end(d: str) -> bool:
+    from datetime import date, timedelta
+
+    return (date.fromisoformat(d) + timedelta(days=1)).day == 1
+
+
+def expected_dates(start: str, end: str, daily_from: str | None,
+                   holidays: frozenset[str] = frozenset()) -> list[str]:
+    """Ngày nguồn PHẢI gửi file trong [start, end]: trước `daily_from` chỉ ngày cuối tháng
+    (lịch snapshot lịch sử), từ `daily_from` mọi ngày nghiệp vụ (lịch xử lý hằng ngày)."""
+    out = business_dates(start, end, holidays)
+    if not daily_from:
+        return out
+    return [d for d in out if d >= daily_from or _is_month_end(d)]
+
+
 def pending_dates(bronze_dates: list[str], watermark: str | None,
                   requested: str | None = None,
-                  holidays: frozenset[str] = frozenset()) -> list[str]:
+                  holidays: frozenset[str] = frozenset(),
+                  daily_from: str | None = None,
+                  expected_until: str | None = None) -> list[str]:
     """Danh sách ngày cần xử lý (tăng dần).
 
     - requested: chạy đúng 1 ngày (rerun / backfill thủ công).
-    - không requested: MỌI ngày theo lịch nghiệp vụ từ sau watermark (chưa có watermark: từ ngày
-      bronze đầu tiên) tới ngày bronze mới nhất. Ngày không có file vẫn nằm trong danh sách ->
-      Silver dừng ở đó với SourceFilesMissing thay vì nhảy qua (watermark không vượt ngày thiếu,
-      file gửi trễ của ngày đó vẫn được xử lý khi về).
+    - không requested: mọi ngày theo lịch (`expected_dates`) từ sau watermark (chưa có
+      watermark: từ ngày bronze đầu tiên) tới max(ngày bronze mới nhất, expected_until).
+      Ngày không có file vẫn nằm trong danh sách -> Silver dừng ở đó với SourceFilesMissing
+      thay vì nhảy qua (watermark không vượt ngày thiếu, file trễ vẫn được xử lý khi về).
+    - daily_from: ngày bắt đầu lịch hằng ngày (trống = suy ra bằng `daily_start`).
+    - expected_until: ngày dữ liệu PHẢI có theo lịch chạy (vd hôm qua). Nhờ đó hôm nay chưa có
+      file nào về vẫn bị phát hiện thiếu (không chỉ dừng ở ngày bronze mới nhất).
     """
     if requested:
         return [check_date(requested)]
     received = sorted({check_date(str(d)) for d in bronze_dates})
     if not received:
-        return []
+        return [check_date(expected_until)] if expected_until and not watermark else []
     if watermark:
         from datetime import date, timedelta
 
         start = (date.fromisoformat(check_date(str(watermark))) + timedelta(days=1)).isoformat()
     else:
         start = received[0]
-    return business_dates(start, received[-1], holidays) if start <= received[-1] else []
+    end = max(received[-1], check_date(expected_until)) if expected_until else received[-1]
+    first_daily = check_date(daily_from) if daily_from else daily_start(received)
+    return expected_dates(start, end, first_daily, holidays) if start <= end else []
+
+
+def expected_processing_date(now_local, lag_days: int = 1) -> str:
+    """Ngày dữ liệu mà lần chạy lúc `now_local` phải xử lý: nguồn chốt số cuối ngày, gửi file
+    sáng hôm sau -> job sáng nay xử lý ngày hôm qua (lag_days = 1)."""
+    from datetime import timedelta
+
+    return (now_local.date() - timedelta(days=lag_days)).isoformat()
+
+
+def sla_deadline(as_of_date: str, lag_days: int, sla_hour: int):
+    """Hạn chót file của ngày `as_of_date` về: (as_of_date + lag_days) lúc sla_hour (giờ VN)."""
+    from datetime import date, datetime, time, timedelta
+
+    d = date.fromisoformat(check_date(as_of_date)) + timedelta(days=lag_days)
+    return datetime.combine(d, time(hour=sla_hour))
+
+
+def missing_status(as_of_date: str, now_local, lag_days: int, sla_hour: int) -> str:
+    """Ngày thiếu file: WAITING (chưa tới hạn, chờ file về - không báo lỗi) hoặc
+    LATE (quá hạn SLA -> FAILED + cảnh báo)."""
+    deadline = sla_deadline(as_of_date, lag_days, sla_hour)
+    return "WAITING" if now_local.replace(tzinfo=None) < deadline else "LATE"
 
 
 def corrected_days(last_loaded: dict[str, object], silver_done_at: dict[str, object]) -> list[str]:

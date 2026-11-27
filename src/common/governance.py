@@ -33,6 +33,10 @@ SCHEMA_GRANTS: dict[str, dict[str, list[str]]] = {
     "gold": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"],
              "risk_analysts": ["USE SCHEMA", "SELECT"],
              "branch_users": ["USE SCHEMA"]},
+    # view batch đang dùng (common.serving): dashboard / người đọc chỉ đọc ở đây
+    "gold_serving": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"],
+                     "risk_analysts": ["USE SCHEMA", "SELECT"],
+                     "branch_users": ["USE SCHEMA"]},
     "silver_stage": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"]},
     "gold_stage": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"]},
     "ops": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE",
@@ -53,7 +57,9 @@ TABLE_GRANTS: dict[str, list[str]] = {
     "risk_analysts": ["ops.dq_results", "ops.recon_card_kpi", "ops.recon_deposit",
                       "ops.pipeline_runs", "ops.published_batches", "ops.task_runs",
                       "ops.file_manifest"],
-    "branch_users": BRANCH_FILTERED + ["gold.dim_date", "gold.dim_branch", "gold.dim_product"],
+    "branch_users": BRANCH_FILTERED + ["gold.dim_date", "gold.dim_branch", "gold.dim_product"]
+    + [t.replace("gold.", "gold_serving.", 1) for t in BRANCH_FILTERED
+       + ["gold.dim_date", "gold.dim_branch", "gold.dim_product"]],
 }
 
 

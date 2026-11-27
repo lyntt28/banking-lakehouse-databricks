@@ -29,7 +29,7 @@ from common.batch import assert_reset_allowed  # noqa: E402
 
 if reset:
     assert_reset_allowed(catalog)
-    for schema in ["silver", "silver_stage", "gold", "gold_stage"]:
+    for schema in ["silver", "silver_stage", "gold", "gold_stage", "gold_serving"]:
         if not spark.catalog.databaseExists(f"{catalog}.{schema}"):
             continue
         for t in spark.sql(f"SHOW TABLES IN {catalog}.{schema}").collect():

@@ -149,8 +149,9 @@ def _checksum(spark, table):
     from pyspark.sql import functions as F
 
     df = spark.table(table)
-    # bỏ cột lineage kỹ thuật (thời điểm nạp, tên file); so nội dung nghiệp vụ
-    cols = sorted(c for c in df.columns if c not in ("_load_ts", "_source_file", "_rescued_data"))
+    # bỏ cột lineage kỹ thuật (thời điểm nạp, tên file, batch publish); so nội dung nghiệp vụ
+    cols = sorted(c for c in df.columns
+                  if c not in ("_load_ts", "_source_file", "_rescued_data", "batch_id"))
     r = df.select(F.count("*").alias("n"),
                   F.sum(F.xxhash64(*cols).cast("decimal(38,0)")).alias("h")).first()
     return (r.n, r.h)
@@ -221,6 +222,15 @@ def test_1_missing_file_stops_at_that_day_then_late_file_is_picked_up(spark, bas
     steps = spark.sql("SELECT step, status FROM ops.task_runs "
                       f"WHERE as_of_date = '{D2}'").collect()
     assert ("file_manifest", "FAILED") in [(r.step, r.status) for r in steps]
+
+    # (1b) bật ngày dự kiến + SLA (prod): sáng 03/11 phải có file 02/11, hạn 09:00.
+    # Trước hạn -> WAITING, không báo lỗi; quá hạn mà vẫn thiếu -> FAILED (cảnh báo)
+    sla = dict(catalog="", expected_lag_days=1, sla_hour=9)
+    assert daily.run(spark, SilverConfig(**sla, now="2026-11-03T07:00:00")) == []
+    assert _runs(spark, "silver")[-1] == (D2, "WAITING")
+    with pytest.raises(SourceFilesMissing):
+        daily.run(spark, SilverConfig(**sla, now="2026-11-03T09:30:00"))
+    assert _runs(spark, "silver")[-1] == (D2, "FAILED")
 
     # (2) file về trễ -> chạy lại job: chỉ xử lý ngày còn thiếu, Gold publish đủ 2 ngày
     baseline["frames"]["transactions"].filter(F.col("_as_of_date") == F.lit(D2).cast("date")) \
@@ -330,23 +340,23 @@ def test_5b_failure_midway_through_gold_publish_is_rolled_back(spark, published,
     from pipelines.gold import run as gold_run
 
     n_pub = spark.table("ops.published_batches").count()
-    real = pg.overwrite_date
+    real = pg.sv.write_batch
 
-    def boom(df, target, *a, **k):
-        if target.endswith("card_mart_kpi_daily"):   # ~ bảng thứ 11: 10 bảng trước đã ghi
+    def boom(df, catalog, table, *a, **k):
+        if table == "card_mart_kpi_daily":   # ~ bảng thứ 11: 10 bảng trước đã ghi batch mới
             raise OSError("storage timeout (giả lập)")
-        return real(df, target, *a, **k)
+        return real(df, catalog, table, *a, **k)
 
-    monkeypatch.setattr(pg, "overwrite_date", boom)
+    monkeypatch.setattr(pg.sv, "write_batch", boom)
     with pytest.raises(OSError):
         gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
     assert _gold_fingerprint(spark) == published["gold_ok"]
-    assert spark.table("ops.published_batches").count() == n_pub
+    assert spark.table("ops.published_batches").count() == n_pub   # batch lỗi KHÔNG kích hoạt
     last = spark.sql("SELECT status, message FROM ops.pipeline_runs WHERE layer = 'gold' "
                      "ORDER BY started_at DESC, status LIMIT 1").first()
     assert last.status == "FAILED" and "rollback" in last.message
 
-    monkeypatch.setattr(pg, "overwrite_date", real)
+    monkeypatch.setattr(pg.sv, "write_batch", real)
     gold_run(spark, GoldConfig(catalog="", as_of_date=D2))      # hạ tầng ổn -> chạy lại
     assert _gold_fingerprint(spark) == published["gold_ok"]
     _assert_integrity(spark)
