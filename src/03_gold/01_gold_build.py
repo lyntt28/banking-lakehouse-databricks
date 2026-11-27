@@ -26,13 +26,15 @@ if src_dir not in sys.path:
 
 from common.dates import check_date
 from common.governance import assert_pipeline_identity
+from common.writer_lock import writer_lock
 from pipelines.gold import GoldConfig, run
 
 as_of = dbutils.widgets.get("as_of_date").strip()
 cfg = GoldConfig(catalog=dbutils.widgets.get("catalog"),
                  as_of_date=check_date(as_of) if as_of else "")
 assert_pipeline_identity(spark, cfg.catalog)  # governance bật -> phải thấy PII
-days = run(spark, cfg)
+with writer_lock(spark, cfg.catalog, "gold"):   # 1 writer / lakehouse
+    days = run(spark, cfg)
 
 # COMMAND ----------
 

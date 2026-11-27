@@ -14,6 +14,7 @@ dbutils.widgets.text("max_fail_pct", "5")
 dbutils.widgets.text("expected_lag_days", "")   # "" = tắt ngày dự kiến / SLA
 dbutils.widgets.text("sla_hour", "9")
 dbutils.widgets.text("daily_from", "")          # "" = tự suy ra
+dbutils.widgets.text("lock_owner", "")          # backfill truyền owner khóa nó đang giữ
 
 # COMMAND ----------
 
@@ -27,6 +28,7 @@ if src_dir not in sys.path:
 
 from common.dates import check_date
 from common.governance import assert_pipeline_identity
+from common.writer_lock import writer_lock
 from pipelines import daily
 from pipelines.silver import SilverConfig
 
@@ -39,5 +41,8 @@ cfg = SilverConfig(catalog=dbutils.widgets.get("catalog"),
                    sla_hour=int(dbutils.widgets.get("sla_hour") or 9),
                    daily_from=dbutils.widgets.get("daily_from").strip())
 assert_pipeline_identity(spark, cfg.catalog)
-days = daily.run(spark, cfg)
+# 1 writer / lakehouse: maintenance / backfill / notebook chạy tay đang ghi -> WriterBusy
+with writer_lock(spark, cfg.catalog, "daily",
+                 owner=dbutils.widgets.get("lock_owner").strip() or None):
+    days = daily.run(spark, cfg)
 print("processed:", days)

@@ -27,6 +27,7 @@ if src_dir not in sys.path:
 
 from common.dates import check_date
 from common.governance import assert_pipeline_identity
+from common.writer_lock import writer_lock
 from pipelines.silver import SilverConfig, run
 
 as_of = dbutils.widgets.get("as_of_date").strip()
@@ -38,5 +39,6 @@ cfg = SilverConfig(catalog=dbutils.widgets.get("catalog"),
                    sla_hour=int(dbutils.widgets.get("sla_hour") or 9),
                    daily_from=dbutils.widgets.get("daily_from").strip())
 assert_pipeline_identity(spark, cfg.catalog)  # governance bật -> phải thấy PII
-days = run(spark, cfg)
+with writer_lock(spark, cfg.catalog, "silver"):   # 1 writer / lakehouse
+    days = run(spark, cfg)
 print("processed:", days)

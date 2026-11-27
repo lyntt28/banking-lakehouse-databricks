@@ -38,6 +38,7 @@ from common.maintenance import (  # noqa: E402
     cluster_statements,
     vacuum_statements,
 )
+from common.writer_lock import writer_lock  # noqa: E402
 
 existing = {t for t in CLUSTERING if spark.catalog.tableExists(f"{catalog}.{t}")}
 if not day:
@@ -73,28 +74,31 @@ def run_benchmarks(phase: str, run_id: str) -> list[tuple]:
     return rows
 
 
-if mode == "benchmark":
-    run_id = str(uuid.uuid4())
-    before_files = {t: table_stats(t) for t in existing}
-    results = run_benchmarks("before", run_id)
-    for sql in cluster_statements(catalog, existing):
-        print(sql)
-        spark.sql(sql)
-    after_files = {t: table_stats(t) for t in existing}
-    results += run_benchmarks("after", run_id)
+# OPTIMIZE / VACUUM / CLUSTER BY không được chạy song song với daily / backfill (VACUUM có
+# thể xoá file mà rollback Gold cần): giữ khóa ghi chung, job khác đang ghi -> WriterBusy
+with writer_lock(spark, catalog, f"maintenance:{mode}"):
+    if mode == "benchmark":
+        run_id = str(uuid.uuid4())
+        before_files = {t: table_stats(t) for t in existing}
+        results = run_benchmarks("before", run_id)
+        for sql in cluster_statements(catalog, existing):
+            print(sql)
+            spark.sql(sql)
+        after_files = {t: table_stats(t) for t in existing}
+        results += run_benchmarks("after", run_id)
 
-    res = spark.createDataFrame(results, "run_id string, phase string, query string, "
-                                         "median_s double, min_s double")
-    res.withColumn("run_ts", F.current_timestamp()).write.mode("append") \
-        .saveAsTable(f"{catalog}.ops.perf_benchmark")
-    display(res.groupBy("query").pivot("phase", ["before", "after"]).agg(F.first("median_s"))
-            .withColumn("speedup_x", F.round(F.col("before") / F.col("after"), 2)))
-    files = [(t, *before_files[t], *after_files[t]) for t in sorted(existing)]
-    display(spark.createDataFrame(files, "table string, files_before long, bytes_before long, "
-                                         "files_after long, bytes_after long"))
-else:
-    # gắn lại CLUSTER BY (gold ghi đè một số bảng) + OPTIMIZE + VACUUM
-    for sql in cluster_statements(catalog, existing) + vacuum_statements(catalog,
-                                                                         existing=existing):
-        print(sql)
-        spark.sql(sql)
+        res = spark.createDataFrame(results, "run_id string, phase string, query string, "
+                                             "median_s double, min_s double")
+        res.withColumn("run_ts", F.current_timestamp()).write.mode("append") \
+            .saveAsTable(f"{catalog}.ops.perf_benchmark")
+        display(res.groupBy("query").pivot("phase", ["before", "after"]).agg(F.first("median_s"))
+                .withColumn("speedup_x", F.round(F.col("before") / F.col("after"), 2)))
+        files = [(t, *before_files[t], *after_files[t]) for t in sorted(existing)]
+        display(spark.createDataFrame(files, "table string, files_before long, bytes_before long, "
+                                             "files_after long, bytes_after long"))
+    else:
+        # gắn lại CLUSTER BY (gold ghi đè một số bảng) + OPTIMIZE + VACUUM
+        for sql in cluster_statements(catalog, existing) + vacuum_statements(catalog,
+                                                                             existing=existing):
+            print(sql)
+            spark.sql(sql)
