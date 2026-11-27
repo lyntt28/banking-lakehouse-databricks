@@ -4,7 +4,7 @@ Source code of three dashboards I built earlier with **Flask + PostgreSQL + Char
 ApexCharts**. They are kept here only as the **specification** for the Gold layer and the
 Databricks SQL dashboards of this project — they are not deployed and not part of CI.
 
-- No real data is included. `card/sample_kpi_files/` are synthetic KPI files.
+- No data files are included. Sample input files are produced by `data_generator/`.
 - Passwords and internal hosts were replaced by placeholders (`<PG_PASSWORD>`,
   `<internal-host>`).
 - Third-party JS libraries (Chart.js, ApexCharts, flatpickr, papaparse) were not copied;
