@@ -40,6 +40,8 @@ Gold chỉ ghi sau gate. Nếu lỗi ở `gold:publish` (hạ tầng giữa ch�
 ## 5. Lỗi giữa `silver:publish` / `gold:publish` (lỗi hạ tầng sau khi đã qua mọi gate)
 Silver và Gold đều **stage → kiểm tra tất cả → publish**: lỗi DQ / đối soát không bao giờ để lại
 bảng ghi dở. Chỉ lỗi hạ tầng trong chính bước publish mới có thể làm một số bảng đã ghi, số khác chưa.
+- **Silver**: lỗi giữa `silver:publish` -> job TỰ `RESTORE` mọi bảng Silver đã ghi về version
+  trước publish (log `silver_rolled_back`, message có "rollback N bảng").
 Gold publish ghi THÊM dòng của batch mới (`batch_id` = run_id) rồi mới kích hoạt bằng 1 dòng vào
 `ops.published_batches`. Người đọc chỉ đọc `gold_serving` (view lọc batch đã kích hoạt), nên batch
 dở dang luôn vô hình. Xem `pipeline_runs.message` để biết lỗi xảy ra trước hay sau kích hoạt:
@@ -76,7 +78,8 @@ Mọi job ghi (daily, chạy tay Silver / Gold, backfill reset, bảo trì OPTIM
 ## 6. Correction / backfill ngày cũ (prod)
 Job daily tự nhận diện file sửa: Bronze có file nạp SAU lần Silver SUCCESS của ngày đó.
 - Ngày sửa = watermark Silver: job tự chạy lại Silver rồi Gold ngày đó (log `daily_correction`),
-  không dựng Gold từ Silver cũ. Không cần thao tác.
+  không dựng Gold từ Silver cũ; file nạp sau cùng thay thế file trước. Không cần thao tác, trừ
+  khi file sửa **rút bớt** TK / thẻ / KH (bảng snapshot MERGE giữ bản cũ) → replay như dưới.
 - Ngày sửa < watermark: job dừng với `CorrectionNeedsReplay`, làm thủ công như dưới:
 1. Dựng catalog song song (vd `bank_prod_rebuild`) với `05_backfill reset=true` từ Bronze.
 2. So sánh với prod (đối soát, số dòng, tổng số dư).

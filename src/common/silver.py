@@ -1,12 +1,17 @@
 """Silver: bronze (mọi cột STRING) -> dữ liệu đã ép kiểu, khử trùng, qua DQ gate.
 
 Luồng cho mỗi bảng (xem `prepare_silver`):
-    1. Lọc theo _as_of_date, bỏ dòng trùng HOÀN TOÀN (file gửi lặp) -> đếm `exact_dupes`.
+    0. Nguồn gửi lại file cho cùng ngày (correction): file nạp SAU CÙNG thay thế TOÀN BỘ file
+       trước của cùng bảng (cùng nhóm file theo data contract) -> đếm `superseded`. Không làm
+       vậy thì khóa có giá trị sửa xuất hiện 2 lần -> cả 2 bị quarantine (trùng khóa) và Silver
+       giữ nguyên giá trị CŨ; dòng nguồn rút khỏi file sửa cũng không mất.
+    1. Lọc theo _as_of_date, bỏ dòng trùng HOÀN TOÀN (trong 1 file) -> đếm `exact_dupes`.
     2. Ép kiểu an toàn bằng try_cast / try_to_timestamp: giá trị sai định dạng thành NULL
        (không làm hỏng job khi Databricks bật ANSI mode).
     3. Thêm cột hỗ trợ cho rule: `_dup_key_count` (trùng khóa nhưng khác nội dung),
        `_fk_ok` (khóa ngoại tồn tại), `_raw_*` (giá trị gốc: phân biệt "trống" / "sai định dạng").
-    4. `apply_dq` tách valid / quarantine. Đối soát: bronze = silver + quarantine + exact_dupes.
+    4. `apply_dq` tách valid / quarantine. Đối soát: bronze = silver + quarantine + exact_dupes
+       + superseded.
 
 Phần ghi Delta (MERGE / SCD2) nằm trong notebook src/02_silver, vì cần Delta Lake.
 """
@@ -20,6 +25,7 @@ from pyspark.sql import Column, DataFrame, Window
 from pyspark.sql import functions as F
 
 from common.banking import debt_group_col
+from common.batch import REQUIRED_FILE_GROUPS
 from common.dq import Rule, apply_dq
 
 TECH_COLS = ["_source_file", "_as_of_date", "_load_ts", "_rescued_data"]
@@ -63,7 +69,9 @@ class SilverTable:
     rules: list[Rule]
     raw_cols: list[str] = field(default_factory=list)   # giữ _raw_<c> để viết rule
     fk: tuple[str, str] | None = None       # (cột, bảng tham chiếu) -> cột _fk_ok
-    write_mode: str = "merge"               # merge | scd2 | append
+    # merge | scd2 | append | replace_day (snapshot theo ngày: key[0] là cột ngày dữ liệu, ghi
+    # đè cả ngày -> dòng nguồn rút khỏi file sửa / bị quarantine ở lần sửa cũng mất khỏi Silver)
+    write_mode: str = "merge"
     optional: list[str] = field(default_factory=list)   # cột nguồn mới, file cũ có thể thiếu
     source: str = ""                        # tên bảng bronze / thư mục landing (rỗng = name)
 
@@ -172,6 +180,7 @@ ACCOUNTS = SilverTable(
 LOANS = SilverTable(
     name="loan_snapshots", source="loans",
     key=["as_of_date", "acctnbr"],          # snapshot dư nợ theo ngày
+    write_mode="replace_day",
     cast={
         "as_of_date": _date("etl_dt", D_MDY),
         "branchnbr": _str("branchnbr"), "acctnbr": _str("acctnbr"),
@@ -416,6 +425,28 @@ ORDER = ["ref_branches", "ref_products", "core_customers", "core_accounts", "loa
 
 
 # ---------------------------------------------------------------- các bước
+def latest_delivery(df: DataFrame, table: str) -> tuple[DataFrame, int]:
+    """Giữ dòng của file nạp SAU CÙNG (max `_load_ts`, hoà thì tên file lớn hơn) trong từng nhóm
+    file của ngày: bảng 1 file / ngày -> cả bảng là 1 nhóm; bảng nhiều nhóm (data contract
+    `REQUIRED_FILE_GROUPS`, vd 9 file KPI thẻ) -> mỗi nhóm thay thế riêng.
+    Trả về (df, số dòng bị thay thế). Không có cột lineage (test thuần) -> giữ nguyên."""
+    if not {"_source_file", "_load_ts"} <= set(df.columns):
+        return df, 0
+    groups = REQUIRED_FILE_GROUPS.get(table, ())
+    base = F.regexp_extract(F.col("_source_file"), r"([^/]*)$", 1)
+    grp = (F.regexp_extract(base, "^(" + "|".join(groups) + ")", 1) if groups else F.lit(""))
+    w = Window.partitionBy("_as_of_date", "_grp") if "_as_of_date" in df.columns \
+        else Window.partitionBy("_grp")
+    # 2 bước cột phẳng (không dùng struct: plan lớn + struct làm optimizer Spark tốn bộ nhớ)
+    kept = (df.withColumn("_grp", grp)
+            .withColumn("_latest", F.max("_load_ts").over(w))
+            .filter(F.col("_load_ts") == F.col("_latest"))
+            .withColumn("_latest", F.max("_source_file").over(w))
+            .filter(F.col("_source_file") == F.col("_latest"))
+            .drop("_grp", "_latest"))
+    return kept, df.count() - kept.count()
+
+
 def drop_exact_duplicates(df: DataFrame) -> tuple[DataFrame, int]:
     """Bỏ dòng trùng y hệt (không tính cột kỹ thuật). Trả về (df, số dòng đã bỏ)."""
     data_cols = [c for c in df.columns if c not in TECH_COLS]
@@ -479,13 +510,15 @@ class SilverResult:
         """
         return self.checked.select(col).filter(F.col(col).isNotNull()).distinct()
     exact_dupes: int
+    superseded: int = 0
 
 
 def prepare_silver(
     bronze: DataFrame, spec: SilverTable, ref_keys: DataFrame | None = None
 ) -> SilverResult:
     """Toàn bộ logic Silver cho 1 lô bronze (thuần Spark, test được không cần Delta)."""
-    df, dupes = drop_exact_duplicates(bronze)
+    df, superseded = latest_delivery(bronze, spec.name)
+    df, dupes = drop_exact_duplicates(df)
     df = cast_columns(df, spec)
     df = add_dup_key_count(df, spec.key)
     if spec.fk:
@@ -498,7 +531,8 @@ def prepare_silver(
         # Silver tính lại nhóm nợ từ DPD (nguồn có thể lệch - rule WARN ghi nhận)
         valid = valid.withColumn("debt_group", debt_group_col(F.col("songay_nqh"))) \
             .withColumn("is_npl", F.col("debt_group") >= 3)
-    return SilverResult(valid=valid, quarantine=quarantine, checked=df, exact_dupes=dupes)
+    return SilverResult(valid=valid, quarantine=quarantine, checked=df, exact_dupes=dupes,
+                        superseded=superseded)
 
 
 def quarantine_records(quarantine: DataFrame, table: str, run_id: str) -> DataFrame:

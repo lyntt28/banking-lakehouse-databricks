@@ -6,9 +6,9 @@ from common.lakeview.core import USD_RATE, Dash, _q, _report_day
 
 # ============================================================ 2. OVERDUE (RAMC)
 # Nguồn: gold.card_mart_overdue_daily (file credit_card_overdue_YYYYMMDD.txt), logic theo
-# reference/dashboards/overdue/api_server.py: tỷ lệ = sum(ovd_bal) / sum(port_bal),
+# dashboard Chart.js gốc (đã xóa khỏi repo): tỷ lệ = sum(ovd_bal) / sum(port_bal),
 # lọc chi nhánh theo mng_br, không lọc loại sản phẩm (All).
-OVD_COLORS = {   # reference/dashboards/overdue/dashboardv200.js
+OVD_COLORS = {   # từ dashboard Chart.js gốc
     "amount": "#3498DB", "ratio": "#E67E22", "fx": "#0077B6",
     "ticker": {"ratio": "#48bb78", "overdue": "#4299e1", "ending": "#ed8936"},
     "products": ["#3498DB", "#E74C3C", "#2ECC71", "#F39C12", "#9B59B6", "#1ABC9C", "#E67E22",
