@@ -55,6 +55,10 @@ def table_version(spark, name):
     return v(spark, name)
 
 
+def _table_id(spark, name):
+    return spark.sql(f"DESCRIBE DETAIL {name}").first()["id"]
+
+
 def _tables(spark, schema):
     return [r.tableName for r in spark.sql(f"SHOW TABLES IN {schema}").collect()
             if not r.isTemporary]
@@ -95,8 +99,8 @@ def baseline(spark, tmp_path_factory):
         for t in base["tables"][schema]:
             spark.sql(f"CREATE TABLE snap_{schema}.{t} USING DELTA AS SELECT * FROM {schema}.{t}")
             v = table_version(spark, f"{schema}.{t}")
-            # (version có nội dung baseline, version hiện tại được biết là "sạch")
-            base["versions"][f"{schema}.{t}"] = [v, v]
+            # (version có nội dung baseline, version hiện tại được biết là "sạch", table id)
+            base["versions"][f"{schema}.{t}"] = [v, v, _table_id(spark, f"{schema}.{t}")]
     yield base
     _drop_all(spark, SCHEMAS + [f"snap_{s}" for s in SCHEMAS])
 
@@ -112,10 +116,15 @@ def published(spark, baseline):
             spark.sql(f"DROP TABLE {schema}.{t}")
         for t in tables:
             name = f"{schema}.{t}"
+            # bảng bị test trước DROP + tạo lại: số version không còn ứng với baseline
+            # (RESTORE theo version sẽ ra nội dung sai) -> dựng lại từ snapshot
+            if t in existing and _table_id(spark, name) != versions[name][2]:
+                spark.sql(f"DROP TABLE {name}")
+                existing.discard(t)
             if t not in existing:
                 spark.sql(f"CREATE TABLE {name} USING DELTA AS SELECT * FROM snap_{name}")
                 v = table_version(spark, name)
-                versions[name] = [v, v]
+                versions[name] = [v, v, _table_id(spark, name)]
             elif table_version(spark, name) != versions[name][1]:   # test trước đã ghi
                 spark.sql(f"RESTORE TABLE {name} TO VERSION AS OF {versions[name][0]}")
                 versions[name][1] = table_version(spark, name)
