@@ -15,7 +15,7 @@ include = ["common*", "pipelines*", "data_generator*"]
 
 [tool.coverage.run]
 source = ["src/common", "src/pipelines"]
-omit = ["src/common/lakeview.py"]
+omit = ["src/common/lakeview/*"]
 
 [tool.coverage.report]
 skip_empty = true
@@ -30,7 +30,6 @@ markers = [
 line-length = 100
 target-version = "py311"
 
-extend-exclude = ["reference"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]

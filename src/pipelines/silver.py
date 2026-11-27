@@ -6,8 +6,9 @@ import và test được trên Spark + Delta local (tests/integration).
 Mỗi ngày dữ liệu:
     1. file manifest  - bảng bắt buộc thiếu file -> FAILED, dừng (ops.file_manifest)
     2. từng bảng theo ORDER: DQ -> quarantine -> DQ gate -> đối soát số dòng -> silver_stage
-    3. chỉ khi MỌI bảng đạt: publish từ silver_stage vào silver (lưu version để RESTORE)
-    3. ghi ops.pipeline_runs (RUNNING/SUCCESS/FAILED) + ops.task_runs (từng bước)
+    3. chỉ khi MỌI bảng đạt: publish từ silver_stage vào silver (lưu version trước khi ghi;
+       lỗi giữa chừng -> tự RESTORE mọi bảng đã ghi, như Gold)
+    4. ghi ops.pipeline_runs (RUNNING/SUCCESS/FAILED) + ops.task_runs (từng bước)
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from common.batch import (
     record_run,
     record_versions,
     required_tables,
+    rollback_publish,
     watermark,
 )
 from common.delta_io import merge_upsert, overwrite, overwrite_date, scd2_upsert
@@ -42,6 +44,11 @@ class SilverConfig:
     catalog: str
     as_of_date: str = ""        # trống = mọi ngày sau watermark
     max_fail_pct: float = 5.0
+    # data contract: ngày nguồn bắt đầu gửi file HẰNG NGÀY; trước đó chỉ có snapshot cuối tháng
+    # (lịch sử nạp 1 lần). Trống = mọi ngày đều là ngày nghiệp vụ.
+    daily_from: str = ""
+    # SLA: ngày dữ liệu mới nhất phải có ở lần chạy này (batch.expected_through). Trống = tắt.
+    expected_until: str = ""
 
     def t(self, schema: str, table: str) -> str:
         return fq(self.catalog, schema, table)
@@ -167,12 +174,16 @@ def process_day(spark: SparkSession, cfg: SilverConfig, day: str, rec: StepRecor
             overwrite(res.valid, stage)             # đóng băng bản ứng viên
             n_valid, n_quar = spark.table(stage).count(), res.quarantine.count()
             s.rows_out = n_valid
-            ok = n_bronze == n_valid + n_quar + res.exact_dupes
+            ok = n_bronze == n_valid + n_quar + res.exact_dupes + res.superseded
             report.append((name, n_bronze, n_valid, n_quar, res.exact_dupes, ok))
+            if res.superseded:
+                log("file_superseded", table=name, as_of_date=day, run_id=run_id,
+                    rows=res.superseded)
             if not ok:
                 raise ReconciliationFailed(
                     f"Đối soát lệch {name}: bronze={n_bronze} silver={n_valid} "
-                    f"quarantine={n_quar} dupes={res.exact_dupes}")
+                    f"quarantine={n_quar} dupes={res.exact_dupes} "
+                    f"superseded={res.superseded}")
             staged.append(name)
 
     # ---------- Phase 2: mọi bảng đã đạt -> publish. Lưu version Delta trước khi ghi để
@@ -185,6 +196,8 @@ def process_day(spark: SparkSession, cfg: SilverConfig, day: str, rec: StepRecor
             valid = spark.table(cfg.t("silver_stage", name))
             if spec.write_mode == "scd2":
                 scd2_upsert(valid, target, spec.key[0], CUSTOMER_TRACKED, day)
+            elif spec.write_mode == "replace_day":
+                overwrite_date(valid, target, spec.key[0], day)
             else:
                 merge_upsert(valid, target, spec.key, insert_only=spec.write_mode == "append")
         s.rows_out = len(staged)
@@ -200,7 +213,9 @@ def run(spark: SparkSession, cfg: SilverConfig) -> list[str]:
     if cfg.as_of_date and wm and cfg.as_of_date < wm:
         raise OutOfOrder(f"Silver đã ở {wm}: không chạy lại {cfg.as_of_date} (sẽ ghi đè snapshot "
                          "mới bằng snapshot cũ). Dựng lại = replay từ ngày đó, xem runbook")
-    days = pending_dates(bronze_dates, wm, cfg.as_of_date or None)
+    days = pending_dates(bronze_dates, wm, cfg.as_of_date or None,
+                         daily_from=cfg.daily_from or None,
+                         expected_until=cfg.expected_until or None)
     log("silver_pending", catalog=cfg.catalog, days=days)
     done = []
     for day in days:
@@ -209,9 +224,20 @@ def run(spark: SparkSession, cfg: SilverConfig) -> list[str]:
         try:
             process_day(spark, cfg, day, rec)
         except Exception as e:
+            msg = f"{type(e).__name__}: {e}"
+            # lỗi giữa bước publish (bảng thứ N MERGE xong, bảng N+1 lỗi): đưa mọi bảng đã ghi
+            # về version trước publish -> Silver không trộn ngày mới / cũ giữa các bảng
+            try:
+                undone = rollback_publish(spark, cfg.catalog, rec.run_id)
+                if undone:
+                    log("silver_rolled_back", as_of_date=day, run_id=rec.run_id,
+                        statements=undone)
+                    msg += f" | rollback {len(undone)} bảng về version trước publish"
+            except Exception as rb:  # rollback cũng lỗi: xử lý tay (incident runbook mục 5)
+                msg += f" | ROLLBACK FAILED {type(rb).__name__}: {rb}"
+                log("silver_rollback_failed", as_of_date=day, run_id=rec.run_id, error=str(rb))
             rec.flush(spark, cfg.t("ops", "task_runs"))
-            record_run(spark, cfg.catalog, day, "silver", rec.run_id, "FAILED",
-                       f"{type(e).__name__}: {e}")
+            record_run(spark, cfg.catalog, day, "silver", rec.run_id, "FAILED", msg)
             log("silver_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
             raise   # ngày sau không chạy khi ngày trước lỗi (SCD2 cần đúng thứ tự)
         rec.flush(spark, cfg.t("ops", "task_runs"))

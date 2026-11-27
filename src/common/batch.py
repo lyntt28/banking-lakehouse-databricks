@@ -4,10 +4,11 @@ Bảng `ops.pipeline_runs` (1 dòng / ngày dữ liệu / layer / lần chạy):
     as_of_date, layer (silver|gold), run_id, status (RUNNING|SUCCESS|FAILED),
     started_at, finished_at, message
 
-Watermark = ngày lớn nhất có status SUCCESS của 1 layer. Job hằng ngày không còn lấy
-"ngày mới nhất trong bronze" nữa mà xử lý MỌI ngày theo lịch nghiệp vụ > watermark (kể cả ngày
-chưa có file: dừng ở đó, không nhảy qua), theo thứ tự tăng dần, nên job bị gián đoạn 2 ngày thì
-lần chạy sau tự bù đủ 3 ngày.
+Watermark = ngày lớn nhất có status SUCCESS của 1 layer. Job hằng ngày xử lý MỌI ngày theo lịch
+nghiệp vụ > watermark (kể cả ngày chưa có file: dừng ở đó, không nhảy qua), tăng dần, nên job
+bị gián đoạn 2 ngày thì lần chạy sau tự bù đủ 3 ngày. Lịch = snapshot cuối tháng trước
+`daily_from` (lịch sử nạp 1 lần), hằng ngày từ `daily_from`; ngày cuối của lịch = max(ngày bronze
+mới nhất, ngày SLA `expected_through`) để phát hiện cả khi nguồn ngừng gửi hẳn.
 """
 
 from __future__ import annotations
@@ -141,43 +142,76 @@ def incomplete_tables(statuses: dict[str, str]) -> list[str]:
     return sorted(t for t, st in statuses.items() if st == "INCOMPLETE")
 
 
-def business_dates(start: str, end: str, holidays: frozenset[str] = frozenset()) -> list[str]:
-    """Lịch ngày nghiệp vụ dự kiến [start, end]: nguồn phải gửi file MỖI ngày (kể cả cuối tuần,
-    hệ thống core chốt số hằng ngày), trừ ngày trong `holidays`."""
+def is_month_end(d) -> bool:
+    from datetime import timedelta
+
+    return (d + timedelta(days=1)).day == 1
+
+
+def business_dates(start: str, end: str, holidays: frozenset[str] = frozenset(),
+                   daily_from: str | None = None) -> list[str]:
+    """Lịch ngày nghiệp vụ dự kiến [start, end].
+
+    - Từ `daily_from` (ngày nguồn bắt đầu gửi file HẰNG NGÀY theo data contract): mọi ngày
+      (kể cả cuối tuần, core chốt số hằng ngày), trừ ngày trong `holidays`.
+    - Trước `daily_from`: lịch sử nạp 1 lần dạng snapshot CUỐI THÁNG -> chỉ ngày cuối tháng
+      là ngày dự kiến (không đòi file cho các ngày giữa tháng không bao giờ được gửi).
+    - `daily_from` trống: toàn bộ khoảng là lịch hằng ngày.
+    """
     from datetime import date, timedelta
 
     d, last = date.fromisoformat(check_date(start)), date.fromisoformat(check_date(end))
+    daily = date.fromisoformat(check_date(daily_from)) if daily_from else d
     out = []
     while d <= last:
-        if d.isoformat() not in holidays:
+        if d.isoformat() not in holidays and (d >= daily or is_month_end(d)):
             out.append(d.isoformat())
         d += timedelta(days=1)
     return out
 
 
+def expected_through(today: str, lag_days: int) -> str:
+    """Ngày dữ liệu mới nhất PHẢI có khi job chạy ngày `today` (SLA: file ngày D về trước
+    giờ chạy của ngày D + lag_days). Vd job 06:30 ngày 27 với lag 1 -> phải có dữ liệu ngày 26."""
+    from datetime import date, timedelta
+
+    if lag_days < 0:
+        raise ValueError(f"lag_days phải >= 0: {lag_days}")
+    return (date.fromisoformat(check_date(today)) - timedelta(days=lag_days)).isoformat()
+
+
 def pending_dates(bronze_dates: list[str], watermark: str | None,
                   requested: str | None = None,
-                  holidays: frozenset[str] = frozenset()) -> list[str]:
+                  holidays: frozenset[str] = frozenset(),
+                  daily_from: str | None = None,
+                  expected_until: str | None = None) -> list[str]:
     """Danh sách ngày cần xử lý (tăng dần).
 
     - requested: chạy đúng 1 ngày (rerun / backfill thủ công).
-    - không requested: MỌI ngày theo lịch nghiệp vụ từ sau watermark (chưa có watermark: từ ngày
-      bronze đầu tiên) tới ngày bronze mới nhất. Ngày không có file vẫn nằm trong danh sách ->
-      Silver dừng ở đó với SourceFilesMissing thay vì nhảy qua (watermark không vượt ngày thiếu,
-      file gửi trễ của ngày đó vẫn được xử lý khi về).
+    - không requested: MỌI ngày theo lịch nghiệp vụ (`business_dates`) từ sau watermark (chưa
+      có watermark: từ ngày bronze đầu tiên) tới max(ngày bronze mới nhất, `expected_until`).
+      Ngày không có file vẫn nằm trong danh sách -> Silver dừng ở đó với SourceFilesMissing
+      thay vì nhảy qua (watermark không vượt ngày thiếu, file gửi trễ vẫn được xử lý khi về).
+    - expected_until (SLA, `expected_through`): nguồn ngừng gửi hẳn thì ngày bronze mới nhất
+      cũng đứng yên -> không có ngày nào "thiếu"; ngày dự kiến theo đồng hồ làm job FAIL
+      (SourceFilesMissing + ops.file_manifest MISSING) thay vì xanh mà không có dữ liệu mới.
     """
     if requested:
         return [check_date(requested)]
     received = sorted({check_date(str(d)) for d in bronze_dates})
-    if not received:
+    ends = received[-1:] + ([check_date(expected_until)] if expected_until else [])
+    if not ends:
         return []
+    end = max(ends)
     if watermark:
         from datetime import date, timedelta
 
         start = (date.fromisoformat(check_date(str(watermark))) + timedelta(days=1)).isoformat()
-    else:
+    elif received:
         start = received[0]
-    return business_dates(start, received[-1], holidays) if start <= received[-1] else []
+    else:
+        return []   # chưa từng có dữ liệu: chưa có mốc bắt đầu
+    return business_dates(start, end, holidays, daily_from) if start <= end else []
 
 
 def corrected_days(last_loaded: dict[str, object], silver_done_at: dict[str, object]) -> list[str]:

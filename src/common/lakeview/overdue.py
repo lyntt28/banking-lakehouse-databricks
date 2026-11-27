@@ -5,7 +5,7 @@ from __future__ import annotations
 from common.lakeview.core import USD_RATE, Dash, _q, _report_day
 
 # ============================================================ 2. OVERDUE (LOAN)
-OVD_COLORS = {   # reference/dashboards/overdue/dashboardv200.js
+OVD_COLORS = {   # màu của dashboard cũ (Chart.js), giữ để nhận diện
     "amount": "#3498DB", "ratio": "#E67E22",
     "ticker": {"ratio": "#48bb78", "overdue": "#4299e1", "ending": "#ed8936"},
     "debt_groups": {"Group 2": "#90CAF9", "Group 3": "#42A5F5", "Group 4": "#1E88E5",

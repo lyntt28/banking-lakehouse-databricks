@@ -12,6 +12,8 @@
 
 dbutils.widgets.text("catalog", "bank_dev")
 dbutils.widgets.dropdown("reset", "false", ["false", "true"])
+# trước ngày này nguồn chỉ có snapshot cuối tháng (history_months của dữ liệu mẫu)
+dbutils.widgets.text("daily_feed_start", "2026-11-01")
 catalog = dbutils.widgets.get("catalog")
 reset = dbutils.widgets.get("reset") == "true"
 
@@ -43,5 +45,6 @@ if reset:
 
 # Silver + Gold xen kẽ từng ngày (bắt buộc: Silver snapshot là MERGE, xem pipelines/daily.py)
 dbutils.notebook.run("../02_silver/00_daily_silver_gold", 14400,
-                     {"catalog": catalog, "as_of_date": ""})
+                     {"catalog": catalog, "as_of_date": "",
+                      "daily_feed_start": dbutils.widgets.get("daily_feed_start")})
 display(spark.table(f"{catalog}.ops.pipeline_runs").orderBy("as_of_date", "layer", "started_at"))

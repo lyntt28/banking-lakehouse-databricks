@@ -52,7 +52,8 @@ def run(spark: SparkSession, cfg: silver.SilverConfig) -> list[str]:
         bronze_dates = [r[0] for r in spark.table(cfg.t("bronze", "loans"))
                         .select("_as_of_date").distinct().collect()]
         silver_wm = watermark(spark, cfg.catalog, "silver")
-        days = pending_dates(bronze_dates, silver_wm)
+        days = pending_dates(bronze_dates, silver_wm, daily_from=cfg.daily_from or None,
+                             expected_until=cfg.expected_until or None)
         corrections = find_corrections(spark, cfg)
         too_old = [d for d in corrections if silver_wm and d < silver_wm]
         if too_old:

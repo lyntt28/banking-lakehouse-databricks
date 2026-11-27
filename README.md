@@ -44,7 +44,12 @@ Deployment   : Declarative Automation Bundles (DAB) + GitHub Actions
   injected errors (duplicate/null keys, bad dates, negative balances, orphan foreign keys,
   invalid debt groups). No real customer data. See [data_generator](data_generator/README.md).
 - **Data quality gate** — FAIL/WARN rules, quarantine with failure reasons, stop the job if
-  any FAIL rule exceeds 5%, row-count reconciliation (bronze = silver + quarantine).
+  any FAIL rule exceeds 5%, row-count reconciliation (bronze = silver + quarantine + dropped duplicates / superseded files).
+- **Batch control** — every expected business day is processed in order (month-end snapshots
+  before `daily_feed_start`, daily after); a missing day stops the run instead of being skipped,
+  and in prod a day whose files are late past the SLA (`sla_lag_days`) fails the job. A
+  re-sent file replaces the earlier delivery of that day. Silver and Gold are staged, gated and
+  rolled back automatically if publishing fails part-way. Details: `docs/runbook.md`.
 - **Reconciliation with source reports** — Gold KPIs must equal the source system's
   summary files (card KPI report, daily deposit summary).
 - **Banking rules** — debt classification (groups 1–5) by days past due per Circular
@@ -59,12 +64,13 @@ Deployment   : Declarative Automation Bundles (DAB) + GitHub Actions
 - One-time setup in GitHub → Settings → Environments: create `ci`, `test` and `prod`; add secrets `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID` (deploy service principal, **OIDC only**, federation policy for `repo:<owner>/<repo>:environment:<env>`) and, for `test`/`prod`, `DATABRICKS_RUN_AS_SP` (separate runtime service principal used as `run_as`); add *Required reviewers* to `prod`. Then set repo variable `CD_ENABLED=true`.
 - `CD_ENABLED` unset → deploy jobs show as **skipped** (demo mode, nothing deployed). Set → missing config **fails** the run; prod only deploys after the smoke test on `test` succeeded.
 - Batch control, the Gold reconciliation gate and rerun/correction/backfill semantics: see `docs/runbook.md`; incidents: `docs/incident_runbook.md`; grain & lineage: `docs/data_dictionary.md`; coding standards: `CONTRIBUTING.md`.
-- Tests: `pytest -m "not integration" --cov` (unit) and `pytest -m integration` (Bronze → Silver → Gold end-to-end on local Delta with failure scenarios: missing/late/duplicate files, reruns, reconciliation failure, out-of-order runs).
+- Tests: `pytest -m "not integration" --cov` (unit) and `pytest -m integration` (Bronze → Silver → Gold end-to-end on local Delta with failure scenarios: missing/late/duplicate files, corrections, reruns, reconciliation failure, mid-publish failure + rollback, out-of-order runs). Each scenario sets up its own state and can be run on its own (`pytest "tests/integration/test_pipeline_scenarios.py::<test>"`).
 
 ## Repository layout
 ```
 databricks.yml          Bundle: variables + targets dev / test / prod
-resources/jobs.yml      Job banking_lakehouse_daily (tasks + retries)
+resources/jobs.yml      Jobs: banking_lakehouse_daily, weekly maintenance, weekly ML
+resources/dashboards.yml 4 AI/BI dashboards (dashboards/*.lvdash.json)
 data_generator/         Fake core-banking data (13 tables) with injected errors
 src/00_setup/           Catalog, schemas, volume, ops tables; sample data generation
 src/01_bronze/          Auto Loader ingestion
@@ -105,7 +111,7 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [x] Gold BI star schema + marts (loan overdue / NPL with D-1·M-1·Y-1, deposit, customer 360), Silver↔Gold reconciliation — run on Databricks pending
 - [x] Gold card marts (daily, spend mix, monthly MoM/YoY + % target) and reconciliation with source summary files (card KPI, bang1247)
 - [x] Deposit marts (trend D-1/M-1/Y-1, tenor, CASA customers, Edu-Save new accounts) + 13-month history generation and backfill notebook
-- [x] 3 AI/BI dashboards (Card, Overdue, Deposit) rebuilt from the original Chart.js dashboards: same order, chart types and colours (`dashboards/`, deployed by the bundle) — not yet opened on a workspace
+- [x] 3 AI/BI dashboards (Card, Overdue, Deposit) rebuilt from the original Chart.js dashboards (original source not kept in this repo; spec in `docs/gold_dashboards.md`) + an operations monitor (`dashboards/`, deployed by the bundle) — not yet opened on a workspace
 - [x] Gold ML feature table + insurance cross-sell propensity model (MLflow, UC registry, scored list) — run on Databricks pending
 - [x] CD: main → test (deploy + run job as smoke test) → manual approval → prod, OIDC or token auth (needs GitHub environments + secrets)
 - [x] Unity Catalog governance as code: RBAC grants, PII column masks + tags, branch row filter (dry-run on Free Edition)

@@ -25,6 +25,16 @@ variables:
       true = chỉ in SQL governance (Free Edition không có account groups);
       false = áp dụng GRANT / column mask / row filter. Prod luôn false (xem target prod).
     default: "true"
+  daily_feed_start:
+    description: >
+      Ngày nguồn bắt đầu gửi file hằng ngày (data contract). Trước ngày này chỉ có snapshot
+      cuối tháng. Mặc định = start_date của dữ liệu mẫu (00_setup/02_generate_sample_data).
+    default: "2026-11-01"
+  sla_lag_days:
+    description: >
+      Số ngày trễ cho phép của file nguồn: job chạy ngày T phải có dữ liệu ngày T - lag, không
+      thì FAIL (SourceFilesMissing). Trống = tắt (dev/test chạy trên dữ liệu mẫu cố định).
+    default: ""
   run_as_sp:
     description: >
       Application ID của service principal CHẠY job (runtime identity) ở test/prod.
@@ -68,6 +78,8 @@ targets:
       catalog: bank_prod
       # Prod enforce governance thật; Free Edition (không có account group) chỉ chạy dev/test.
       governance_dry_run: "false"
+      # 06:30 ngày T phải có đủ file ngày T-1 (core chốt số cuối ngày)
+      sla_lag_days: "1"
     run_as:
       service_principal_name: ${var.run_as_sp}
     workspace:

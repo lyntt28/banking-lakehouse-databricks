@@ -1,7 +1,7 @@
 """3 dashboard Databricks AI/BI (Lakeview) dựng lại từ dashboard Flask + Chart.js gốc.
 
-Bố cục (thứ tự, vị trí, tỉ lệ rộng), loại biểu đồ và mã màu chép từ code gốc
-(reference/dashboards/*/dashboard.html, *.js, styles.css). Lưới Lakeview rộng 6 cột:
+Bố cục (thứ tự, vị trí, tỉ lệ rộng), loại biểu đồ và mã màu theo dashboard gốc (code gốc
+không còn trong repo; đặc tả nằm ở docs/gold_dashboards.md). Lưới Lakeview rộng 6 cột:
     - hàng 2 biểu đồ 1fr 1fr      -> 3 + 3
     - hàng 1fr 1.5fr (Overdue)    -> 2 + 4 (gần nhất trên lưới 6 cột)
     - hàng 1fr 2fr (Deposit)      -> 2 + 4
