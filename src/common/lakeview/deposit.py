@@ -5,7 +5,7 @@ from __future__ import annotations
 from common.lakeview.core import USD_RATE, Dash, _arrow_pct, _q, _report_day
 
 # ============================================================ 3. RETAIL DEPOSIT (DEPOSIT)
-DEP_COLORS = {   # reference/dashboards/deposit/dashboardv2.js, api_server.py
+DEP_COLORS = {   # từ dashboard Chart.js gốc (đã xóa khỏi repo)
     "gauge": {"all": "#22AFFF", "casa": "#10B981", "tda": "#F47B20"},
     "ticker": {"bal": "#223A5E", "mavg": "#009688", "cust": "#F4A300"},
     "daily": "#223A5E",

@@ -84,7 +84,7 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
 
 ## 5. `src/03_gold/02_dashboard_views`
 - **MỤC ĐÍCH:** tạo 21 view `gold.v_*`, mỗi view = 1 chart của 3 dashboard
-  (`docs/gold_dashboards.md`, code cũ trong `reference/dashboards/`).
+  (`docs/gold_dashboards.md`).
 - **KIỂM TRA:** `SHOW VIEWS IN bank_dev.gold;` và `SELECT * FROM bank_dev.gold.v_overdue_tickers;`
 
 ## 6. `src/00_setup/03_governance`

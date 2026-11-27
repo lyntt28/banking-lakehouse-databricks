@@ -5,7 +5,7 @@ from __future__ import annotations
 from common.lakeview.core import USD_RATE, Dash, _arrow_pct, _q, _report_day
 
 # ============================================================ 1. CARD BUSINESS
-CARD_COLORS = {   # reference/dashboards/card: card_dashboard_final.html (Dashboard_CARD_v4)
+CARD_COLORS = {   # từ dashboard Chart.js gốc (đã xóa khỏi repo)
     "kpi": ["#1F2937", "#2F5597", "#C55A11", "#2F5597", "#5B9BD5"],
     "smart_credit": "#4472C4", "branches": "#B4C7E7", "new_issuance": "#2F5597",
     "termination": "#A5A5A5",
