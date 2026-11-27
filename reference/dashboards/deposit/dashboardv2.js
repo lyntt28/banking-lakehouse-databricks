@@ -1212,7 +1212,7 @@ async function refreshData() {
         // Draw other charts with delays
         setTimeout(() => drawTermMixChart(date, region, branch), 100);
 
-        setTimeout(() => drawKStudyNewOpenChart(), 300);
+        setTimeout(() => drawEduSaveNewOpenChart(), 300);
         setTimeout(() => drawCasaCustomerChart(), 350);
         setTimeout(() => drawDailyBalanceChart(), 400);
         
@@ -1468,10 +1468,10 @@ async function initializeDashboard() {
         // ENABLED: Auto-load initial data
         setTimeout(() => {
             refreshData();
-            // Force draw K-Study chart after initial load
+            // Force draw Edu-Save chart after initial load
             setTimeout(() => {
-                console.log('🔄 Force drawing K-Study chart after initial load...');
-                drawKStudyNewOpenChart();
+                console.log('🔄 Force drawing Edu-Save chart after initial load...');
+                drawEduSaveNewOpenChart();
             }, 1000);
         }, 500);
         
@@ -1687,28 +1687,28 @@ async function drawCasaCustomerChart() {
     }
 }
 
-// Draw K-Study new open chart (Updated)
-async function drawKStudyNewOpenChart() {
+// Draw Edu-Save new open chart (Updated)
+async function drawEduSaveNewOpenChart() {
     try {
         const date = getCurrentDate();
         const region = document.getElementById('region-select')?.value || '';
         const branch = document.getElementById('branch-input')?.value || '';
         
-        const ctx = document.getElementById('kstudy-newopen-chart');
+        const ctx = document.getElementById('edusave-newopen-chart');
         if (!ctx) return;
         
-        if (window.kstudyNewOpenChart) {
-            window.kstudyNewOpenChart.destroy();
+        if (window.edusaveNewOpenChart) {
+            window.edusaveNewOpenChart.destroy();
         }
 
-        const url = `${API_BASE_URL}/kstudy-newopen?date=${date}&region=${region}&branch=${branch}`;
-        console.log('🔍 Fetching K-Study data from:', url);
+        const url = `${API_BASE_URL}/edusave-newopen?date=${date}&region=${region}&branch=${branch}`;
+        console.log('🔍 Fetching Edu-Save data from:', url);
         
         const res = await fetch(url);
         const data = await res.json();
 
         if (data.error || !data || !data.labels || data.labels.length === 0) {
-            console.error('K-Study Chart: No data available');
+            console.error('Edu-Save Chart: No data available');
             const context = ctx.getContext('2d');
             context.clearRect(0, 0, ctx.width, ctx.height);
             context.font = '16px Arial';
@@ -1718,7 +1718,7 @@ async function drawKStudyNewOpenChart() {
             return;
         }
 
-        console.log('📊 K-Study data:', data);
+        console.log('📊 Edu-Save data:', data);
 
         // Filter out Y2022 if it exists and is the first element
         let filteredLabels = [...data.labels];
@@ -1773,7 +1773,7 @@ async function drawKStudyNewOpenChart() {
             return '#223A5E';
         });
 
-        window.kstudyNewOpenChart = new Chart(ctx, {
+        window.edusaveNewOpenChart = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: formattedLabels,
@@ -1855,13 +1855,13 @@ async function drawKStudyNewOpenChart() {
             plugins: [ChartDataLabels]
         });
 
-        console.log('✅ K-Study new open chart created successfully');
+        console.log('✅ Edu-Save new open chart created successfully');
 
     } catch (error) {
-        console.error('❌ Error drawing K-study new open chart:', error);
+        console.error('❌ Error drawing Edu-save new open chart:', error);
         
         // Show error state
-        const ctx = document.getElementById('kstudy-newopen-chart');
+        const ctx = document.getElementById('edusave-newopen-chart');
         if (ctx) {
             const context = ctx.getContext('2d');
             context.clearRect(0, 0, ctx.width, ctx.height);

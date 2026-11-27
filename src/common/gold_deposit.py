@@ -1,12 +1,12 @@
-"""Gold cho dashboard Tiền gửi bán lẻ (RCD) - xem docs/gold_dashboards.md mục 3.
+"""Gold cho dashboard Tiền gửi bán lẻ (DEPOSIT) - xem docs/gold_dashboards.md mục 3.
 
     dep_mart_trend          ngày x nhóm TK x lớp (CASA/TD/ISA) x tiền tệ x vùng x chi nhánh
-                                x quốc tịch (VIETNAMESE/KOREAN/OTHER): số dư VND,
+                                x quốc tịch (VIETNAMESE/FOREIGN/OTHER): số dư VND,
                                 so với D-1, cuối tháng trước (M-1), cuối năm trước (Y-1)
     dep_mart_by_tenor       TD / ISA theo kỳ hạn x chi nhánh: số dư, số TK, lãi suất min/max/bq
     dep_mart_casa_customer          chi nhánh: KH cá nhân, KH có CASA, CASA hoạt động / ngủ đông
     dep_mart_new_accounts   tháng mở x chi nhánh x sản phẩm: TK mở mới + luỹ kế trong năm
-                                (dashboard lọc product_type = 'KSTUDY')
+                                (dashboard lọc product_type = 'EDUSAVE')
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ def nation_group(col: str = "nationality") -> F.Column:
     """Mã quốc gia KH -> nhóm như cột NATION của bang1247 (bộ lọc Nationality)."""
     c = F.upper(F.col(col))
     return (F.when(c.isin("VN", "VIETNAMESE"), "VIETNAMESE")
-            .when(c.isin("KR", "KOREAN"), "KOREAN").otherwise("OTHER"))
+            .when(c.isin("KR", "FOREIGN"), "FOREIGN").otherwise("OTHER"))
 
 
 def build_mart_deposit_trend(accounts: DataFrame, products: DataFrame, fx: DataFrame,

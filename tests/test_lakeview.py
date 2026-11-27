@@ -37,7 +37,8 @@ def tables(spark, results):
             r["core_accounts"], dim_product, r["ref_fx_rates"], AS_OF),
         "gold_dep_mart_casa_customer": gd.build_mart_casa_customer(
             r["core_accounts"], dim_product, dim_customer, AS_OF),
-        "gold_dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"]),
+        "gold_dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"])
+        .withColumn("as_of_date", F.lit(AS_OF).cast("date")),
         "silver_ref_targets": r["ref_targets"], "silver_ref_fx_rates": r["ref_fx_rates"],
     }
     ops = {
@@ -62,6 +63,10 @@ def tables(spark, results):
     }
     for name, schema in ops.items():
         m[f"ops_{name}"] = spark.createDataFrame([], schema)
+    # batch Gold đang phục vụ: dataset chỉ đọc tới ngày đã publish
+    m["ops_published_batches"] = spark.sql(
+        f"SELECT DATE'{AS_OF}' AS as_of_date, 'r1' AS run_id, "
+        "current_timestamp() AS published_at, '{}' AS checks")
     for name, df in m.items():
         df.createOrReplaceTempView(name)
     return m
@@ -158,8 +163,8 @@ def test_section_order_matches_original():
              "By Channels", "DPD 1+ (%)", "DPD 10+ (%)", "DPD 30+ (%)", "NPL (%)"]
     assert [t for t in card[6:] if t in order] == order
     ovd = titles("loan_overdue.lvdash.json")
-    assert ovd == ["FX (VND/USD)", "Overdue Ratio", "Overdue Balance (USD)", "Ending Balance (USD)",
-                   "Overdue Ratio vs Last Day / Month / Year",
+    assert ovd == ["FX (VND/USD)", "Overdue Ratio", "Overdue Balance (USD)",
+                   "Ending Balance (USD)", "Overdue Ratio vs Last Day / Month / Year",
                    "Overdue Balance (USD) vs Last Day / Month / Year",
                    "Ending Balance (USD) vs Last Day / Month / Year",
                    "Overdue Trend (Last 5 Days)", "Overdue Trend (Monthly)",
@@ -171,18 +176,20 @@ def test_section_order_matches_original():
         "CASA Target (%)", "TDA/ISA Target (%)", "Ending Balance - Last 30 Days",
         "Monthly Average Balance (MoM)", "Regional Deposit Distribution",
         "Deposit by Term and IR (in Month)", "CASA Customer Distribution",
-        "K-Study New open Account_ Accumulate by Month", "Balance by Product (K USD)"]
+        "Edu-Save New open Account_ Accumulate by Month", "Balance by Product (K USD)"]
 
 
 def test_bundle_files_up_to_date():
-    """dashboards/*.lvdash.json phải khớp với generator (chạy lại: python -m common.lakeview)."""
+    """dashboards/*.lvdash.json phải khớp với generator.
+    Sinh lại: PYTHONPATH=src python -m common.lakeview dashboards"""
     import json
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "dashboards"
     for name, body in build_all("").items():
         on_disk = json.loads((root / name).read_text(encoding="utf-8"))
-        assert on_disk == body, f"{name} cũ - chạy: python src/common/lakeview.py dashboards"
+        assert on_disk == body, (f"{name} cũ - chạy: "
+                                 "PYTHONPATH=src python -m common.lakeview dashboards")
 
 
 def test_card_colors_from_original_palette():

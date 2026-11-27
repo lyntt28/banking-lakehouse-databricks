@@ -1578,15 +1578,15 @@ def casa_customer():
     except Exception as e:
         return handle_error(e, 'casa-customer')
 
-@app.route('/api/kstudy-newopen')
-def kstudy_newopen():
-    """K-Study New Open Accounts by Month"""
+@app.route('/api/edusave-newopen')
+def edusave_newopen():
+    """Edu-Save New Open Accounts by Month"""
     try:
         d = request.args.get('date')
         r, b = request.args.get('region'), request.args.get('branch')
 
         if not validate_date(d):
-            logger.error(f"Kstudy-newopen: Invalid date format received: {d}")
+            logger.error(f"Edusave-newopen: Invalid date format received: {d}")
             return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
 
         d_obj = datetime.strptime(d, '%Y-%m-%d')
@@ -1595,7 +1595,7 @@ def kstudy_newopen():
         month = d_obj.month
         input_date_obj = d_obj.date()
 
-        logger.info(f"Kstudy-newopen request: date={d} (comparing {prev_year} vs {current_year}), region={r}, branch={b}")
+        logger.info(f"Edusave-newopen request: date={d} (comparing {prev_year} vs {current_year}), region={r}, branch={b}")
 
         # Build base filters (excluding date)
         q_base = []
@@ -1624,7 +1624,7 @@ def kstudy_newopen():
             
             if last_date_year_before_prev and last_date_year_before_prev[0]:
                 cur.execute(f"""
-                    SELECT COALESCE(SUM(no_ac_kstudy), 0) FROM bang6 WHERE stnd_dt = %s {where_base}
+                    SELECT COALESCE(SUM(no_ac_edusave), 0) FROM bang6 WHERE stnd_dt = %s {where_base}
                 """, [last_date_year_before_prev[0]] + p_base)
                 total_year_before_prev = cur.fetchone()[0] or 0
                 labels.append(f'Y{year_before_prev}')
@@ -1649,7 +1649,7 @@ def kstudy_newopen():
                 last_date = row[1]
                 
                 cur.execute(f"""
-                    SELECT COALESCE(SUM(no_ac_kstudy), 0)
+                    SELECT COALESCE(SUM(no_ac_edusave), 0)
                     FROM bang6
                     WHERE stnd_dt = %s {where_base}
                 """, [last_date] + p_base)
@@ -1701,7 +1701,7 @@ def kstudy_newopen():
                 for date_val in dates_current_year:
                     month_key = date_val.month
                     cur.execute(f"""
-                        SELECT COALESCE(SUM(no_ac_kstudy), 0)
+                        SELECT COALESCE(SUM(no_ac_edusave), 0)
                         FROM bang6
                         WHERE stnd_dt = %s {where_base}
                     """, [date_val] + p_base)
@@ -1721,7 +1721,7 @@ def kstudy_newopen():
 
             # Validate we have data
             if not labels or not data_values:
-                logger.warning("No K-Study data found")
+                logger.warning("No Edu-Save data found")
                 return jsonify({
                     'labels': [],
                     'data': [],
@@ -1743,16 +1743,16 @@ def kstudy_newopen():
                 'branch': b or ''
             }
             
-            logger.info(f"K-study API response: labels={len(labels)}, data={len(data_values)}")
+            logger.info(f"Edu-save API response: labels={len(labels)}, data={len(data_values)}")
             logger.info(f"Labels: {labels}")
             logger.info(f"Data: {data_values}")
             
             return jsonify(result)
 
     except Exception as e:
-        logger.error(f"Error in kstudy-newopen: {str(e)}")
+        logger.error(f"Error in edusave-newopen: {str(e)}")
         logger.error(traceback.format_exc())
-        return handle_error(e, 'kstudy-newopen')
+        return handle_error(e, 'edusave-newopen')
 
 if __name__ == '__main__':
     print("🚀 Starting Dashboard API Server...")

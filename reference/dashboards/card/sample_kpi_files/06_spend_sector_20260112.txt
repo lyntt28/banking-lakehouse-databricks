@@ -1,7 +1,0 @@
-Trx_Date	Metric_Code	Metric_Value
-2026-01-12	Purchasing_Amt	91,710,436
-2026-01-12	Cash_Advance_Amt	418,797
-2026-01-12	Installment_Amt	5,314,413
-2026-01-12	Flexi_Amt	65,671
-2026-01-12	Total_Spending_Amt	96,360,837
-2026-01-12	Avg_Spending_Per_Member	896

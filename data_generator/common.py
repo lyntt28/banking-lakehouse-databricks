@@ -47,15 +47,15 @@ LOAN_PRODUCTS = [
 # Tiền gửi: product_type, ACCOUNT_GROUP (giống file tổng hợp bang1247), GROUP_CLASS
 DEPOSIT_PRODUCTS = [
     ("CASA", "Current Account", "1-CASA"),
-    ("PAYROLL", "Payroll / S-Payroll Account", "1-CASA"),
+    ("PAYROLL", "Payroll / Payroll Plus Account", "1-CASA"),
     ("SAVING", "Time Saving Account", "1-CASA"),
     ("TD", "Term Deposit", "2-TD"),
 ]
 # Sản phẩm suy ra từ sản phẩm gốc theo account_id (không thêm lượt ngẫu nhiên -> dữ liệu cũ
-# giữ nguyên): 1/4 SAVING là ISA (tích luỹ cá nhân), 1/25 CASA là K-Study (du học)
+# giữ nguyên): 1/4 SAVING là ISA (tích luỹ cá nhân), 1/25 CASA là Edu-Save (du học)
 DEPOSIT_DERIVED = [
     ("ISA", "Individual Saving Account", "3-ISA"),
-    ("KSTUDY", "K-Study Account", "1-CASA"),
+    ("EDUSAVE", "Edu-Save Account", "1-CASA"),
 ]
 DEPOSIT_ALL = DEPOSIT_PRODUCTS + DEPOSIT_DERIVED
 TENORS = [1, 3, 6, 12, 24, 36]                       # kỳ hạn TD / ISA (tháng)

@@ -35,7 +35,7 @@ DB_PARAMS = {
 
 BASE_PATH = Path(__file__).resolve().parent
 # Thư mục FTP nhận file (watch và load tại chỗ)
-FTP_RCV_DIR = Path(r"D:\Export-Data\ftp\rcv")
+FTP_RCV_DIR = Path(r"<FTP_RCV_DIR>")
 SOURCE_DIR = FTP_RCV_DIR
 WORKING_DIR = FTP_RCV_DIR
 ERROR_DIR = BASE_PATH / "error"
@@ -127,7 +127,7 @@ CARD_METRIC_STRUCTURE = {
 def setup_logger() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     today = datetime.now().strftime('%Y%m%d')
-    log_file = LOG_DIR / f'rcd_{today}.log'
+    log_file = LOG_DIR / f'deposit_{today}.log'
 
     logging.basicConfig(
         level=logging.INFO,
@@ -176,7 +176,7 @@ def create_tables() -> None:
                 stnd_dt DATE,
                 region VARCHAR(50),
                 branch VARCHAR(10),
-                no_ac_kstudy INTEGER
+                no_ac_edusave INTEGER
             );
             CREATE TABLE IF NOT EXISTS bang1247 (
                 id SERIAL PRIMARY KEY,
@@ -509,7 +509,7 @@ LEGACY_COLUMN_MAPPING = {
     "MAX_CURR_INTRT": "max_curr_intrt",
     "AVGINTRT": "avgintrt",
     "TOTAL_BAL": "total_bal",
-    "NO_AC_KSTUDY": "no_ac_kstudy",
+    "NO_AC_EDUSAVE": "no_ac_edusave",
 }
 
 

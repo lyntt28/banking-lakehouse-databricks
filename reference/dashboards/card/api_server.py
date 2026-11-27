@@ -949,7 +949,7 @@ def get_comparison_dates(target_date):
         last_day_target = (date_obj - timedelta(days=1)).strftime('%Y-%m-%d')
         last_day = find_nearest_date(date_obj - timedelta(days=1)) or last_day_target
         
-        # Last month: last day of previous month (same logic as Dashboard_RCD)
+        # Last month: last day of previous month (same logic as Dashboard_DEPOSIT)
         if date_obj.month == 1:
             prev_month = 12
             prev_year = date_obj.year - 1

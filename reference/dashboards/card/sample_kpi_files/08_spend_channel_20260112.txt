@@ -1,5 +1,0 @@
-Trx_Date	Metric_Code	Metric_Value
-2026-01-12	POS_Spending_Amt	82,923,964
-2026-01-12	Online_Spending_Amt	14,264,361
-2026-01-12	Offline_Rate	86.47%
-2026-01-12	Online_Rate	15.11%

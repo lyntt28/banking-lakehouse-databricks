@@ -1,5 +1,0 @@
-Trx_Date	Metric_Code	Metric_Value
-2026-01-12	Consumer_Closed	4,157
-2026-01-12	Corporate_Closed	34
-2026-01-12	Member_Closed	4,097
-2026-01-12	Attrition_Rate	1.94%

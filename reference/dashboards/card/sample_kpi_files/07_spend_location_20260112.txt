@@ -1,5 +1,0 @@
-Trx_Date	Metric_Code	Metric_Value
-2026-01-12	Domestic_Spending_Amt	91,152,706
-2026-01-12	XBorder_Spending_Amt	4,768,368
-2026-01-12	Domestic_Rate	92.98%
-2026-01-12	XBorder_Rate	5.10%

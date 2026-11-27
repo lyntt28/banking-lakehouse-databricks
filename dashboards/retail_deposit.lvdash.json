@@ -4,7 +4,7 @@
       "name": "dep_tickers",
       "displayName": "Tickers",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend\n",
         "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
@@ -81,7 +81,7 @@
       "name": "dep_compare",
       "displayName": "Tickers vs last day / month / year",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend\n",
         "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
@@ -159,7 +159,7 @@
       "name": "dep_gauges",
       "displayName": "Target gauges",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend\n",
         "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
@@ -251,7 +251,7 @@
       "name": "dep_daily30",
       "displayName": "Ending Balance - Last 30 Days",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend\n",
         "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
@@ -329,7 +329,7 @@
       "name": "dep_mom",
       "displayName": "Monthly Average Balance (MoM)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend\n",
         "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
@@ -414,7 +414,7 @@
       "name": "dep_region",
       "displayName": "Regional Deposit Distribution",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend\n",
         "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
@@ -491,7 +491,7 @@
       "name": "dep_term",
       "displayName": "Deposit by Term and IR (in Month)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_by_tenor WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd)\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_by_tenor WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd)\n",
         "SELECT CASE WHEN t.tenor_months < 1 THEN '00-01M' WHEN t.tenor_months < 6 THEN '01-06M'\n",
         "            WHEN t.tenor_months < 12 THEN '06-12M' WHEN t.tenor_months < 24 THEN '12-24M'\n",
         "            ELSE '24M+' END AS tenor,\n",
@@ -554,7 +554,7 @@
       "name": "dep_casa_customer",
       "displayName": "CASA Customer Distribution",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_casa_customer WHERE as_of_date <= :report_date) AS d),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_casa_customer WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d),\n",
         "c AS (SELECT sum(c.retail_customers) retail, sum(c.casa_active_customers) active,\n",
         "             sum(c.casa_dormant_customers) dormant\n",
         "      FROM gold.dep_mart_casa_customer c CROSS JOIN p\n",
@@ -614,14 +614,15 @@
       ]
     },
     {
-      "name": "dep_kstudy",
-      "displayName": "K-Study New open Account_ Accumulate by Month",
+      "name": "dep_edusave",
+      "displayName": "Edu-Save New open Account_ Accumulate by Month",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d)\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d)\n",
         "SELECT n.open_month AS month, sum(n.new_accounts_ytd) AS cumulative_accounts\n",
         "FROM gold.dep_mart_new_accounts n CROSS JOIN p\n",
         "LEFT JOIN gold.dim_branch b ON b.branchnbr = n.branchnbr\n",
-        "WHERE n.product_type = 'KSTUDY' AND n.open_month <= date_format(p.d, 'yyyy-MM')\n",
+        "WHERE n.product_type = 'EDUSAVE' AND n.as_of_date = p.d\n",
+        "  AND n.open_month <= date_format(p.d, 'yyyy-MM')\n",
         "  AND n.open_month > date_format(add_months(p.d, -12), 'yyyy-MM')\n",
         "  AND (:region = 'all' OR b.region = :region) AND (:branch = 'all' OR n.branchnbr = :branch)\n",
         "GROUP BY 1\n"
@@ -678,7 +679,7 @@
       "name": "dep_by_product",
       "displayName": "Balance by Product",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.dep_mart_trend WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.dep_mart_trend\n",
         "      WHERE (:region = 'all' OR region = :region) AND (:branch = 'all' OR branchnbr = :branch)),\n",
         "day AS (SELECT as_of_date, sum(balance_vnd) bal FROM f GROUP BY as_of_date),\n",
@@ -923,9 +924,9 @@
                 }
               },
               {
-                "name": "param_dep_kstudy_report_date",
+                "name": "param_dep_edusave_report_date",
                 "query": {
-                  "datasetName": "dep_kstudy",
+                  "datasetName": "dep_edusave",
                   "parameters": [
                     {
                       "name": "report_date",
@@ -988,7 +989,7 @@
                   },
                   {
                     "parameterName": "report_date",
-                    "queryName": "param_dep_kstudy_report_date"
+                    "queryName": "param_dep_edusave_report_date"
                   },
                   {
                     "parameterName": "report_date",
@@ -1131,9 +1132,9 @@
                 }
               },
               {
-                "name": "param_dep_kstudy_region",
+                "name": "param_dep_edusave_region",
                 "query": {
-                  "datasetName": "dep_kstudy",
+                  "datasetName": "dep_edusave",
                   "parameters": [
                     {
                       "name": "region",
@@ -1201,7 +1202,7 @@
                   },
                   {
                     "parameterName": "region",
-                    "queryName": "param_dep_kstudy_region"
+                    "queryName": "param_dep_edusave_region"
                   },
                   {
                     "parameterName": "region",
@@ -1344,9 +1345,9 @@
                 }
               },
               {
-                "name": "param_dep_kstudy_branch",
+                "name": "param_dep_edusave_branch",
                 "query": {
-                  "datasetName": "dep_kstudy",
+                  "datasetName": "dep_edusave",
                   "parameters": [
                     {
                       "name": "branch",
@@ -1414,7 +1415,7 @@
                   },
                   {
                     "parameterName": "branch",
-                    "queryName": "param_dep_kstudy_branch"
+                    "queryName": "param_dep_edusave_branch"
                   },
                   {
                     "parameterName": "branch",
@@ -2296,7 +2297,7 @@
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "dep_kstudy",
+                  "datasetName": "dep_edusave",
                   "fields": [
                     {
                       "name": "month",
@@ -2335,7 +2336,7 @@
               },
               "frame": {
                 "showTitle": true,
-                "title": "K-Study New open Account_ Accumulate by Month"
+                "title": "Edu-Save New open Account_ Accumulate by Month"
               },
               "mark": {
                 "colors": [

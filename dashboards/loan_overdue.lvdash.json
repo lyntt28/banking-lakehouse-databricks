@@ -28,7 +28,7 @@
       "name": "ovd_tickers",
       "displayName": "Tickers",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
         "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -73,7 +73,7 @@
       "name": "ovd_compare",
       "displayName": "Tickers vs last day / month / year",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
         "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -137,7 +137,7 @@
       "name": "ovd_last5",
       "displayName": "Overdue Trend (Last 5 Days)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
         "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -185,7 +185,7 @@
       "name": "ovd_monthly",
       "displayName": "Overdue Trend (Monthly)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
         "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -234,7 +234,7 @@
       "name": "ovd_debt_groups",
       "displayName": "Overdue Amount by Debt Groups",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
         "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -281,7 +281,7 @@
       "name": "ovd_product_amount",
       "displayName": "Overdue Amount by Product Groups",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
         "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
         "\n",
@@ -326,7 +326,7 @@
       "name": "ovd_product_ratio",
       "displayName": "Overdue Ratio by Product Groups - Top5",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
+        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
         "f AS (SELECT * FROM gold.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
         "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
         "\n",

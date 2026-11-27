@@ -132,7 +132,7 @@ def test_insurance_label_has_signal_for_ml(out):
 
 
 def test_new_accounts_open_after_first_day(out):
-    """Ngày 2 có TK mở mới (open_date = ngày 2) -> biểu đồ TK mới / K-Study có dữ liệu."""
+    """Ngày 2 có TK mở mới (open_date = ngày 2) -> biểu đồ TK mới / Edu-Save có dữ liệu."""
     d1 = {r["account_id"] for r in _t(out, "accounts", D1)}
     new = [r for r in _t(out, "accounts", D2) if r["account_id"] not in d1 and r["account_id"]]
     assert new, "không có TK mở mới ở ngày 2"

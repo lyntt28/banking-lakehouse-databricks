@@ -60,7 +60,7 @@ def build_customer_features(as_of_date: str, customers: DataFrame, accounts: Dat
         F.sum("bal_vnd").alias("deposit_balance_vnd"),
         F.max((F.col("product_type") == "TD").cast("int")).alias("has_term_deposit"),
         F.max((F.col("product_type") == "ISA").cast("int")).alias("has_isa"),
-        (F.sum(F.when(F.col("product_type").isin("CASA", "PAYROLL", "KSTUDY"), F.col("bal_vnd"))
+        (F.sum(F.when(F.col("product_type").isin("CASA", "PAYROLL", "EDUSAVE"), F.col("bal_vnd"))
                .otherwise(0)) / F.sum("bal_vnd")).alias("casa_share"),
     )
 

@@ -58,9 +58,9 @@ def test_history_dates_generated(silver_days):
 def test_new_products_and_tenors(silver_days):
     acc = silver_days[DATES[-1]]["accounts"]
     types = {r.product_type for r in acc.select("product_type").distinct().collect()}
-    assert {"ISA", "KSTUDY", "TD", "CASA"} <= types
+    assert {"ISA", "EDUSAVE", "TD", "CASA"} <= types
     assert acc.filter("product_type IN ('TD', 'ISA') AND tenor_months = 0").count() == 0
-    assert acc.filter("product_type IN ('CASA', 'KSTUDY') AND tenor_months <> 0").count() == 0
+    assert acc.filter("product_type IN ('CASA', 'EDUSAVE') AND tenor_months <> 0").count() == 0
 
 
 def test_trend_with_month_comparisons(silver_days):
@@ -119,7 +119,7 @@ def test_casa_customer(silver_days):
 
 def test_new_accounts_ytd(silver_days):
     m = build_mart_deposit_new_accounts(silver_days[DATES[-1]]["accounts"])
-    k = m.filter("product_type = 'KSTUDY'").orderBy("branchnbr", "open_month").collect()
+    k = m.filter("product_type = 'EDUSAVE'").orderBy("branchnbr", "open_month").collect()
     assert k
     run = {}
     for r in k:

@@ -25,7 +25,7 @@ DB_PARAMS = {
 # 📁 PATH CONFIG
 # ─────────────────────────────────────────────
 BASE_PATH = Path("D:/DATA_ROOM/10. Nguyen Thi Thao Ly/PROJECT/Dashboard14/Data")
-SOURCE_DIR = Path("D:/Export-Data/ftp/rcv")
+SOURCE_DIR = Path("<FTP_RCV_DIR>")
 WORKING_DIR = BASE_PATH / "data"
 ERROR_DIR = BASE_PATH / "error"
 LOG_DIR = BASE_PATH / "logs"
@@ -36,7 +36,7 @@ LOG_DIR = BASE_PATH / "logs"
 def setup_logger():
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     today = datetime.now().strftime('%Y%m%d')
-    log_file = LOG_DIR / f'rcd_{today}.log'
+    log_file = LOG_DIR / f'deposit_{today}.log'
 
     logging.basicConfig(
         level=logging.INFO,
@@ -81,7 +81,7 @@ def create_tables():
                 stnd_dt DATE,
                 region VARCHAR(50),
                 branch VARCHAR(10),
-                no_ac_kstudy INTEGER
+                no_ac_edusave INTEGER
             );
             CREATE TABLE IF NOT EXISTS bang1247 (
                 id SERIAL PRIMARY KEY,

@@ -104,7 +104,7 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [x] Silver: typing, DQ gate, MERGE, SCD2 — code + unit tests, run on Databricks pending
 - [x] Gold BI star schema + marts (loan overdue / NPL with D-1·M-1·Y-1, deposit, customer 360), Silver↔Gold reconciliation — run on Databricks pending
 - [x] Gold card marts (daily, spend mix, monthly MoM/YoY + % target) and reconciliation with source summary files (card KPI, bang1247)
-- [x] Deposit marts (trend D-1/M-1/Y-1, tenor, CASA customers, K-Study new accounts) + 13-month history generation and backfill notebook
+- [x] Deposit marts (trend D-1/M-1/Y-1, tenor, CASA customers, Edu-Save new accounts) + 13-month history generation and backfill notebook
 - [x] 3 AI/BI dashboards (Card, Overdue, Deposit) rebuilt from the original Chart.js dashboards: same order, chart types and colours (`dashboards/`, deployed by the bundle) — not yet opened on a workspace
 - [x] Gold ML feature table + insurance cross-sell propensity model (MLflow, UC registry, scored list) — run on Databricks pending
 - [x] CD: main → test (deploy + run job as smoke test) → manual approval → prod, OIDC or token auth (needs GitHub environments + secrets)

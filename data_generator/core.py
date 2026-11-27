@@ -157,7 +157,7 @@ def base_deposit_accounts(rnd: random.Random, n: int, customers: list[dict],
 
 
 NEW_ACCOUNT_ID_BASE = 250_000_000   # TK mở mới sau ngày đầu (khác dải 200M gốc, 299M lỗi FK)
-NEW_ACCOUNT_MIX = [("CASA", 35), ("PAYROLL", 15), ("SAVING", 15), ("TD", 15), ("KSTUDY", 10),
+NEW_ACCOUNT_MIX = [("CASA", 35), ("PAYROLL", 15), ("SAVING", 15), ("TD", 15), ("EDUSAVE", 10),
                    ("ISA", 10)]
 
 
@@ -165,7 +165,7 @@ def open_new_accounts(rnd: random.Random, accounts: list[dict], customers: list[
                       as_of: date, n: int) -> list[dict]:
     """Mở thêm n TK tiền gửi trong ngày as_of (ngân hàng thật mở TK mới mỗi ngày).
 
-    Không có hàm này thì mọi TK đều mở TRƯỚC ngày đầu tiên -> biểu đồ "TK mở mới" (K-Study,
+    Không có hàm này thì mọi TK đều mở TRƯỚC ngày đầu tiên -> biểu đồ "TK mở mới" (Edu-Save,
     new accounts) không có dữ liệu trong 12 tháng gần nhất. Dùng rnd riêng để dữ liệu ngày cũ
     không đổi.
     """
@@ -194,11 +194,11 @@ def open_new_accounts(rnd: random.Random, accounts: list[dict], customers: list[
 
 
 def _derive_deposit_terms(a: dict, i: int) -> None:
-    """ISA / K-Study, kỳ hạn và lãi suất theo kỳ hạn - suy từ số thứ tự, không dùng rnd."""
+    """ISA / Edu-Save, kỳ hạn và lãi suất theo kỳ hạn - suy từ số thứ tự, không dùng rnd."""
     if a["product_type"] == "SAVING" and i % 4 == 0:
         a["product_type"] = "ISA"
     elif a["product_type"] == "CASA" and i % 25 == 0:
-        a["product_type"] = "KSTUDY"
+        a["product_type"] = "EDUSAVE"
     if a["product_type"] in ("TD", "ISA"):
         t = TENORS[i % len(TENORS)]
         a["tenor_months"] = t

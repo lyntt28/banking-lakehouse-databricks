@@ -1,5 +1,0 @@
-Trx_Date	Metric_Code	Metric_Value
-2026-01-12	EOP_Consumer	219,627
-2026-01-12	EOP_Corporate	3,146
-2026-01-12	EOP_Active_Corporate	2,729
-2026-01-12	Active_Corporate_Rate	85.49%

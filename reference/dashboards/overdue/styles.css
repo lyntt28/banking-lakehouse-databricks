@@ -664,7 +664,7 @@ th {
 /* Đảm bảo các số được căn phải trong tất cả các bảng */
 #region-table-body td:not(:first-child),
 #term-table-body td:not(:first-child),
-#kstudy-table-body td:not(:first-child) {
+#edusave-table-body td:not(:first-child) {
     text-align: right;
 }
 
@@ -693,12 +693,12 @@ th {
 }
 
 /* =====================
-   TABLE: K-Study Account by Region
+   TABLE: Edu-Save Account by Region
    ===================== */
-#kstudy-table th:nth-child(2),
-#kstudy-table th:nth-child(3),
-#kstudy-table td:nth-child(2),
-#kstudy-table td:nth-child(3) {
+#edusave-table th:nth-child(2),
+#edusave-table th:nth-child(3),
+#edusave-table td:nth-child(2),
+#edusave-table td:nth-child(3) {
     text-align: right !important;
 }
 
@@ -1203,7 +1203,7 @@ th {
     transform-origin: bottom;
 }
 
-/* Study Icon - K-Study */
+/* Study Icon - Edu-Save */
 .study-icon {
     width: 24px;
     height: 20px;
@@ -1361,7 +1361,7 @@ th {
     border-radius: 50%;
 }
 
-/* Graduation Cap Icon - K-Study Account by Region */
+/* Graduation Cap Icon - Edu-Save Account by Region */
 .graduation-cap-icon {
     width: 26px;
     height: 20px;

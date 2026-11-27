@@ -116,7 +116,7 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
                                           * 2.5e6 * 30 / nb,
                                           "DEPOSIT_BALANCE": dep_vnd / nb,
                                           "DEPOSIT_CASA": dep_sum({"CASA", "PAYROLL", "SAVING",
-                                                                   "KSTUDY"}) / nb,
+                                                                   "EDUSAVE"}) / nb,
                                           "DEPOSIT_TD_ISA": dep_sum({"TD", "ISA"}) / nb,
                                       })]))
         else:

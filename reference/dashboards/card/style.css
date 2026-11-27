@@ -1,6 +1,6 @@
 /* =====================
    CARD BUSINESS DASHBOARD v2
-   Style: card_dashboard_final + RAMC filter bar
+   Style: card_dashboard_final + LOAN filter bar
    ===================== */
 * {
     margin: 0;
@@ -21,7 +21,7 @@ body {
     margin: 0 auto;
 }
 
-/* Header & filters (RAMC-style) */
+/* Header & filters (LOAN-style) */
 .header-bar {
     border-bottom: 2px solid #d0d0d0;
     padding-bottom: 12px;

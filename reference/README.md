@@ -13,8 +13,8 @@ Databricks SQL dashboards of this project — they are not deployed and not part
 | Folder | Dashboard | Main files | Gold target (see `docs/gold_dashboards.md`) |
 |---|---|---|---|
 | `card/` | Card Business Dashboard – Performance & Growth | `dashboard.html`, `dashboard.js`, `api_server.py` (`/api/dashboard/full-stats`) | `mart_card_kpi_monthly`, `mart_card_spend_mix` |
-| `overdue/` | Retail loan overdue tracking (RAMC) | `dashboard.html`, `dashboardv200.js`, `api_server.py` (`/ticker*`, `/bar_line_chart`, `/overdue_*`) | `mart_loan_overdue_daily` |
-| `deposit/` | Retail Deposit Performance (RCD) | `dashboard.html`, `dashboardv2.js`, `api_server.py` (`/api/gauge-*`, `/api/account-group-table`, `/api/balance-by-*`, `/api/casa-*`, `/api/kstudy-newopen`) | `mart_deposit_daily`, `mart_deposit_by_tenor`, `mart_casa_customer` |
+| `overdue/` | Retail loan overdue tracking (LOAN) | `dashboard.html`, `dashboardv200.js`, `api_server.py` (`/ticker*`, `/bar_line_chart`, `/overdue_*`) | `mart_loan_overdue_daily` |
+| `deposit/` | Retail Deposit Performance (DEPOSIT) | `dashboard.html`, `dashboardv2.js`, `api_server.py` (`/api/gauge-*`, `/api/account-group-table`, `/api/balance-by-*`, `/api/casa-*`, `/api/edusave-newopen`) | `mart_deposit_daily`, `mart_deposit_by_tenor`, `mart_casa_customer` |
 
 How to use when building Gold:
 1. Read the SQL inside each `api_server.py` endpoint — it defines the metric
