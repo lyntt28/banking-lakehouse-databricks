@@ -6,7 +6,7 @@ Mỗi ngày dữ liệu:
                 tiền gửi vs bang1247. Lệch -> GateFailed, bảng `gold` KHÔNG bị ghi
                 (dashboard vẫn thấy batch hợp lệ gần nhất)
     3. publish - ghi vào `gold` (idempotent: replaceWhere / MERGE / overwrite) rồi thêm dòng
-                vào `ops.published_batches`. Lỗi giữa chừng (bảng thứ N/17) -> tự RESTORE mọi bảng
+                vào `ops.published_batches`. Lỗi giữa chừng (bảng thứ N/18) -> tự RESTORE mọi bảng
                 về version trước publish (rollback) -> Gold không bị trộn bảng mới / cũ.
                 Dashboard chỉ đọc tới ngày trong `published_batches` (dòng cuối cùng được ghi).
 
@@ -52,7 +52,8 @@ PUBLISHED_TABLES = ["dim_date", "dim_branch", "dim_product", "dim_customer", "lo
                     "core_fact_transaction", "loan_mart_overdue_daily", "loan_mart_npl_daily",
                     "dep_mart_daily", "cust_mart_360", "card_mart_kpi_daily",
                     "card_mart_spend_mix", "card_mart_kpi_monthly", "dep_mart_trend",
-                    "dep_mart_by_tenor", "dep_mart_casa_customer", "dep_mart_new_accounts"]
+                    "dep_mart_by_tenor", "dep_mart_casa_customer", "dep_mart_new_accounts",
+                    "card_mart_overdue_daily"]
 
 
 class GateFailed(RuntimeError):
@@ -208,6 +209,9 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         publish_batch_snapshot(gc.build_mart_card_kpi_monthly(
             spark.table(G("card_mart_kpi_daily")), spark.table(S("ref_targets"))),
             G("card_mart_kpi_monthly"), day_s)
+        ovd_src = spark.table(S("card_overdue_source")).filter(F.col("report_dt") == day)
+        overwrite_date(gc.build_mart_card_overdue_daily(ovd_src), G("card_mart_overdue_daily"),
+                       "as_of_date", day_s)
 
         fx_day = spark.table(S("ref_fx_rates")).filter(F.col("rate_date") == day)
         trend_hist = (spark.table(G("dep_mart_trend"))
