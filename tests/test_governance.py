@@ -116,8 +116,10 @@ def test_branch_users_only_get_row_filtered_or_dimension_tables():
 
     granted = {s.split("ON TABLE bank_test.")[1].split(" ")[0] for s in SQL
                if s.startswith("GRANT SELECT ON TABLE") and s.endswith("`branch_users`")}
-    assert granted - set(BRANCH_FILTERED) <= {"gold.dim_date", "gold.dim_branch",
-                                              "gold.dim_product"}
+    allowed = set(BRANCH_FILTERED) | {"gold.dim_date", "gold.dim_branch", "gold.dim_product"}
+    # view gold_serving.* của đúng các bảng đó (lọc dòng vẫn áp dụng qua bảng gốc)
+    allowed |= {t.replace("gold.", "gold_serving.", 1) for t in allowed}
+    assert granted <= allowed
     assert set(BRANCH_FILTERED) <= granted
 
 
