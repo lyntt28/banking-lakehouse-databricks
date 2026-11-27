@@ -37,8 +37,9 @@ SELECT max(as_of_date) FROM <c>.ops.published_batches;
 - Có người chạy lại ngày cũ hơn watermark. Không làm gì với dữ liệu: lệnh đã bị chặn trước khi ghi.
 - Cần sửa ngày cũ thật sự → mục 6.
 
-## 5. Lỗi ở / sau `gold:publish` (lỗi hạ tầng sau khi đã qua mọi gate)
-Silver: **stage → kiểm tra tất cả → publish**, lỗi DQ / đối soát không để lại bảng ghi dở.
+## 5. Lỗi ở `silver:publish` / ở hoặc sau `gold:publish` (lỗi hạ tầng sau khi đã qua mọi gate)
+Silver: **stage → kiểm tra tất cả → publish**, lỗi DQ / đối soát không để lại bảng ghi dở; lỗi hạ
+tầng giữa `silver:publish` → job tự `RESTORE` các bảng Silver đã ghi (log `silver_rolled_back`).
 Gold: ghi THÊM batch mới (vô hình) → **kích hoạt** (1 dòng `ops.published_batches`) → tạo + kiểm
 tra view `gold_serving` → dọn batch cũ. Xem `pipeline_runs.message` để biết lỗi ở giai đoạn nào:
 - **"rollback N bảng"** – lỗi TRƯỚC kích hoạt. Batch chưa từng được thấy; job đã `RESTORE` các
@@ -73,7 +74,8 @@ SELECT * FROM <c>.ops.writer_lock;   -- job nào, owner nào, hết hạn lúc n
 ## 6. Correction / backfill ngày cũ (prod)
 Job daily tự nhận diện file sửa: Bronze có file nạp SAU lần Silver SUCCESS của ngày đó.
 - Ngày sửa = watermark Silver: job tự chạy lại Silver rồi Gold ngày đó (log `daily_correction`),
-  không dựng Gold từ Silver cũ. Không cần thao tác.
+  không dựng Gold từ Silver cũ; file nạp sau cùng thay thế file trước. Không cần thao tác, trừ
+  khi file sửa **rút bớt** TK / thẻ / KH (bảng snapshot MERGE giữ bản cũ) → replay như dưới.
 - Ngày sửa < watermark: job dừng với `CorrectionNeedsReplay`, làm thủ công như dưới:
 1. Dựng catalog song song (vd `bank_prod_rebuild`) với `05_backfill reset=true` từ Bronze.
 2. So sánh với prod (đối soát, số dòng, tổng số dư).

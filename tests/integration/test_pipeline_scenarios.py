@@ -15,12 +15,14 @@ Kịch bản sự cố:
                                       ngày 1; chạy lại tự xử lý ngày 2, Gold publish đủ 2 ngày
     3. chạy lại nhiều lần          -> checksum nội dung Silver/Gold không đổi, không trùng khóa
     3b. lỗi giữa chừng (bảng thứ N) -> Silver không bị ghi dở; sửa xong chạy lại hội tụ
+    3c. lỗi GIỮA bước publish Silver -> tự rollback mọi bảng Silver đã ghi
     4. file trùng (gửi lại)        -> không nhân đôi dữ liệu, manifest báo MULTIPLE_FILES
     5. đối soát lệch               -> GateFailed, Gold đang phục vụ KHÔNG đổi, không publish
     5b. lỗi GIỮA bước publish Gold -> tự rollback mọi bảng đã ghi, không publish batch
     5c. lỗi SAU khi kích hoạt batch -> KHÔNG rollback (con trỏ vẫn trỏ vào batch đầy đủ)
     6. backfill ngày cũ hơn SCD2   -> bị từ chối, dữ liệu hiện tại không đổi
     6b. file sửa (correction)      -> ngày mới nhất: chạy lại Silver rồi Gold; ngày cũ: dừng
+    6d. file sửa có giá trị KHÁC    -> giá trị sửa vào Silver + Gold, dòng bị rút khỏi file mất
     7. gián đoạn nhiều ngày        -> daily chạy bù xen kẽ Silver/Gold = chạy từng ngày
 """
 
@@ -280,6 +282,33 @@ def test_3b_failure_midway_leaves_silver_untouched_then_rerun_recovers(spark, pu
     assert _runs(spark, "silver")[-1] == (D2, "SUCCESS")
 
 
+def test_3c_failure_midway_through_silver_publish_is_rolled_back(spark, published,
+                                                                 monkeypatch):
+    """Lỗi hạ tầng khi MERGE bảng Silver thứ N: bảng 1..N-1 đã ghi phải được RESTORE."""
+    import pipelines.silver as ps
+    from pipelines.silver import SilverConfig, run
+
+    real = ps.merge_upsert
+
+    def boom(df, target, *a, **k):
+        if target.endswith("card_master"):           # các bảng trước đã MERGE xong
+            raise OSError("storage timeout (giả lập)")
+        return real(df, target, *a, **k)
+
+    monkeypatch.setattr(ps, "merge_upsert", boom)
+    with pytest.raises(OSError):
+        run(spark, SilverConfig(catalog="", as_of_date=D2))
+    assert _silver_fingerprint(spark) == published["silver_ok"]
+    last = spark.sql("SELECT status, message FROM ops.pipeline_runs WHERE layer = 'silver' "
+                     "ORDER BY started_at DESC, status LIMIT 1").first()
+    assert last.status == "FAILED" and "rollback" in last.message
+
+    monkeypatch.setattr(ps, "merge_upsert", real)
+    run(spark, SilverConfig(catalog="", as_of_date=D2))          # hạ tầng ổn -> chạy lại
+    assert _silver_fingerprint(spark) == published["silver_ok"]
+    _assert_integrity(spark)
+
+
 def test_4_duplicate_file_does_not_double_count(spark, published):
     from pyspark.sql import functions as F
 
@@ -438,6 +467,41 @@ def test_6b_correction_reprocesses_silver_before_gold(spark, published):
     assert _gold_fingerprint(spark) == published["gold_ok"]
     assert daily.run(spark, SilverConfig(catalog="")) == []        # đã xử lý: không lặp lại
     assert len(_runs(spark, "silver")) == n_silver + 2
+
+
+def test_6d_correction_with_changed_values_replaces_the_day(spark, published):
+    """File sửa thật: 1 khoản vay đổi số liệu, 1 khoản vay bị nguồn rút khỏi file.
+    Không được: cả 2 bản cùng khóa bị quarantine (trùng khóa) và Silver giữ giá trị cũ."""
+    from pyspark.sql import functions as F
+
+    from pipelines import daily
+    from pipelines.silver import SilverConfig
+
+    day = F.lit(D2).cast("date")
+    changed, removed = [r.acctnbr for r in spark.table("silver.loan_snapshots")
+                        .filter(F.col("as_of_date") == day).orderBy("acctnbr").limit(2).collect()]
+    (spark.table("bronze.loans").filter(F.col("_as_of_date") == day)
+     .filter(F.col("acctnbr") != removed)
+     .withColumn("thulai", F.when(F.col("acctnbr") == changed, F.lit("777"))
+                 .otherwise(F.col("thulai")))
+     .withColumn("_source_file", F.concat(F.col("_source_file"), F.lit(".corrected")))
+     .withColumn("_load_ts", F.current_timestamp())
+     .write.format("delta").mode("append").saveAsTable("bronze.loans"))
+
+    assert daily.run(spark, SilverConfig(catalog="")) == []
+    silver_d2 = spark.table("silver.loan_snapshots").filter(F.col("as_of_date") == day)
+    assert silver_d2.filter(F.col("acctnbr") == removed).count() == 0
+    assert float(silver_d2.filter(F.col("acctnbr") == changed).first().thulai) == 777.0
+    gold_d2 = spark.table("gold.loan_fact_daily").filter(F.col("as_of_date") == day)
+    assert gold_d2.filter(F.col("acctnbr") == removed).count() == 0
+    assert gold_d2.count() == silver_d2.count()
+    assert spark.sql("SELECT count(*) FROM ops.dq_quarantine WHERE table_name = "
+                     "'loan_snapshots' AND array_contains(failed_rules, 'loan_key_unique')"
+                     ).first()[0] == 0
+    # D1 không bị đụng tới
+    d1 = spark.table("silver.loan_snapshots").filter(F.col("as_of_date") == F.lit(D1).cast("date"))
+    assert d1.filter(F.col("acctnbr") == removed).count() == 1
+    _assert_integrity(spark)
 
 
 def test_6c_correction_older_than_watermark_stops_for_replay(spark, published):
