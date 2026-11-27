@@ -29,6 +29,12 @@ Each decision: context → decision → alternatives considered → consequences
 ## ADR-006: Idempotent writes
 - **Decision:** Silver and Gold facts use `MERGE` on the business key (transactions insert-only). Customers use SCD2 (ADR-003). Gold marts are recomputed for the whole day and written with `replaceWhere as_of_date = <day>`. Small dimensions are overwritten.
 - **Consequences:** Re-running any day gives the same tables. Late data for a past day needs that day re-run.
+- **Update (batch publish, see ADR-012):** Gold no longer overwrites in place. Each publish appends rows tagged with `batch_id`, and readers see a batch only after it is activated.
+
+## ADR-012: Atomic Gold publish by batch, readers on `gold_serving`
+- **Context:** Gold publishes ~18 tables one after another. Overwriting them in place let a dashboard read new and old tables mixed, and a correction for an already published day could not be told apart from the old batch.
+- **Decision:** Every Gold table gets a `batch_id`. Publish appends the batch, then activates it with one append to `ops.published_batches` (a single Delta commit). Readers (Lakeview, `v_*` views, analysts, branch users) only have privileges on `gold_serving`, whose views select the active batch. Superseded batches are deleted after activation. A failure before activation rolls back with `RESTORE`; a failure after activation is never rolled back, because the pointer already refers to the complete batch. Serving views are validated after each publish and a mismatch fails the run.
+- **Consequences:** Readers never see a half-written publish. Only one writer may run at a time: daily, manual Silver/Gold, maintenance and backfill share `ops.writer_lock` (a conditional `MERGE`, so Delta's optimistic concurrency picks one winner; the lock expires after 8h).
 
 ## ADR-007: Reconcile Gold against the source system's own summary files
 - **Context:** Core banking sends summary files (`card_kpi`, `deposit_summary`/bang1247) computed on its side. A dashboard number that disagrees with them will not be trusted.

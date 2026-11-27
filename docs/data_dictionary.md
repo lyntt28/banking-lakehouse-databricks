@@ -1,7 +1,14 @@
 # Data dictionary – grain & lineage (Gold + Ops)
 
-Ký hiệu ghi: **snapshot/day** = `replaceWhere as_of_date = D` (chạy lại / correction ghi đè cả
-ngày); **merge** = MERGE theo khóa; **insert-only** = chỉ chèn khóa mới; **full** = ghi đè cả bảng.
+Gold publish theo **batch** (`common/serving.py`): mỗi lần publish ghi THÊM dòng có
+`batch_id` (= run_id Gold) vào bảng `gold.*`, rồi kích hoạt bằng 1 dòng trong
+`ops.published_batches`. Người đọc chỉ đọc view `gold_serving.<table>` (lọc batch đang dùng, bỏ
+cột `batch_id`); không ai ngoài pipeline có quyền trên schema `gold`. Batch cũ được xoá sau khi
+batch mới kích hoạt.
+
+Ký hiệu batch đang dùng: **snapshot/day** = batch mới nhất của từng `as_of_date` (correction thay
+cả ngày); **snapshot/batch** = cả bảng là batch mới nhất; **insert-only** = mọi dòng của batch đã
+kích hoạt (fact bất biến, MERGE chỉ chèn khóa mới); **full** = bảng tính lại toàn bộ mỗi batch.
 Mọi bảng Gold chỉ được ghi sau khi ngày đó qua gate đối soát (`pipelines/gold.py`).
 
 ## Lineage
@@ -10,8 +17,10 @@ landing (CSV/JSON, Volume)
   -> bronze.<source>                 Auto Loader, append, string + _source_file/_as_of_date/_load_ts
   -> silver.<table>                  pipelines/silver.py: cast, dedup, DQ, quarantine, MERGE/SCD2
   -> gold_stage.<mart>               pipelines/gold.py: bản ứng viên để đối soát
-  -> gold.<table>                    publish sau gate
-  -> gold views (02_dashboard_views) -> 4 dashboard AI/BI; ML feature table
+  -> gold.<table>                    publish sau gate: ghi thêm dòng của batch (chỉ pipeline đọc)
+  -> ops.published_batches           kích hoạt batch (1 commit)
+  -> gold_serving.<table>            view batch đang dùng (người đọc, Lakeview, ML)
+  -> gold_serving.v_* (02_dashboard_views) -> dashboard AI/BI
 ```
 
 ## Gold
@@ -41,7 +50,9 @@ landing (CSV/JSON, Volume)
 | `pipeline_runs` | as_of_date × layer × run_id × status (append) | Watermark, lịch sử chạy |
 | `task_runs` | run_id × step | Thời gian, số dòng, lỗi từng bước |
 | `file_manifest` | as_of_date × table_name | File nào về / thiếu / gửi nhiều lần |
-| `published_batches` | as_of_date × run_id | Batch Gold đã qua gate (consumer chỉ dùng ngày ở đây) |
+| `published_batches` | as_of_date × run_id | Con trỏ kích hoạt: batch đang dùng của ngày D = dòng `published_at` mới nhất |
+| `publish_versions` | run_id × bảng | Version trước publish, để rollback batch CHƯA kích hoạt |
+| `writer_lock` | 1 dòng (`lakehouse`) | Khóa ghi chung: daily / silver / gold / maintenance / backfill không chạy song song |
 | `dq_results` | run_id × table × rule | Kết quả DQ |
 | `dq_quarantine` | bản ghi lỗi | **Restricted** – chứa PII gốc |
 | `recon_card_kpi`, `recon_deposit` | as_of_date × chỉ tiêu | Kết quả đối soát |

@@ -13,8 +13,8 @@ SELECT * FROM <c>.ops.task_runs WHERE status = 'FAILED' ORDER BY logged_at DESC 
 -- Gold đang phục vụ batch nào
 SELECT max(as_of_date) FROM <c>.ops.published_batches;
 ```
-**Dashboard business có đang sai không?** Không, nếu lỗi xảy ra trước bước `gold:publish`:
-Gold chỉ ghi sau gate. Nếu lỗi ở `gold:publish` (hạ tầng giữa chừng) → mục 5.
+**Dashboard business có đang sai không?** Không: người đọc chỉ đọc `gold_serving.*`, chỉ thấy batch
+đã kích hoạt trong `ops.published_batches`. Lỗi ở `gold:publish` hoặc sau đó → mục 5.
 
 ## 1. `SourceFilesMissing` (bước `file_manifest`)
 - Xem `ops.file_manifest` ngày đó, `status IN ('MISSING', 'INCOMPLETE')`. `INCOMPLETE` = đã
@@ -37,21 +37,38 @@ Gold chỉ ghi sau gate. Nếu lỗi ở `gold:publish` (hạ tầng giữa ch�
 - Có người chạy lại ngày cũ hơn watermark. Không làm gì với dữ liệu: lệnh đã bị chặn trước khi ghi.
 - Cần sửa ngày cũ thật sự → mục 6.
 
-## 5. Lỗi giữa `silver:publish` / `gold:publish` (lỗi hạ tầng sau khi đã qua mọi gate)
-Silver và Gold đều **stage → kiểm tra tất cả → publish**: lỗi DQ / đối soát không bao giờ để lại
-bảng ghi dở. Chỉ lỗi hạ tầng trong chính bước publish mới có thể làm một số bảng đã ghi, số khác chưa.
-- Job TỰ rollback: mọi bảng Gold đã ghi trong lần publish lỗi được `RESTORE` về version trước
-  publish (log `gold_rolled_back`, `pipeline_runs.message` có "rollback N bảng"). Dashboard chỉ đọc
-  tới ngày trong `ops.published_batches` nên không thấy dữ liệu dở dang.
-- `message` có "ROLLBACK FAILED": rollback tự động cũng lỗi -> làm tay theo Cách 2.
-- Cách 1 (thường dùng): chạy lại job. Publish idempotent (MERGE / replaceWhere / overwrite từ
-  bản stage đã đạt) nên kết quả hội tụ.
-- Cách 2 (cần quay lại ngay): version trước publish được lưu ở `ops.publish_versions`:
+## 5. Lỗi ở / sau `gold:publish` (lỗi hạ tầng sau khi đã qua mọi gate)
+Silver: **stage → kiểm tra tất cả → publish**, lỗi DQ / đối soát không để lại bảng ghi dở.
+Gold: ghi THÊM batch mới (vô hình) → **kích hoạt** (1 dòng `ops.published_batches`) → tạo + kiểm
+tra view `gold_serving` → dọn batch cũ. Xem `pipeline_runs.message` để biết lỗi ở giai đoạn nào:
+- **"rollback N bảng"** – lỗi TRƯỚC kích hoạt. Batch chưa từng được thấy; job đã `RESTORE` các
+  bảng về version trước publish. Chạy lại job.
+- **"ROLLBACK FAILED"** – lỗi trước kích hoạt và rollback cũng lỗi. Dashboard vẫn đúng (batch dở
+  không được kích hoạt), chỉ còn dòng rác. Chạy lại job (batch cũ / rác được dọn khi batch mới
+  kích hoạt) hoặc RESTORE tay:
   ```sql
   SELECT table_name, version_before FROM <c>.ops.publish_versions WHERE run_id = '<run_id>';
   RESTORE TABLE <table_name> TO VERSION AS OF <version_before>;   -- từng bảng
   ```
   `version_before` NULL = bảng được tạo trong lần chạy đó → DROP nếu cần.
+  **Không** RESTORE run đã kích hoạt (run_id có trong `published_batches`): sẽ xoá dòng mà
+  dashboard đang đọc.
+- **"batch đã kích hoạt trước khi lỗi -> không rollback"** – dashboard đang đọc batch mới, đầy đủ.
+  Run FAILED để lần chạy sau dựng lại ngày đó (batch mới thay thế). Không cần thao tác dữ liệu.
+- **`ServingViewsInvalid`** – batch đã kích hoạt nhưng view `gold_serving` thiếu / lệch cột (vd:
+  bảng thêm cột, view lỗi). Dashboard có thể thiếu cột mới / lỗi. Xem danh sách trong message, sửa
+  rồi chạy lại job (tạo lại view). Kiểm tra: `SHOW VIEWS IN <c>.gold_serving`.
+- **SUCCESS có "WARN dọn batch cũ lỗi"** – dữ liệu đang phục vụ đúng; còn dòng batch cũ trong
+  `gold`. Lần publish sau của ngày đó dọn tiếp; không gấp.
+
+## 5b. `WriterBusy`
+Một job khác đang ghi lakehouse (daily, Silver / Gold chạy tay, maintenance, backfill).
+```sql
+SELECT * FROM <c>.ops.writer_lock;   -- job nào, owner nào, hết hạn lúc nào
+```
+- Job kia đang chạy thật (Jobs → Runs): chờ xong rồi chạy lại. Không xoá khóa.
+- Job kia đã chết (không còn run nào chạy) mà khóa chưa hết hạn (8h): xoá tay để chạy ngay
+  `DELETE FROM <c>.ops.writer_lock WHERE owner = '<owner>'`.
 
 ## 6. Correction / backfill ngày cũ (prod)
 Job daily tự nhận diện file sửa: Bronze có file nạp SAU lần Silver SUCCESS của ngày đó.

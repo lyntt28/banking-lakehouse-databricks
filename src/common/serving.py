@@ -14,6 +14,8 @@ Cách làm:
     4. Sau khi kích hoạt mới xoá dòng của batch cũ (người đọc đã không còn thấy chúng).
 
 Batch lỗi giữa chừng: chưa kích hoạt -> vô hình với người đọc; rollback (RESTORE) vẫn dọn nó.
+Lỗi SAU khi kích hoạt: không rollback (sẽ xoá dòng mà con trỏ đang trỏ tới), xem pipelines/gold.py.
+Quyền: người đọc chỉ có quyền trên gold_serving, không trên gold (common.governance).
 """
 
 from __future__ import annotations

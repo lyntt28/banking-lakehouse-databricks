@@ -5,10 +5,17 @@ Mỗi ngày dữ liệu:
     2. gate   - đối soát trên bản stage: dư nợ Silver = Gold, KPI thẻ vs file nguồn,
                 tiền gửi vs bang1247. Lệch -> GateFailed, bảng `gold` KHÔNG bị ghi
                 (dashboard vẫn thấy batch hợp lệ gần nhất)
-    3. publish - ghi vào `gold` (idempotent: replaceWhere / MERGE / overwrite) rồi thêm dòng
-                vào `ops.published_batches`. Lỗi giữa chừng (bảng thứ N/18) -> tự RESTORE mọi bảng
-                về version trước publish (rollback) -> Gold không bị trộn bảng mới / cũ.
-                Dashboard chỉ đọc tới ngày trong `published_batches` (dòng cuối cùng được ghi).
+    3. publish - ghi THÊM dòng của batch (batch_id = run_id) vào mọi bảng `gold` (common.serving),
+                rồi KÍCH HOẠT bằng 1 dòng append vào `ops.published_batches` (1 commit = nguyên
+                tử). Người đọc chỉ đọc view `gold_serving.*` (lọc batch đang dùng) nên không bao
+                giờ thấy batch dở dang.
+                - lỗi TRƯỚC kích hoạt: batch vô hình; RESTORE các bảng đã ghi (rollback) để dọn.
+                - lỗi SAU kích hoạt: KHÔNG rollback (con trỏ đang trỏ vào batch đầy đủ) -> FAILED,
+                  lần chạy sau dựng batch mới.
+    4. sau kích hoạt - tạo + kiểm tra view gold_serving (sai -> ServingViewsInvalid, FAILED),
+                dọn dòng batch cũ (lỗi chỉ là cảnh báo trong message SUCCESS).
+
+Ghi Gold phải giữ khóa ghi chung `ops.writer_lock` (common.writer_lock, notebook gọi).
 
 Ngày cần dựng = ngày Silver SUCCESS mà Gold chưa SUCCESS (hoặc đúng `as_of_date`).
 """

@@ -74,7 +74,7 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
   SELECT status, count(*) FROM bank_dev.ops.recon_card_kpi GROUP BY 1;
   SELECT status, count(*) FROM bank_dev.ops.recon_deposit GROUP BY 1;
   -- NPL theo ngày
-  SELECT * FROM bank_dev.gold.loan_mart_npl_daily ORDER BY as_of_date DESC LIMIT 10;
+  SELECT * FROM bank_dev.gold_serving.loan_mart_npl_daily ORDER BY as_of_date DESC LIMIT 10;
   ```
   Đúng: fail_pct các rule FAIL < 5%; NPL ~3%; recon toàn `MATCH`.
 - **NẾU LỖI:**
@@ -131,8 +131,12 @@ databricks bundle run banking_lakehouse_daily -t dev
 **Bảng trạng thái**
 - `ops.pipeline_runs`: mỗi ngày dữ liệu × layer (silver/gold) × lần chạy: RUNNING → SUCCESS/FAILED.
   Watermark = ngày SUCCESS lớn nhất. Lần đầu nâng cấp (chưa có bảng) → suy từ dữ liệu sẵn có.
-- `ops.published_batches`: ngày Gold đã qua gate đối soát (kèm số liệu kiểm tra dạng JSON).
-  Consumer (ML) chỉ dùng ngày trong bảng này và dừng nếu batch mới nhất cũ hơn `max_gold_age_days`.
+- `ops.published_batches`: con trỏ kích hoạt batch Gold đã qua gate (kèm số liệu kiểm tra JSON).
+  Batch đang dùng của ngày D = dòng `published_at` mới nhất. Người đọc chỉ đọc `gold_serving.*`
+  (view lọc đúng batch đó). ML dừng nếu batch mới nhất cũ hơn `max_gold_age_days`.
+- `ops.writer_lock`: khóa ghi chung. Daily, notebook Silver / Gold chạy tay, maintenance và
+  backfill giữ khóa khi chạy; job thứ hai dừng với `WriterBusy` (không ghi gì). `max_concurrent_runs: 1`
+  chỉ chặn 2 lần chạy của CÙNG một job, nên vẫn cần khóa này.
 
 **Luồng** (task `silver_gold` → `src/pipelines/daily.py`): với từng ngày chờ, chạy Silver
 rồi Gold ngay, sau đó mới sang ngày sau. Bắt buộc xen kẽ vì Silver snapshot (TK, thẻ) là MERGE
@@ -147,17 +151,19 @@ chỉ giữ trạng thái mới nhất: Gold ngày D phải dựng trước khi 
    `ref_targets`) → FAILED, dừng; các ngày sau **không** chạy (SCD2 cần đúng thứ tự).
 2. Gold: tính mart dùng để đối soát → ghi `gold_stage` → đối soát (dư nợ Silver–Gold, KPI thẻ,
    tiền gửi bang1247) → lệch thì dừng, **bảng Gold mà dashboard đọc không bị đụng tới**;
-   đạt thì mới publish vào `gold` và ghi `ops.published_batches`.
-   Lưu ý: publish ghi nhiều bảng lần lượt (Delta atomic theo từng bảng). Nếu lỗi giữa chừng
-   (hạ tầng), chạy lại ngày đó: mọi bước publish idempotent (replaceWhere / MERGE / overwrite).
+   đạt thì mới publish: ghi THÊM dòng của batch vào các bảng `gold` (người đọc chưa thấy), rồi
+   kích hoạt bằng 1 dòng vào `ops.published_batches` → `gold_serving` chuyển sang batch mới cùng lúc.
+   Lỗi trước kích hoạt → tự rollback, dashboard vẫn ở batch cũ. Lỗi sau kích hoạt → không
+   rollback, run FAILED, lần chạy sau dựng batch mới. View `gold_serving` sai → FAILED
+   (`ServingViewsInvalid`). Chi tiết: `docs/incident_runbook.md` mục 5.
 
 | Tình huống | Làm gì | Cơ chế |
 |---|---|---|
-| **Retry** (task lỗi tạm thời) | Job tự retry / chạy lại job | Idempotent: MERGE theo khóa, replaceWhere theo ngày, SCD2 so hash |
+| **Retry** (task lỗi tạm thời) | Job tự retry / chạy lại job | Idempotent: Silver MERGE theo khóa, SCD2 so hash; Gold dựng batch mới, kích hoạt thay batch cũ |
 | **Gián đoạn nhiều ngày** | Chạy job như thường, `as_of_date` trống | Xử lý mọi ngày sau watermark |
 | **File về trễ** | Chờ file, chạy lại job | Ngày thiếu file FAILED, watermark đứng yên. Ngày KHÔNG có file nào (kể cả loans) cũng được tính theo lịch nghiệp vụ nên không bị nhảy qua |
 | **Rerun 1 ngày** (cùng dữ liệu) | Job với `as_of_date=<ngày>` | Không đổi kết quả |
-| **Correction** (nguồn gửi lại file sửa của ngày D = ngày mới nhất đã xử lý) | Đặt file mới (tên khác) vào landing → Bronze nạp; chạy `as_of_date=D` | Snapshot (loan fact, mart): ghi đè cả ngày → dòng bị rút cũng biến mất. SCD2 cùng ngày: sửa tại chỗ phiên bản ngày D. Giao dịch (`core_transactions`, insert-only): **không** cập nhật bản đã có – cần quy trình sửa riêng (reversal/adjustment từ nguồn) |
+| **Correction** (nguồn gửi lại file sửa của ngày D = ngày mới nhất đã xử lý) | Đặt file mới (tên khác) vào landing → Bronze nạp; chạy `as_of_date=D` | Snapshot (loan fact, mart): batch mới thay cả ngày khi kích hoạt → dòng bị rút cũng biến mất. SCD2 cùng ngày: sửa tại chỗ phiên bản ngày D. Giao dịch (`core_transactions`, insert-only): **không** cập nhật bản đã có – cần quy trình sửa riêng (reversal/adjustment từ nguồn) |
 | **Correction / backfill ngày cũ hơn watermark** | dev/test: `05_backfill reset=true`. prod: dựng catalog song song từ Bronze, kiểm tra, rồi chuyển consumer (`docs/incident_runbook.md`) | Bị chặn (`OutOfOrder`): snapshot MERGE + SCD2 không cho ghi vào quá khứ |
 
 **SCD2 (`silver.core_customers`)**: ngữ nghĩa *daily snapshot* – tối đa 1 phiên bản / khách hàng /
