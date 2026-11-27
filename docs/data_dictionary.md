@@ -3,6 +3,9 @@
 Ký hiệu ghi: **snapshot/day** = `replaceWhere as_of_date = D` (chạy lại / correction ghi đè cả
 ngày); **merge** = MERGE theo khóa; **insert-only** = chỉ chèn khóa mới; **full** = ghi đè cả bảng.
 Mọi bảng Gold chỉ được ghi sau khi ngày đó qua gate đối soát (`pipelines/gold.py`).
+Gold: mỗi dòng có `batch_id`; publish ghi THÊM batch mới rồi kích hoạt qua `ops.published_batches`,
+sau đó mới xoá dòng batch cũ. "snapshot/day" ở Gold = batch mới thay cả ngày khi được kích hoạt.
+Người đọc dùng view `gold_serving.<bảng>` (lọc batch đang dùng), không đọc `gold.<bảng>` trực tiếp.
 
 ## Lineage
 ```
@@ -41,7 +44,8 @@ landing (CSV/JSON, Volume)
 | `pipeline_runs` | as_of_date × layer × run_id × status (append) | Watermark, lịch sử chạy |
 | `task_runs` | run_id × step | Thời gian, số dòng, lỗi từng bước |
 | `file_manifest` | as_of_date × table_name | File nào về / thiếu / gửi nhiều lần |
-| `published_batches` | as_of_date × run_id | Batch Gold đã qua gate (consumer chỉ dùng ngày ở đây) |
+| `published_batches` | as_of_date × run_id | Con trỏ kích hoạt batch Gold (đã qua gate); `gold_serving` đọc batch mới nhất theo `published_at` |
+| `writer_lock` | lock_name | Khoá ghi dùng chung cho mọi job ghi (owner, expires_at) |
 | `dq_results` | run_id × table × rule | Kết quả DQ |
 | `dq_quarantine` | bản ghi lỗi | **Restricted** – chứa PII gốc |
 | `recon_card_kpi`, `recon_deposit` | as_of_date × chỉ tiêu | Kết quả đối soát |

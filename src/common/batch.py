@@ -356,8 +356,9 @@ def rollback_statements(versions: list[tuple[str, int | None, int | None]]) -> l
 
 
 def rollback_publish(spark, catalog: str, run_id: str) -> list[str]:
-    """Publish Gold lỗi giữa chừng (vd: bảng thứ 3/17): đưa MỌI bảng đã ghi về version trước
-    publish -> Gold toàn vẹn ở batch cũ, không trộn bảng mới / cũ. Trả về các lệnh đã chạy."""
+    """Publish Gold lỗi TRƯỚC khi kích hoạt batch (vd: bảng thứ 3/18): đưa mọi bảng đã ghi về
+    version trước publish -> dọn dòng của batch lỗi. Không gọi sau khi đã kích hoạt (con trỏ
+    sẽ trỏ vào batch bị xoá, xem pipelines/gold.py). Trả về các lệnh đã chạy."""
     t = fq(catalog, "ops", "publish_versions")
     rows = spark.sql(f"SELECT table_name, version_before FROM {t} "
                      f"WHERE run_id = '{run_id}'").collect()

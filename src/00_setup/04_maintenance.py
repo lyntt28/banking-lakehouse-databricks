@@ -93,8 +93,12 @@ if mode == "benchmark":
     display(spark.createDataFrame(files, "table string, files_before long, bytes_before long, "
                                          "files_after long, bytes_after long"))
 else:
-    # gắn lại CLUSTER BY (gold ghi đè một số bảng) + OPTIMIZE + VACUUM
-    for sql in cluster_statements(catalog, existing) + vacuum_statements(catalog,
-                                                                         existing=existing):
-        print(sql)
-        spark.sql(sql)
+    # gắn lại CLUSTER BY (gold ghi đè một số bảng) + OPTIMIZE + VACUUM.
+    # Giữ khoá ghi: VACUUM không được xoá file mà RESTORE (rollback Gold) của job khác cần.
+    from common.lock import writer_lock  # noqa: E402
+
+    with writer_lock(spark, catalog, "maintenance"):
+        for sql in cluster_statements(catalog, existing) + vacuum_statements(catalog,
+                                                                             existing=existing):
+            print(sql)
+            spark.sql(sql)

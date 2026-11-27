@@ -5,10 +5,15 @@ Mỗi ngày dữ liệu:
     2. gate   - đối soát trên bản stage: dư nợ Silver = Gold, KPI thẻ vs file nguồn,
                 tiền gửi vs bang1247. Lệch -> GateFailed, bảng `gold` KHÔNG bị ghi
                 (dashboard vẫn thấy batch hợp lệ gần nhất)
-    3. publish - ghi vào `gold` (idempotent: replaceWhere / MERGE / overwrite) rồi thêm dòng
-                vào `ops.published_batches`. Lỗi giữa chừng (bảng thứ N/18) -> tự RESTORE mọi bảng
-                về version trước publish (rollback) -> Gold không bị trộn bảng mới / cũ.
-                Dashboard chỉ đọc tới ngày trong `published_batches` (dòng cuối cùng được ghi).
+    3. publish - ghi THÊM dòng của batch (batch_id = run_id) vào `gold`, vô hình với người đọc
+                (`gold_serving` chỉ thấy batch đã kích hoạt, xem common/serving.py). Kích hoạt =
+                1 dòng append vào `ops.published_batches` (1 commit = nguyên tử).
+                - Lỗi TRƯỚC kích hoạt: RESTORE các bảng đã ghi (dọn dòng batch lỗi); người đọc
+                  vốn không thấy batch này.
+                - Lỗi SAU kích hoạt: KHÔNG rollback (con trỏ đã trỏ batch mới, RESTORE Gold sẽ
+                  làm view trỏ vào batch không còn dữ liệu). Run báo FAILED để cảnh báo.
+    4. sau kích hoạt - dọn dòng batch cũ (lỗi chỉ ghi log), tạo + kiểm tra view gold_serving
+                (lỗi -> FAILED: người đọc có thể không thấy cột / bảng mới).
 
 Ngày cần dựng = ngày Silver SUCCESS mà Gold chưa SUCCESS (hoặc đúng `as_of_date`).
 """
@@ -35,6 +40,7 @@ from common.batch import (
 )
 from common.dates import check_date
 from common.delta_io import overwrite, overwrite_date
+from common.lock import writer_lock
 from common.names import fq
 from common.ops_log import StepRecorder, log
 
@@ -59,6 +65,28 @@ PUBLISHED_TABLES = ["dim_date", "dim_branch", "dim_product", "dim_customer", "lo
 
 class GateFailed(RuntimeError):
     pass
+
+
+class ServingViewsInvalid(RuntimeError):
+    """Batch đã kích hoạt nhưng view gold_serving thiếu / không truy vấn được."""
+
+
+@dataclass
+class PublishState:
+    """Trạng thái publish, để `run` biết lỗi xảy ra trước hay sau khi kích hoạt batch."""
+    activated: bool = False
+
+
+def failure_action(activated: bool) -> str:
+    """Lỗi trước kích hoạt -> rollback; sau kích hoạt -> giữ nguyên (thuần Python, test được)."""
+    return "keep_active" if activated else "rollback"
+
+
+def serving_view_errors(expected: list[str], created: list[str],
+                        broken: dict[str, str]) -> list[str]:
+    errors = [f"thiếu view gold_serving.{t}" for t in expected if t not in created]
+    errors += [f"view gold_serving.{t} lỗi: {e}" for t, e in broken.items()]
+    return errors
 
 
 class NotReproducible(RuntimeError):
@@ -98,7 +126,8 @@ def pending_days(spark: SparkSession, cfg: GoldConfig) -> list[str]:
 
 
 def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
-                      rec: StepRecorder) -> dict:
+                      rec: StepRecorder, state: PublishState | None = None) -> dict:
+    state = state if state is not None else PublishState()
     S = lambda t: cfg.t("silver", t)  # noqa: E731
     G = lambda t: cfg.t("gold", t)  # noqa: E731
     ops = lambda t: cfg.t("ops", t)  # noqa: E731
@@ -221,17 +250,39 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         put(gd.build_mart_deposit_new_accounts(spark.table(S("core_accounts")))
             .withColumn("as_of_date", day), "dep_mart_new_accounts")
 
-        # KÍCH HOẠT batch: từ commit này người đọc gold_serving thấy toàn bộ batch mới
+        s.rows_out = fact_loan_day.count()
+        # KÍCH HOẠT batch: từ commit này người đọc gold_serving thấy toàn bộ batch mới.
+        # Là câu lệnh CUỐI của bước publish; mọi lỗi sau đây không được rollback Gold.
         (spark.createDataFrame([(day_s, rec.run_id, json.dumps(checks))],
                                "as_of_date string, run_id string, checks string")
          .select(F.col("as_of_date").cast("date"), "run_id",
                  F.current_timestamp().alias("published_at"), "checks")
          .write.format("delta").mode("append").saveAsTable(ops("published_batches")))
-        s.rows_out = fact_loan_day.count()
+        state.activated = True
     return checks
 
 
+def refresh_serving_views(spark: SparkSession, cfg: GoldConfig) -> None:
+    """Tạo lại view gold_serving rồi kiểm tra từng view truy vấn được (LIMIT 0)."""
+    expected = [t for t in PUBLISHED_TABLES if spark.catalog.tableExists(cfg.t("gold", t))]
+    created = sv.create_serving_views(spark, cfg.catalog)
+    broken = {}
+    for t in created:
+        try:
+            spark.sql(f"SELECT * FROM {cfg.t('gold_serving', t)} LIMIT 0").collect()
+        except Exception as e:  # noqa: BLE001
+            broken[t] = f"{type(e).__name__}: {e}"
+    errors = serving_view_errors(expected, created, broken)
+    if errors:
+        raise ServingViewsInvalid("; ".join(errors))
+
+
 def run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
+    with writer_lock(spark, cfg.catalog, "gold"):
+        return _run(spark, cfg)
+
+
+def _run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
     ensure_ops_tables(spark, cfg.catalog)
     for schema in ("gold", "gold_stage"):
         spark.sql(f"CREATE SCHEMA IF NOT EXISTS {fq(cfg.catalog, schema)}")
@@ -243,11 +294,21 @@ def run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
         assert_reproducible(day, silver_wm)
         rec = StepRecorder(str(uuid.uuid4()), day, "gold")
         record_run(spark, cfg.catalog, day, "gold", rec.run_id, "RUNNING")
+        state = PublishState()
         try:
-            build_and_publish(spark, cfg, day, rec)
+            build_and_publish(spark, cfg, day, rec, state)
         except Exception as e:
             msg = f"{type(e).__name__}: {e}"
-            # lỗi trong bước publish: đã có version trước publish của run này -> rollback
+            if failure_action(state.activated) == "keep_active":
+                # con trỏ đã trỏ batch mới, dữ liệu batch đầy đủ -> KHÔNG RESTORE (sẽ làm
+                # gold_serving trỏ vào batch đã bị xoá). Báo FAILED để người vận hành kiểm tra.
+                msg += " | batch ĐÃ kích hoạt, không rollback (runbook mục 5)"
+                log("gold_failed_after_activation", as_of_date=day, run_id=rec.run_id,
+                    error=str(e))
+                rec.flush(spark, cfg.t("ops", "task_runs"))
+                record_run(spark, cfg.catalog, day, "gold", rec.run_id, "FAILED", msg)
+                raise
+            # lỗi trước kích hoạt: RESTORE về version trước publish (dọn dòng batch lỗi)
             try:
                 undone = rollback_publish(spark, cfg.catalog, rec.run_id)
                 if undone:
@@ -260,14 +321,23 @@ def run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
             record_run(spark, cfg.catalog, day, "gold", rec.run_id, "FAILED", msg)
             log("gold_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
             raise
-        # batch đã kích hoạt: dọn dòng batch cũ (người đọc không còn thấy) + cập nhật view.
-        # Lỗi ở đây không làm hỏng batch đã publish -> chỉ ghi log, lần chạy sau dọn tiếp.
+        # batch đã kích hoạt: dọn dòng batch cũ (người đọc không còn thấy). Lỗi dọn dẹp không
+        # làm sai dữ liệu người đọc thấy -> chỉ ghi log, lần chạy sau dọn tiếp.
         try:
             for t in PUBLISHED_TABLES:
                 sv.cleanup_superseded(spark, cfg.catalog, t, day, rec.run_id)
-            sv.create_serving_views(spark, cfg.catalog)
         except Exception as e:  # noqa: BLE001
             log("gold_cleanup_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
+        # view gold_serving lỗi / thiếu -> người đọc không thấy batch mới đúng -> FAILED + raise
+        try:
+            refresh_serving_views(spark, cfg)
+        except Exception as e:
+            msg = (f"{type(e).__name__}: {e} | batch ĐÃ kích hoạt, view gold_serving cần sửa "
+                   "rồi chạy 03_gold/02_dashboard_views")
+            log("gold_serving_views_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
+            rec.flush(spark, cfg.t("ops", "task_runs"))
+            record_run(spark, cfg.catalog, day, "gold", rec.run_id, "FAILED", msg)
+            raise
         rec.flush(spark, cfg.t("ops", "task_runs"))
         record_run(spark, cfg.catalog, day, "gold", rec.run_id, "SUCCESS")
         log("gold_published", as_of_date=day, run_id=rec.run_id)

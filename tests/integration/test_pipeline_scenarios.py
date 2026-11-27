@@ -362,6 +362,45 @@ def test_5b_failure_midway_through_gold_publish_is_rolled_back(spark, published,
     _assert_integrity(spark)
 
 
+def test_5c_failure_after_activation_does_not_rollback(spark, published, monkeypatch):
+    """Lỗi NGAY SAU khi kích hoạt batch: không được RESTORE Gold (con trỏ đã trỏ batch mới,
+    RESTORE sẽ làm gold_serving trỏ vào batch không còn dữ liệu). Run báo FAILED."""
+    import pipelines.gold as pg
+    from pipelines.gold import GoldConfig
+    from pipelines.gold import run as gold_run
+
+    n_pub = spark.table("ops.published_batches").count()
+    real = pg.build_and_publish
+
+    def activate_then_fail(*a, **k):
+        real(*a, **k)
+        raise OSError("driver mất kết nối sau khi kích hoạt (giả lập)")
+
+    monkeypatch.setattr(pg, "build_and_publish", activate_then_fail)
+    with pytest.raises(OSError):
+        gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
+    assert spark.table("ops.published_batches").count() == n_pub + 1   # batch mới đang dùng
+    last = spark.sql("SELECT status, message FROM ops.pipeline_runs WHERE layer = 'gold' "
+                     "ORDER BY started_at DESC, status LIMIT 1").first()
+    assert last.status == "FAILED" and "không rollback" in last.message
+    # batch đang dùng có đủ dữ liệu: người đọc thấy đúng nội dung như trước
+    assert _gold_fingerprint(spark) == published["gold_ok"]
+    _assert_integrity(spark)
+
+
+def test_5d_serving_view_failure_marks_run_failed(spark, published, monkeypatch):
+    import pipelines.gold as pg
+    from pipelines.gold import GoldConfig, ServingViewsInvalid
+    from pipelines.gold import run as gold_run
+
+    monkeypatch.setattr(pg.sv, "create_serving_views", lambda spark, catalog: [])
+    with pytest.raises(ServingViewsInvalid):
+        gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
+    last = spark.sql("SELECT status, message FROM ops.pipeline_runs WHERE layer = 'gold' "
+                     "ORDER BY started_at DESC, status LIMIT 1").first()
+    assert last.status == "FAILED" and "gold_serving" in last.message
+
+
 def test_6_out_of_order_rerun_rejected_without_damage(spark, published):
     from pipelines.gold import GoldConfig, NotReproducible
     from pipelines.gold import run as gold_run

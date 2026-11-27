@@ -26,18 +26,21 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 from common.batch import assert_reset_allowed  # noqa: E402
+from common.lock import writer_lock  # noqa: E402
 
 if reset:
     assert_reset_allowed(catalog)
-    for schema in ["silver", "silver_stage", "gold", "gold_stage", "gold_serving"]:
-        if not spark.catalog.databaseExists(f"{catalog}.{schema}"):
-            continue
-        for t in spark.sql(f"SHOW TABLES IN {catalog}.{schema}").collect():
-            if not t.isTemporary:
-                spark.sql(f"DROP TABLE IF EXISTS {catalog}.{schema}.`{t.tableName}`")
-                print(f"dropped {catalog}.{schema}.{t.tableName}")
-    for t in ["pipeline_runs", "published_batches", "publish_versions"]:
-        spark.sql(f"DROP TABLE IF EXISTS {catalog}.ops.{t}")
+    # job khác đang ghi -> WriterBusy: không drop bảng đang được ghi
+    with writer_lock(spark, catalog, "backfill_reset"):
+        for schema in ["silver", "silver_stage", "gold", "gold_stage", "gold_serving"]:
+            if not spark.catalog.databaseExists(f"{catalog}.{schema}"):
+                continue
+            for t in spark.sql(f"SHOW TABLES IN {catalog}.{schema}").collect():
+                if not t.isTemporary:
+                    spark.sql(f"DROP TABLE IF EXISTS {catalog}.{schema}.`{t.tableName}`")
+                    print(f"dropped {catalog}.{schema}.{t.tableName}")
+        for t in ["pipeline_runs", "published_batches", "publish_versions"]:
+            spark.sql(f"DROP TABLE IF EXISTS {catalog}.ops.{t}")
 
 # COMMAND ----------
 

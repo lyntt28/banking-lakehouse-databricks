@@ -83,15 +83,14 @@ def test_row_filter_on_branch_tables():
 def test_least_privilege_grants():
     joined = "\n".join(SQL)
     assert "TO `branch_users`" in joined
-    # branch_users chỉ đọc gold, không đụng silver / bronze / ops data
+    # branch_users chỉ đọc gold_serving, không đụng gold / silver / bronze / ops data
     bu = [s for s in SQL if s.endswith("TO `branch_users`") and "ON SCHEMA" in s]
-    assert {s.split("ON SCHEMA ")[1].split(" ")[0] for s in bu} == {"bank_test.gold",
-                                                                    "bank_test.gold_serving",
+    assert {s.split("ON SCHEMA ")[1].split(" ")[0] for s in bu} == {"bank_test.gold_serving",
                                                                     "bank_test.ops"}
     assert all("MODIFY" not in s for s in SQL if "risk_analysts" in s or "branch_users" in s)
     # nhóm đọc giới hạn không có SELECT cả schema gold (branch_users) / ops (cả hai)
     for g, schema in [("branch_users", "gold"), ("branch_users", "gold_serving"),
-                      ("branch_users", "ops"),
+                      ("branch_users", "ops"), ("risk_analysts", "gold"),
                       ("risk_analysts", "ops")]:
         assert not any(f"ON SCHEMA bank_test.{schema} TO `{g}`" in s and "SELECT" in s
                        for s in SQL), (g, schema)
@@ -116,11 +115,34 @@ def test_branch_users_only_get_row_filtered_or_dimension_tables():
 
     granted = {s.split("ON TABLE bank_test.")[1].split(" ")[0] for s in SQL
                if s.startswith("GRANT SELECT ON TABLE") and s.endswith("`branch_users`")}
-    allowed = set(BRANCH_FILTERED) | {"gold.dim_date", "gold.dim_branch", "gold.dim_product"}
-    # view gold_serving.* của đúng các bảng đó (lọc dòng vẫn áp dụng qua bảng gốc)
-    allowed |= {t.replace("gold.", "gold_serving.", 1) for t in allowed}
-    assert granted <= allowed
-    assert set(BRANCH_FILTERED) <= granted
+    base = set(BRANCH_FILTERED) | {"gold.dim_date", "gold.dim_branch", "gold.dim_product"}
+    # CHỈ view gold_serving.* của đúng các bảng đó (lọc dòng vẫn áp dụng qua bảng gốc)
+    allowed = {t.replace("gold.", "gold_serving.", 1) for t in base}
+    assert granted == allowed
+
+
+def test_consumers_never_read_raw_gold_tables():
+    """Bảng gold chứa batch chưa kích hoạt -> nhóm đọc chỉ được đọc gold_serving / view v_*."""
+    from common.dashboard_views import VIEWS
+
+    views = {f"gold.{v[2]}" for v in VIEWS}
+    for g in ("risk_analysts", "branch_users"):
+        tables = {s.split("ON TABLE bank_test.")[1].split(" ")[0] for s in SQL
+                  if s.startswith("GRANT SELECT ON TABLE") and s.endswith(f"`{g}`")}
+        raw_gold = {t for t in tables if t.startswith("gold.")} - views
+        assert not raw_gold, (g, raw_gold)
+    assert all(f"GRANT SELECT ON TABLE bank_test.{v} TO `risk_analysts`" in SQL for v in views)
+
+
+def test_old_raw_gold_grants_are_revoked_after_grants():
+    from common.governance import BRANCH_FILTERED
+
+    assert "REVOKE SELECT ON SCHEMA bank_test.gold FROM `risk_analysts`" in SQL
+    for t in BRANCH_FILTERED:
+        assert f"REVOKE SELECT ON TABLE bank_test.{t} FROM `branch_users`" in SQL
+    last_grant = max(i for i, s in enumerate(SQL) if s.startswith("GRANT"))
+    first_revoke = min(i for i, s in enumerate(SQL) if s.startswith("REVOKE"))
+    assert last_grant < first_revoke
 
 
 def test_table_grants_after_row_filters():
