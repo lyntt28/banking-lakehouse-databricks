@@ -54,10 +54,14 @@ def compare_with_history(df: DataFrame, keys: list[str], values: list[str],
 
 
 def nation_group(col: str = "nationality") -> F.Column:
-    """Mã quốc gia KH -> nhóm như cột NATION của bang1247 (bộ lọc Nationality)."""
-    c = F.upper(F.col(col))
-    return (F.when(c.isin("VN", "VIETNAMESE"), "VIETNAMESE")
-            .when(c.isin("KR", "FOREIGN"), "FOREIGN").otherwise("OTHER"))
+    """Mã quốc gia KH -> nhóm như cột NATION của bang1247 (bộ lọc Nationality).
+
+    VN -> VIETNAMESE; mọi mã quốc gia khác -> FOREIGN; trống / NULL -> OTHER.
+    """
+    c = F.upper(F.trim(F.col(col)))
+    return (F.when(c.isNull() | (c == "") | (c == "OTHER"), "OTHER")
+            .when(c.isin("VN", "VIETNAMESE"), "VIETNAMESE")
+            .otherwise("FOREIGN"))
 
 
 def build_mart_deposit_trend(accounts: DataFrame, products: DataFrame, fx: DataFrame,
