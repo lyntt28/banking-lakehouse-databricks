@@ -36,7 +36,7 @@ from common.batch import (
 )
 from common.delta_io import merge_upsert, overwrite, overwrite_date, scd2_upsert
 from common.dq import dq_summary, should_stop
-from common.lock import writer_lock
+from common.lock import ensure_held, writer_lock
 from common.names import fq
 from common.ops_log import StepRecorder, log
 from common.silver import CUSTOMER_TRACKED, ORDER, TABLES, prepare_silver, quarantine_records
@@ -207,6 +207,7 @@ def process_day(spark: SparkSession, cfg: SilverConfig, day: str, rec: StepRecor
     # ---------- Phase 2: mọi bảng đã đạt -> publish. Lưu version Delta trước khi ghi để
     # RESTORE được nếu lỗi hạ tầng giữa chừng (ops.publish_versions, incident runbook).
     with rec.step("silver:publish") as s:
+        ensure_held(spark, cfg.catalog)   # mất khoá ghi -> dừng trước khi ghi Silver
         targets = [cfg.t("silver", n) for n in staged]
         record_versions(spark, cfg.catalog, run_id, day, "silver", targets)
         for name in staged:

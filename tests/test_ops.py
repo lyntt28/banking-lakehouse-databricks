@@ -99,3 +99,36 @@ def test_rollback_restores_written_tables_and_drops_new_ones():
         ("gold.card_mart_spend_mix", None, None),  # chưa từng tồn tại -> bỏ qua
     ]) == ["RESTORE TABLE gold.dim_date TO VERSION AS OF 4",
            "DROP TABLE IF EXISTS gold.dep_mart_trend"]
+
+
+def test_smoke_latest_resolves_to_silver_watermark():
+    from pipelines.daily import NoProgress, resolve_as_of
+
+    assert resolve_as_of("latest", "2026-11-02") == "2026-11-02"
+    assert resolve_as_of("2026-11-01", "2026-11-02") == "2026-11-01"
+    assert resolve_as_of("", "2026-11-02") == ""
+    with pytest.raises(NoProgress):
+        resolve_as_of("latest", None)
+
+
+def test_smoke_requires_progress():
+    from pipelines.daily import NoProgress, assert_progress
+
+    assert_progress(["2026-11-02"])
+    with pytest.raises(NoProgress):
+        assert_progress([])
+
+
+def test_gate_money_stays_decimal_beyond_float_precision():
+    from decimal import Decimal
+
+    from pipelines.gold import as_money, gate_errors
+
+    big = Decimal("12345678901234567.89")                  # > 2^53: float làm tròn mất .89
+    assert float(big) == float(big + Decimal("0.01"))       # float KHÔNG phân biệt được
+    checks = {"silver_balance": as_money(big), "gold_balance": as_money(big + Decimal("0.01")),
+              "recon_card_bad": 0, "recon_deposit_bad": 0}
+    assert gate_errors(checks)                              # Decimal: phát hiện lệch 0,01
+    assert as_money(None) == 0
+    with pytest.raises(TypeError):
+        as_money(1.5)

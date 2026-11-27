@@ -4,7 +4,7 @@ Ký hiệu ghi: **snapshot/day** = `replaceWhere as_of_date = D` (chạy lại /
 ngày); **merge** = MERGE theo khóa; **insert-only** = chỉ chèn khóa mới; **full** = ghi đè cả bảng.
 Mọi bảng Gold chỉ được ghi sau khi ngày đó qua gate đối soát (`pipelines/gold.py`).
 Gold: mỗi dòng có `batch_id`; publish ghi THÊM batch mới rồi kích hoạt qua `ops.published_batches`,
-sau đó mới xoá dòng batch cũ. "snapshot/day" ở Gold = batch mới thay cả ngày khi được kích hoạt.
+sau đó mới dọn batch lỗi và batch cũ (giữ lại batch đang dùng ngay trước cho truy vấn đang chạy). "snapshot/day" ở Gold = batch mới thay cả ngày khi được kích hoạt.
 Người đọc dùng view `gold_serving.<bảng>` (lọc batch đang dùng), không đọc `gold.<bảng>` trực tiếp.
 
 ## Lineage

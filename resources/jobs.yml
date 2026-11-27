@@ -21,6 +21,9 @@ resources:
         # Ngày bắt đầu lịch hằng ngày; trước đó chỉ đòi snapshot cuối tháng. "" = tự suy ra
         - name: daily_from
           default: ""
+        # Smoke test (CD): true = job không xử lý ngày nào thì FAIL. Dùng với as_of_date=latest
+        - name: require_progress
+          default: "false"
 
       tasks:
         - task_key: setup

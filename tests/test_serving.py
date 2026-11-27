@@ -53,8 +53,15 @@ def test_new_batch_invisible_until_activated_then_old_cleaned(spark, clean):
     _activate(spark, D1, "b2", "2026-11-01 09:00:00")   # 1 commit -> chuyển hẳn sang b2
     assert _serving(spark, t) == {(D1, 99.0)}
     sv.cleanup_superseded(spark, "", t, D1, "b2")
-    assert spark.table(f"gold.{t}").count() == 1
+    # giữ b1 (batch đang dùng ngay trước) cho truy vấn đang chạy với con trỏ cũ
+    assert {r.batch_id for r in spark.table(f"gold.{t}").collect()} == {"b1", "b2"}
     assert _serving(spark, t) == {(D1, 99.0)}
+    # batch sửa tiếp theo (b3): b1 bị dọn, giữ b2 + b3
+    sv.write_batch(_mart(spark, D1, 7.0), "", t, "b3")
+    _activate(spark, D1, "b3", "2026-11-01 11:00:00")
+    sv.cleanup_superseded(spark, "", t, D1, "b3")
+    assert {r.batch_id for r in spark.table(f"gold.{t}").collect()} == {"b2", "b3"}
+    assert _serving(spark, t) == {(D1, 7.0)}
 
 
 def test_daily_keeps_other_days_and_failed_batch_stays_hidden(spark, clean):
@@ -96,9 +103,56 @@ def test_upgrade_adds_batch_id_to_existing_table(spark, clean):
     assert _serving(spark, t) == {(D1, 5.0)}
 
 
+def test_concurrent_reader_sees_old_or_new_batch_never_mixed_or_empty(spark, clean):
+    """Người đọc truy vấn liên tục trong lúc batch mới được ghi, kích hoạt rồi dọn batch cũ:
+    mỗi lần đọc phải thấy TRỌN batch cũ hoặc TRỌN batch mới (không lẫn, không rỗng)."""
+    import threading
+
+    t = "loan_mart_overdue_daily"
+
+    def mart(v):
+        rows = [(D1, str(b), v) for b in range(101, 106)]   # 5 chi nhánh
+        return spark.createDataFrame(rows, "as_of_date string, branchnbr string, ovd double") \
+            .withColumn("as_of_date", F.col("as_of_date").cast("date"))
+
+    sv.write_batch(mart(1.0), "", t, "b1")
+    _activate(spark, D1, "b1", "2026-11-01 07:00:00")
+    sv.create_serving_views(spark, "")
+
+    seen, errors, stop = [], [], threading.Event()
+
+    def reader():
+        while not stop.is_set():
+            try:
+                r = spark.sql(f"SELECT count(*) AS n, sum(ovd) AS s, "
+                              f"count(DISTINCT ovd) AS k FROM gold_serving.{t}").first()
+                seen.append((r.n, r.s, r.k))
+            except Exception as e:  # noqa: BLE001
+                errors.append(e)
+
+    th = threading.Thread(target=reader)
+    th.start()
+    try:
+        sv.write_batch(mart(2.0), "", t, "b2")                 # ghi THÊM, chưa kích hoạt
+        _activate(spark, D1, "b2", "2026-11-01 09:00:00")      # 1 commit
+        sv.cleanup_superseded(spark, "", t, D1, "b2")           # xoá batch cũ
+        for _ in range(3):                                      # cho reader đọc thêm sau dọn
+            spark.sql(f"SELECT count(*) FROM gold_serving.{t}").collect()
+    finally:
+        stop.set()
+        th.join()
+
+    assert not errors, errors
+    assert len(seen) >= 2
+    assert set(seen) <= {(5, 5.0, 1), (5, 10.0, 1)}, set(seen)   # trọn b1 hoặc trọn b2
+    assert _serving(spark, t) == {(D1, 2.0)}
+
+
 def test_view_sql_kinds():
-    assert "max_by(run_id, published_at)" in sv.serving_view_sql("c", "dep_mart_daily",
-                                                                 ["as_of_date", "batch_id"])
+    daily = sv.serving_view_sql("c", "dep_mart_daily", ["as_of_date", "batch_id"])
+    assert "max_by(p.run_id, p.published_at)" in daily
+    # chỉ chọn batch có mặt trong snapshot bảng đang đọc (đọc đồng thời không ra rỗng)
+    assert "SELECT DISTINCT as_of_date, batch_id FROM c.gold.dep_mart_daily" in daily
     sql = sv.serving_view_sql("c", "core_fact_transaction", ["txn_id", "batch_id"])
     assert "IN (SELECT run_id FROM c.ops.published_batches)" in sql
     assert "`batch_id`" not in sql

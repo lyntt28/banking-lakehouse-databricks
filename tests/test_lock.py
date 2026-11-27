@@ -35,3 +35,34 @@ def test_context_manager_is_reentrant_and_releases_on_error(spark, ops):
                 assert spark.table("ops.writer_lock").count() == 1
             raise ValueError("lỗi trong job")
     assert spark.table("ops.writer_lock").count() == 0
+
+
+def test_ensure_held_renews_while_owner(spark, ops):
+    with lock.writer_lock(spark, "", "daily"):
+        before = spark.table("ops.writer_lock").first().expires_at
+        lock.ensure_held(spark, "")
+        assert spark.table("ops.writer_lock").first().expires_at >= before
+
+
+def test_job_stops_writing_after_lock_expired_and_taken(spark, ops):
+    """Job chạy quá hạn khoá, job khác lấy khoá: job cũ phải dừng trước commit tiếp theo."""
+    with pytest.raises(lock.LockLost, match="maintenance"):
+        with lock.writer_lock(spark, "", "daily"):
+            spark.sql("UPDATE ops.writer_lock "
+                      "SET expires_at = current_timestamp() - INTERVAL 1 HOURS")
+            lock.acquire(spark, "", "maintenance")        # job khác lấy khoá hết hạn
+            lock.ensure_held(spark, "")                    # trước commit quan trọng
+    # job cũ nhả khoá không được xoá khoá của job mới
+    assert spark.table("ops.writer_lock").first().job == "maintenance"
+
+
+def test_expired_lock_not_yet_taken_is_also_lost(spark, ops):
+    with pytest.raises(lock.LockLost):
+        with lock.writer_lock(spark, "", "daily"):
+            spark.sql("UPDATE ops.writer_lock "
+                      "SET expires_at = current_timestamp() - INTERVAL 1 HOURS")
+            lock.ensure_held(spark, "")
+
+
+def test_ensure_held_without_lock_is_noop(spark, ops):
+    lock.ensure_held(spark, "")   # gọi thẳng hàm publish (unit test) không cần khoá

@@ -162,7 +162,8 @@ def _checksum(spark, table):
 def _gold_fingerprint(spark):
     from pipelines.gold import PUBLISHED_TABLES
 
-    return {t: _checksum(spark, f"gold.{t}") for t in PUBLISHED_TABLES}
+    # so cái người đọc thấy: bảng gold gốc còn giữ batch đang dùng ngay trước (serving.py)
+    return {t: _checksum(spark, f"gold_serving.{t}") for t in PUBLISHED_TABLES}
 
 
 def _silver_fingerprint(spark):
@@ -178,8 +179,9 @@ def _assert_integrity(spark):
 
     for t, key in GOLD_KEYS.items():
         k = ", ".join(key)
-        dup = spark.sql(f"SELECT {k} FROM gold.{t} GROUP BY {k} HAVING count(*) > 1").count()
-        assert dup == 0, f"gold.{t} trùng khóa {key}"
+        dup = spark.sql(f"SELECT {k} FROM gold_serving.{t} GROUP BY {k} "
+                        "HAVING count(*) > 1").count()
+        assert dup == 0, f"gold_serving.{t} trùng khóa {key}"
     for t in ORDER:
         spec = TABLES[t]
         if spec.write_mode == "scd2":
@@ -196,7 +198,7 @@ def _assert_integrity(spark):
         SELECT 1 FROM silver.core_customers a JOIN silver.core_customers b
           ON a.customer_id = b.customer_id AND a.valid_from < b.valid_from
          AND (a.valid_to IS NULL OR a.valid_to >= b.valid_from)""").count() == 0
-    assert spark.sql("SELECT customer_sk FROM gold.dim_customer GROUP BY customer_sk "
+    assert spark.sql("SELECT customer_sk FROM gold_serving.dim_customer GROUP BY customer_sk "
                      "HAVING count(*) > 1").count() == 0
 
 
@@ -412,12 +414,8 @@ def test_5c_failure_after_activation_does_not_rollback(spark, published, monkeyp
     last = spark.sql("SELECT status, message FROM ops.pipeline_runs WHERE layer = 'gold' "
                      "ORDER BY started_at DESC, status LIMIT 1").first()
     assert last.status == "FAILED" and "không rollback" in last.message
-    # người đọc (gold_serving) thấy batch mới đầy đủ, cùng nội dung như trước. Bảng gold gốc
-    # còn dòng batch cũ (chưa dọn vì run dừng sau kích hoạt) -> không so bảng gốc ở đây.
-    from pipelines.gold import PUBLISHED_TABLES
-
-    serving = {t: _checksum(spark, f"gold_serving.{t}") for t in PUBLISHED_TABLES}
-    assert serving == published["gold_ok"]
+    # người đọc (gold_serving) thấy batch mới đầy đủ, cùng nội dung như trước
+    assert _gold_fingerprint(spark) == published["gold_ok"]
 
     monkeypatch.setattr(pg, "build_and_publish", real)
     gold_run(spark, GoldConfig(catalog="", as_of_date=D2))      # chạy lại: dọn + SUCCESS
@@ -506,7 +504,7 @@ def test_6d_correction_with_changed_values_replaces_the_day(spark, published):
     silver_d2 = spark.table("silver.loan_snapshots").filter(F.col("as_of_date") == day)
     assert silver_d2.filter(F.col("acctnbr") == removed).count() == 0
     assert float(silver_d2.filter(F.col("acctnbr") == changed).first().thulai) == 777.0
-    gold_d2 = spark.table("gold.loan_fact_daily").filter(F.col("as_of_date") == day)
+    gold_d2 = spark.table("gold_serving.loan_fact_daily").filter(F.col("as_of_date") == day)
     assert gold_d2.filter(F.col("acctnbr") == removed).count() == 0
     assert gold_d2.count() == silver_d2.count()
     assert spark.sql("SELECT count(*) FROM ops.dq_quarantine WHERE table_name = "

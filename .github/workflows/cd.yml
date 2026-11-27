@@ -70,6 +70,7 @@ jobs:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
       RUN_AS_SP: ${{ secrets.DATABRICKS_RUN_AS_SP }}
+      WAREHOUSE_ID: ${{ vars.DATABRICKS_WAREHOUSE_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: databricks/setup-cli@v1.28.0
@@ -79,6 +80,9 @@ jobs:
             [ -n "${!v}" ] || { echo "::error::environment 'test' thiếu $v"; exit 1; }
           done
           echo "DATABRICKS_AUTH_TYPE=github-oidc" >> "$GITHUB_ENV"
+          # workspace không phải Free Edition: đặt biến DATABRICKS_WAREHOUSE_ID của environment
+          # (trống = tra warehouse theo tên mặc định trong databricks.yml)
+          if [ -n "$WAREHOUSE_ID" ]; then echo "BUNDLE_VAR_warehouse_id=$WAREHOUSE_ID" >> "$GITHUB_ENV"; fi
       - name: Show OIDC subject
         run: echo "subject = repo:${GITHUB_REPOSITORY}:environment:test"
       - name: Validate + deploy bundle (test)
@@ -89,13 +93,14 @@ jobs:
         env:
           AS_OF_DATE: ${{ inputs.as_of_date }}   # qua env, không chèn thẳng vào script
         run: |
-          params=""
-          if [ -n "$AS_OF_DATE" ]; then
-            [[ "$AS_OF_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "bad date"; exit 1; }
-            params="--params as_of_date=$AS_OF_DATE"
-          fi
+          # Mặc định as_of_date=latest: chạy lại ngày mới nhất -> luôn đi qua Silver, gate đối
+          # soát và publish Gold. require_progress=true: không xử lý ngày nào -> FAIL, tránh
+          # "xanh vì không có gì để làm".
+          day="${AS_OF_DATE:-latest}"
+          [[ "$day" == latest || "$day" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "bad date"; exit 1; }
           # Job fail (thiếu file, DQ gate, gate đối soát Gold...) -> mã lỗi -> không lên prod
-          databricks bundle run banking_lakehouse_daily -t test --var run_as_sp="$RUN_AS_SP" $params
+          databricks bundle run banking_lakehouse_daily -t test --var run_as_sp="$RUN_AS_SP" \
+            --params "as_of_date=$day,require_progress=true"
 
   deploy-prod:
     needs: deploy-test           # skipped/failed -> prod không chạy
@@ -109,6 +114,7 @@ jobs:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
       RUN_AS_SP: ${{ secrets.DATABRICKS_RUN_AS_SP }}
+      WAREHOUSE_ID: ${{ vars.DATABRICKS_WAREHOUSE_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: databricks/setup-cli@v1.28.0
@@ -118,6 +124,9 @@ jobs:
             [ -n "${!v}" ] || { echo "::error::environment 'prod' thiếu $v"; exit 1; }
           done
           echo "DATABRICKS_AUTH_TYPE=github-oidc" >> "$GITHUB_ENV"
+          # workspace không phải Free Edition: đặt biến DATABRICKS_WAREHOUSE_ID của environment
+          # (trống = tra warehouse theo tên mặc định trong databricks.yml)
+          if [ -n "$WAREHOUSE_ID" ]; then echo "BUNDLE_VAR_warehouse_id=$WAREHOUSE_ID" >> "$GITHUB_ENV"; fi
       - name: Validate + deploy bundle (prod)
         run: |
           databricks bundle validate -t prod --var run_as_sp="$RUN_AS_SP"

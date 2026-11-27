@@ -11,7 +11,9 @@ Cách làm:
     2. Kích hoạt = 1 dòng append vào `ops.published_batches` (1 commit Delta = nguyên tử).
        Batch đang dùng của ngày D = dòng `published_at` mới nhất của D.
     3. Người đọc (dashboard, view, ML) đọc schema `gold_serving`: view lọc đúng batch đang dùng.
-    4. Sau khi kích hoạt mới xoá dòng của batch cũ (người đọc đã không còn thấy chúng).
+    4. Sau khi kích hoạt mới dọn: xoá batch lỗi + batch cũ hơn batch đang dùng ngay trước. Giữ
+       batch ngay trước để truy vấn đang chạy với con trỏ cũ vẫn đọc đủ (Delta không chụp
+       snapshot nhiều bảng cùng lúc, xem serving_view_sql).
 
 Batch lỗi giữa chừng: chưa kích hoạt -> vô hình với người đọc; rollback (RESTORE) vẫn dọn nó.
 """
@@ -55,16 +57,29 @@ def latest_batch_sql(catalog: str) -> str:
 
 
 def serving_view_sql(catalog: str, table: str, columns: list[str]) -> str:
-    """View đọc batch đang dùng của bảng Gold (bỏ cột batch_id)."""
+    """View đọc batch đang dùng của bảng Gold (bỏ cột batch_id).
+
+    Đọc đồng thời: 1 truy vấn đọc 2 bảng Delta (bảng Gold + con trỏ) nhưng Delta KHÔNG chụp 2
+    bảng cùng thời điểm. Nếu chỉ join "batch mới nhất trong con trỏ" thì có thể ra RỖNG:
+    con trỏ đã trỏ batch mới mà snapshot bảng Gold chưa có nó (hoặc ngược lại batch cũ vừa bị
+    dọn). Vì vậy view chọn batch kích hoạt mới nhất CÓ MẶT trong chính snapshot bảng Gold đang
+    đọc, và `cleanup_superseded` giữ lại batch đang dùng ngay trước -> luôn thấy trọn 1 batch."""
     src = fq(catalog, "gold", table)
     view = fq(catalog, "gold_serving", table)
+    ptr = _pointer(catalog)
     cols = ", ".join(f"s.`{c}`" for c in columns if c != BATCH_COL)
     kind = TABLE_KIND[table]
     if kind == "daily":
-        body = (f"SELECT {cols} FROM {src} s JOIN ({active_by_date_sql(catalog)}) a "
+        active = (f"SELECT p.as_of_date, max_by(p.run_id, p.published_at) AS batch_id "
+                  f"FROM {ptr} p JOIN (SELECT DISTINCT as_of_date, {BATCH_COL} FROM {src}) b "
+                  f"ON p.as_of_date = b.as_of_date AND p.run_id = b.{BATCH_COL} "
+                  "GROUP BY p.as_of_date")
+        body = (f"SELECT {cols} FROM {src} s JOIN ({active}) a "
                 f"ON s.as_of_date = a.as_of_date AND s.{BATCH_COL} = a.batch_id")
     elif kind == "snapshot":
-        body = f"SELECT {cols} FROM {src} s WHERE s.{BATCH_COL} = {latest_batch_sql(catalog)}"
+        latest = (f"(SELECT max_by(run_id, published_at) FROM {ptr} WHERE run_id IN "
+                  f"(SELECT DISTINCT {BATCH_COL} FROM {src}))")
+        body = f"SELECT {cols} FROM {src} s WHERE s.{BATCH_COL} = {latest}"
     else:
         body = (f"SELECT {cols} FROM {src} s WHERE s.{BATCH_COL} IN "
                 f"(SELECT run_id FROM {_pointer(catalog)})")
@@ -144,15 +159,26 @@ def candidate(spark, catalog: str, table: str, day_s: str, batch_id: str) -> Dat
     return j.filter(keep).drop("_d", "_b", BATCH_COL)
 
 
+KEEP_BATCHES = 2   # batch đang dùng + batch đang dùng ngay trước (cho truy vấn đang chạy)
+
+
 def cleanup_superseded(spark, catalog: str, table: str, day_s: str, batch_id: str) -> None:
-    """Sau khi kích hoạt: xoá dòng của batch cũ / batch lỗi (người đọc đã không thấy chúng)."""
+    """Sau khi kích hoạt: xoá batch lỗi (chưa từng kích hoạt) và batch cũ hơn batch đang dùng
+    ngay trước. Giữ batch ngay trước: truy vấn đang chạy có thể vẫn đọc con trỏ cũ (xem
+    serving_view_sql); lần publish sau của ngày đó sẽ dọn nó. `batch_id` (batch vừa kích hoạt)
+    luôn nằm trong số được giữ."""
     target = fq(catalog, "gold", table)
     if not spark.catalog.tableExists(target):
         return
+    ptr = _pointer(catalog)
     kind = TABLE_KIND[table]
-    if kind == "daily":
-        spark.sql(f"DELETE FROM {target} WHERE as_of_date = DATE'{day_s}' "
-                  f"AND {BATCH_COL} <> '{batch_id}'")
-    elif kind == "snapshot":
-        spark.sql(f"DELETE FROM {target} WHERE {BATCH_COL} <> '{batch_id}'")
-    # append: fact bất biến, dòng của batch cũ vẫn là dữ liệu đúng -> giữ
+    if kind == "append":   # fact bất biến, dòng của batch cũ vẫn là dữ liệu đúng -> giữ
+        return
+    where = f"WHERE as_of_date = DATE'{day_s}' " if kind == "daily" else ""
+    # Delta không cho subquery trong DELETE -> đọc danh sách batch cần giữ trước
+    keep = {r.run_id for r in spark.sql(f"SELECT run_id FROM {ptr} {where}"
+                                        f"ORDER BY published_at DESC LIMIT {KEEP_BATCHES}")
+            .collect()} | {batch_id}
+    keep_sql = ", ".join(f"'{b}'" for b in sorted(keep))
+    scope = f"as_of_date = DATE'{day_s}' AND " if kind == "daily" else ""
+    spark.sql(f"DELETE FROM {target} WHERE {scope}{BATCH_COL} NOT IN ({keep_sql})")

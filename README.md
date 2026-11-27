@@ -65,7 +65,7 @@ Deployment   : Declarative Automation Bundles (DAB) + GitHub Actions
 ```
 databricks.yml          Bundle: variables + targets dev / test / prod
 resources/jobs.yml      Job banking_lakehouse_daily (tasks + retries)
-data_generator/         Fake core-banking data (13 tables) with injected errors
+data_generator/         Fake core-banking data (15 source feeds, see `src/common/bronze.py`) with injected errors
 src/00_setup/           Catalog, schemas, volume, ops tables; sample data generation
 src/01_bronze/          Auto Loader ingestion
 src/02_silver/          Typing, DQ gate, quarantine, MERGE / SCD2
@@ -107,7 +107,7 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [x] Deposit marts (trend D-1/M-1/Y-1, tenor, CASA customers, Edu-Save new accounts) + 13-month history generation and backfill notebook
 - [x] 3 AI/BI dashboards (Card, Overdue, Deposit) rebuilt from the original Chart.js dashboards: same order, chart types and colours (`dashboards/`, deployed by the bundle) — not yet opened on a workspace
 - [x] Gold ML feature table + insurance cross-sell propensity model (MLflow, UC registry, scored list) — run on Databricks pending
-- [x] CD: main → test (deploy + run job as smoke test) → manual approval → prod, OIDC or token auth (needs GitHub environments + secrets)
+- [x] CD: main → test (deploy + smoke test that must reprocess the latest day through both gates and Gold publish) → manual approval → prod, OIDC auth only (needs GitHub environments + secrets; optional `DATABRICKS_WAREHOUSE_ID` variable for non-Free-Edition workspaces) — not yet run against a workspace
 - [x] Unity Catalog governance as code: RBAC grants (readers only see `gold_serving` views), PII column masks + tags, branch row filter (dry-run on Free Edition)
 - [x] Atomic Gold publish: batch IDs + activation pointer (`ops.published_batches`), serving views, rollback only before activation, shared writer lock across jobs (ADR-012) — integration-tested on local Delta, run on Databricks pending
 - [x] Performance tuning code: liquid clustering, OPTIMIZE/VACUUM weekly job, before/after benchmark notebook (numbers pending a Databricks run)
