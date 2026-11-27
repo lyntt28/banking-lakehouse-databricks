@@ -55,6 +55,10 @@ def table_version(spark, name):
     return v(spark, name)
 
 
+def _table_id(spark, name):
+    return spark.sql(f"DESCRIBE DETAIL {name}").first()["id"]
+
+
 def _tables(spark, schema):
     return [r.tableName for r in spark.sql(f"SHOW TABLES IN {schema}").collect()
             if not r.isTemporary]
@@ -95,8 +99,8 @@ def baseline(spark, tmp_path_factory):
         for t in base["tables"][schema]:
             spark.sql(f"CREATE TABLE snap_{schema}.{t} USING DELTA AS SELECT * FROM {schema}.{t}")
             v = table_version(spark, f"{schema}.{t}")
-            # (version có nội dung baseline, version hiện tại được biết là "sạch")
-            base["versions"][f"{schema}.{t}"] = [v, v]
+            # (version có nội dung baseline, version hiện tại được biết là "sạch", table id)
+            base["versions"][f"{schema}.{t}"] = [v, v, _table_id(spark, f"{schema}.{t}")]
     yield base
     _drop_all(spark, SCHEMAS + [f"snap_{s}" for s in SCHEMAS])
 
@@ -112,10 +116,15 @@ def published(spark, baseline):
             spark.sql(f"DROP TABLE {schema}.{t}")
         for t in tables:
             name = f"{schema}.{t}"
+            # bảng bị test trước DROP + tạo lại: số version không còn ứng với baseline
+            # (RESTORE theo version sẽ ra nội dung sai) -> dựng lại từ snapshot
+            if t in existing and _table_id(spark, name) != versions[name][2]:
+                spark.sql(f"DROP TABLE {name}")
+                existing.discard(t)
             if t not in existing:
                 spark.sql(f"CREATE TABLE {name} USING DELTA AS SELECT * FROM snap_{name}")
                 v = table_version(spark, name)
-                versions[name] = [v, v]
+                versions[name] = [v, v, _table_id(spark, name)]
             elif table_version(spark, name) != versions[name][1]:   # test trước đã ghi
                 spark.sql(f"RESTORE TABLE {name} TO VERSION AS OF {versions[name][0]}")
                 versions[name][1] = table_version(spark, name)
@@ -283,7 +292,7 @@ def test_4_duplicate_file_does_not_double_count(spark, published):
 def test_5_reconciliation_failure_keeps_serving_gold(spark, published):
     from pyspark.sql import functions as F
 
-    from pipelines.gold import GateFailed, GoldConfig
+    from pipelines.gold import PUBLISHED_TABLES, GateFailed, GoldConfig
     from pipelines.gold import run as gold_run
 
     n_pub = spark.table("ops.published_batches").count()
@@ -306,7 +315,7 @@ def test_5_reconciliation_failure_keeps_serving_gold(spark, published):
     assert spark.table("ops.published_batches").count() == n_pub
     # có version trước publish của mọi bảng Gold (để RESTORE)
     assert spark.sql("SELECT count(DISTINCT table_name) FROM ops.publish_versions "
-                     "WHERE layer = 'gold'").first()[0] == 17
+                     "WHERE layer = 'gold'").first()[0] == len(PUBLISHED_TABLES)
     assert _runs(spark, "gold")[-1] == (D2, "FAILED")
     gate = spark.sql("SELECT status, error FROM ops.task_runs WHERE layer = 'gold' "
                      "AND step = 'gold:gate' ORDER BY logged_at DESC LIMIT 1").first()
@@ -314,7 +323,7 @@ def test_5_reconciliation_failure_keeps_serving_gold(spark, published):
 
 
 def test_5b_failure_midway_through_gold_publish_is_rolled_back(spark, published, monkeypatch):
-    """Lỗi hạ tầng khi đang ghi bảng Gold thứ N/17: mọi bảng đã ghi phải được RESTORE,
+    """Lỗi hạ tầng khi đang ghi bảng Gold thứ N/18: mọi bảng đã ghi phải được RESTORE,
     published_batches không có dòng mới -> dashboard vẫn ở batch cũ, không trộn mới / cũ."""
     import pipelines.gold as pg
     from pipelines.gold import GoldConfig
