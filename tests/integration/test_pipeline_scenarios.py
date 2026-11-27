@@ -383,7 +383,15 @@ def test_5c_failure_after_activation_does_not_rollback(spark, published, monkeyp
     last = spark.sql("SELECT status, message FROM ops.pipeline_runs WHERE layer = 'gold' "
                      "ORDER BY started_at DESC, status LIMIT 1").first()
     assert last.status == "FAILED" and "không rollback" in last.message
-    # batch đang dùng có đủ dữ liệu: người đọc thấy đúng nội dung như trước
+    # người đọc (gold_serving) thấy batch mới đầy đủ, cùng nội dung như trước. Bảng gold gốc
+    # còn dòng batch cũ (chưa dọn vì run dừng sau kích hoạt) -> không so bảng gốc ở đây.
+    from pipelines.gold import PUBLISHED_TABLES
+
+    serving = {t: _checksum(spark, f"gold_serving.{t}") for t in PUBLISHED_TABLES}
+    assert serving == published["gold_ok"]
+
+    monkeypatch.setattr(pg, "build_and_publish", real)
+    gold_run(spark, GoldConfig(catalog="", as_of_date=D2))      # chạy lại: dọn + SUCCESS
     assert _gold_fingerprint(spark) == published["gold_ok"]
     _assert_integrity(spark)
 
