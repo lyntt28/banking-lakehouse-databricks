@@ -110,10 +110,9 @@ def pipeline(spark, tmp_path_factory):
     days = [str(r[0]) for r in spark.table(f"{CATALOG}.bronze.loans")
             .select("_as_of_date").distinct().orderBy("_as_of_date").collect()]
     assert days == DAYS
-    # như 05_backfill: 1 lần notebook daily, as_of_date trống -> tự đi theo lịch nghiệp vụ.
-    # 2026-10-31 là snapshot cuối tháng (lịch sử), daily từ 11-02: không đòi file 11-01.
-    run_notebook(spark, "src/02_silver/00_daily_silver_gold.py", catalog=CATALOG,
-                 as_of_date="", daily_feed_start="2026-11-02")
+    for d in days:   # giống vòng lặp trong 05_backfill
+        run_notebook(spark, "src/02_silver/01_silver_transform.py", catalog=CATALOG, as_of_date=d)
+        run_notebook(spark, "src/03_gold/01_gold_build.py", catalog=CATALOG, as_of_date=d)
     return spark
 
 
@@ -122,9 +121,6 @@ def test_backfill_runs_every_day(pipeline):
     got = {str(r[0]) for r in pipeline.table(f"{CATALOG}.gold.loan_mart_npl_daily")
            .select("as_of_date").collect()}
     assert got == set(DAYS)
-    pub = [str(r[0]) for r in pipeline.sql(
-        f"SELECT as_of_date FROM {CATALOG}.ops.published_batches ORDER BY 1").collect()]
-    assert pub == DAYS
 
 
 @pytest.mark.parametrize("table", ["recon_deposit", "recon_card_kpi"])

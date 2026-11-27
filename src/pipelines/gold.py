@@ -6,7 +6,7 @@ Mỗi ngày dữ liệu:
                 tiền gửi vs bang1247. Lệch -> GateFailed, bảng `gold` KHÔNG bị ghi
                 (dashboard vẫn thấy batch hợp lệ gần nhất)
     3. publish - ghi vào `gold` (idempotent: replaceWhere / MERGE / overwrite) rồi thêm dòng
-                vào `ops.published_batches`. Lỗi giữa chừng (bảng thứ N/17) -> tự RESTORE mọi bảng
+                vào `ops.published_batches`. Lỗi giữa chừng (bảng thứ N/18) -> tự RESTORE mọi bảng
                 về version trước publish (rollback) -> Gold không bị trộn bảng mới / cũ.
                 Dashboard chỉ đọc tới ngày trong `published_batches` (dòng cuối cùng được ghi).
 
@@ -25,6 +25,7 @@ from pyspark.sql import functions as F
 from common import gold as g
 from common import gold_cards as gc
 from common import gold_deposit as gd
+from common import serving as sv
 from common.batch import (
     ensure_ops_tables,
     record_run,
@@ -33,7 +34,7 @@ from common.batch import (
     watermark,
 )
 from common.dates import check_date
-from common.delta_io import merge_upsert, overwrite, overwrite_date
+from common.delta_io import overwrite, overwrite_date
 from common.names import fq
 from common.ops_log import StepRecorder, log
 
@@ -52,7 +53,8 @@ PUBLISHED_TABLES = ["dim_date", "dim_branch", "dim_product", "dim_customer", "lo
                     "core_fact_transaction", "loan_mart_overdue_daily", "loan_mart_npl_daily",
                     "dep_mart_daily", "cust_mart_360", "card_mart_kpi_daily",
                     "card_mart_spend_mix", "card_mart_kpi_monthly", "dep_mart_trend",
-                    "dep_mart_by_tenor", "dep_mart_casa_customer", "dep_mart_new_accounts"]
+                    "dep_mart_by_tenor", "dep_mart_casa_customer", "dep_mart_new_accounts",
+                    "card_mart_overdue_daily"]
 
 
 class GateFailed(RuntimeError):
@@ -93,20 +95,6 @@ def pending_days(spark: SparkSession, cfg: GoldConfig) -> list[str]:
     return [str(r[0]) for r in spark.sql(
         f"SELECT DISTINCT as_of_date FROM {cfg.t('ops', 'pipeline_runs')} "
         f"WHERE layer = 'silver' AND status = 'SUCCESS' {cond} ORDER BY as_of_date").collect()]
-
-
-def publish_batch_snapshot(df, target: str, day_s: str) -> None:
-    """Mart tính lại TOÀN BỘ mỗi ngày (tháng, luỹ kế) nhưng dashboard đọc: lưu 1 snapshot / batch
-    (cột as_of_date = ngày batch) thay vì ghi đè cả bảng -> trong lúc publish đang chạy, view
-    (lọc as_of_date = batch đã publish) vẫn đọc bản cũ, không thấy bản mới dở dang.
-    Bảng cũ chưa có cột as_of_date (trước nâng cấp): ghi đè 1 lần để đổi schema."""
-    spark = df.sparkSession
-    df = df.withColumn("as_of_date", F.lit(day_s).cast("date"))
-    if spark.catalog.tableExists(target) and \
-            "as_of_date" not in spark.table(target).columns:
-        overwrite(df, target)
-        return
-    overwrite_date(df, target, "as_of_date", day_s)
 
 
 def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
@@ -176,55 +164,64 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         if errors:
             raise GateFailed(f"Gate chặn publish {day_s}: {errors}")
 
-    # ---------- 3) publish
+    # ---------- 3) publish: ghi THÊM dòng của batch này (vô hình với người đọc), rồi kích hoạt
+    # bằng 1 dòng vào ops.published_batches (1 commit = nguyên tử), rồi mới dọn batch cũ.
+    batch = rec.run_id
+    cat = cfg.catalog
+
+    def put(df, table: str, key: list[str] | None = None) -> None:
+        sv.write_batch(df, cat, table, batch, key)
+
+    def cand(table: str):
+        """Bảng như sau khi batch này được kích hoạt (cho mart đọc lại Gold)."""
+        return sv.candidate(spark, cat, table, day_s, batch)
+
     with rec.step("gold:publish") as s:
         record_versions(spark, cfg.catalog, rec.run_id, day_s, "gold",
                         [G(t) for t in PUBLISHED_TABLES])
-        overwrite(dim_date, G("dim_date"))
-        overwrite(dim_branch, G("dim_branch"))
-        overwrite(dim_product, G("dim_product"))
-        overwrite(dim_customer, G("dim_customer"))
-        dim_customer_g = spark.table(G("dim_customer"))
+        put(dim_date, "dim_date")
+        put(dim_branch, "dim_branch")
+        put(dim_product, "dim_product")
+        put(dim_customer, "dim_customer")
+        dim_customer_g = dim_customer   # bản stage = nội dung batch này
 
-        # snapshot ngày: ghi đè cả ngày -> khoản vay bị nguồn rút khỏi file sửa cũng biến mất
-        overwrite_date(fact_loan_day, G("loan_fact_daily"), "as_of_date", day_s)
+        # snapshot ngày: batch mới thay cả ngày -> khoản vay bị nguồn rút khỏi file sửa biến mất
+        put(fact_loan_day, "loan_fact_daily")
         txns_day = spark.table(S("core_transactions")).filter(F.col("_as_of_date") == day)
-        merge_upsert(g.build_fact_transaction(txns_day, spark.table(S("core_accounts")),
-                                              dim_customer_g),
-                     G("core_fact_transaction"), g.GOLD_KEYS["core_fact_transaction"],
-                     insert_only=True)
+        put(g.build_fact_transaction(txns_day, spark.table(S("core_accounts")), dim_customer_g),
+            "core_fact_transaction", g.GOLD_KEYS["core_fact_transaction"])
 
-        overwrite_date(overdue_day, G("loan_mart_overdue_daily"), "as_of_date", day_s)
-        overwrite(g.build_mart_npl_daily(spark.table(G("loan_mart_overdue_daily"))),
-                  G("loan_mart_npl_daily"))
-        overwrite_date(dep_daily, G("dep_mart_daily"), "as_of_date", day_s)
-        overwrite(g.build_mart_customer_360(dim_customer_g, spark.table(G("loan_fact_daily")),
-                                            acc_day, spark.table(G("core_fact_transaction")),
-                                            day_s), G("cust_mart_360"))
+        put(overdue_day, "loan_mart_overdue_daily")
+        put(g.build_mart_npl_daily(cand("loan_mart_overdue_daily")), "loan_mart_npl_daily")
+        put(dep_daily, "dep_mart_daily")
+        put(g.build_mart_customer_360(dim_customer_g, cand("loan_fact_daily"), acc_day,
+                                      cand("core_fact_transaction"), day_s), "cust_mart_360")
 
-        overwrite_date(card_daily, G("card_mart_kpi_daily"), "as_of_date", day_s)
-        overwrite_date(gc.build_mart_card_spend_mix(ctx_day, day_s), G("card_mart_spend_mix"),
-                       "as_of_date", day_s)
-        publish_batch_snapshot(gc.build_mart_card_kpi_monthly(
-            spark.table(G("card_mart_kpi_daily")), spark.table(S("ref_targets"))),
-            G("card_mart_kpi_monthly"), day_s)
+        put(card_daily, "card_mart_kpi_daily")
+        put(gc.build_mart_card_spend_mix(ctx_day, day_s), "card_mart_spend_mix")
+        put(gc.build_mart_card_kpi_monthly(cand("card_mart_kpi_daily"),
+                                           spark.table(S("ref_targets")))
+            .withColumn("as_of_date", day), "card_mart_kpi_monthly")
+        ovd_src = spark.table(S("card_overdue_source")).filter(F.col("report_dt") == day)
+        put(gc.build_mart_card_overdue_daily(ovd_src), "card_mart_overdue_daily")
 
         fx_day = spark.table(S("ref_fx_rates")).filter(F.col("rate_date") == day)
-        trend_hist = (spark.table(G("dep_mart_trend"))
-                      if spark.catalog.tableExists(G("dep_mart_trend")) else None)
-        overwrite_date(gd.build_mart_deposit_trend(acc_day, dim_product, fx_day,
-                                                   spark.table(S("ref_branches")), day_s,
-                                                   history=trend_hist,
-                                                   customers=dim_customer_g.filter("is_current")),
-                       G("dep_mart_trend"), "as_of_date", day_s)
-        overwrite_date(gd.build_mart_deposit_by_tenor(acc_day, dim_product, fx_day, day_s),
-                       G("dep_mart_by_tenor"), "as_of_date", day_s)
-        overwrite_date(gd.build_mart_casa_customer(acc_day, dim_product,
-                                                   dim_customer_g.filter("is_current"), day_s),
-                       G("dep_mart_casa_customer"), "as_of_date", day_s)
-        publish_batch_snapshot(gd.build_mart_deposit_new_accounts(spark.table(S("core_accounts"))),
-                               G("dep_mart_new_accounts"), day_s)
+        trend_hist = (cand("dep_mart_trend") if spark.catalog.tableExists(G("dep_mart_trend"))
+                      else None)
+        put(gd.build_mart_deposit_trend(acc_day, dim_product, fx_day,
+                                        spark.table(S("ref_branches")), day_s,
+                                        history=trend_hist,
+                                        customers=dim_customer_g.filter("is_current")),
+            "dep_mart_trend")
+        put(gd.build_mart_deposit_by_tenor(acc_day, dim_product, fx_day, day_s),
+            "dep_mart_by_tenor")
+        put(gd.build_mart_casa_customer(acc_day, dim_product,
+                                        dim_customer_g.filter("is_current"), day_s),
+            "dep_mart_casa_customer")
+        put(gd.build_mart_deposit_new_accounts(spark.table(S("core_accounts")))
+            .withColumn("as_of_date", day), "dep_mart_new_accounts")
 
+        # KÍCH HOẠT batch: từ commit này người đọc gold_serving thấy toàn bộ batch mới
         (spark.createDataFrame([(day_s, rec.run_id, json.dumps(checks))],
                                "as_of_date string, run_id string, checks string")
          .select(F.col("as_of_date").cast("date"), "run_id",
@@ -263,6 +260,14 @@ def run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
             record_run(spark, cfg.catalog, day, "gold", rec.run_id, "FAILED", msg)
             log("gold_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
             raise
+        # batch đã kích hoạt: dọn dòng batch cũ (người đọc không còn thấy) + cập nhật view.
+        # Lỗi ở đây không làm hỏng batch đã publish -> chỉ ghi log, lần chạy sau dọn tiếp.
+        try:
+            for t in PUBLISHED_TABLES:
+                sv.cleanup_superseded(spark, cfg.catalog, t, day, rec.run_id)
+            sv.create_serving_views(spark, cfg.catalog)
+        except Exception as e:  # noqa: BLE001
+            log("gold_cleanup_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
         rec.flush(spark, cfg.t("ops", "task_runs"))
         record_run(spark, cfg.catalog, day, "gold", rec.run_id, "SUCCESS")
         log("gold_published", as_of_date=day, run_id=rec.run_id)

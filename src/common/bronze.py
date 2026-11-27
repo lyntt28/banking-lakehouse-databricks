@@ -38,6 +38,7 @@ SOURCES = [
     Source("insurance_policies", "csv", CSV),
     Source("card_kpi", "csv", TSV),          # 9 file .txt tab-separated / ngày
     Source("deposit_summary", "csv", TSV),   # bang1247_YYYYMMDD.txt
+    Source("card_overdue", "csv", TSV),      # credit_card_overdue_YYYYMMDD.txt
     Source("targets", "csv", CSV),           # chỉ tiêu kế hoạch (ngày đầu)
     Source("fx_rates", "csv", CSV),          # tỷ giá về VND mỗi ngày
 ]

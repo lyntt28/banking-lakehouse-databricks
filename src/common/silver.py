@@ -367,6 +367,33 @@ DEPOSIT_SUMMARY = SilverTable(
     ],
 )
 
+CARD_OVERDUE = SilverTable(
+    name="card_overdue_source", source="card_overdue",
+    key=["report_dt", "product_group", "product_name", "mng_br", "sal_br", "del_grp"],
+    cast={
+        "report_dt": _date("REPORT_DT", "yyyyMMdd"), "prdt_code": _str("PRDT_CODE"),
+        "product_type": _str("PRODUCT_TYPE"), "product_group": _str("PRODUCT_GROUP"),
+        "product_name": _str("PRODUCT_NAME"),
+        # mã CN có thể xuất dạng số thực ("7911.0") -> bỏ đuôi .0
+        "mng_br": lambda: F.regexp_replace(_blank_to_null("MNG_BR"), r"\.0+$", ""),
+        "sal_br": lambda: F.regexp_replace(_blank_to_null("SAL_BR"), r"\.0+$", ""),
+        "del_grp": _str("DEL_GRP"),
+        "port_acc": _num("PORT_ACC", "bigint"), "ovd_acc": _num("OVD_ACC", "bigint"),
+        "port_bal": _num("PORT_BAL", "decimal(22,2)"),
+        "ovd_bal": _num("OVD_BAL", "decimal(22,2)"),
+    },
+    rules=[
+        Rule("ovd_key_not_null", "report_dt IS NOT NULL AND mng_br IS NOT NULL "
+                                 "AND del_grp IS NOT NULL"),
+        Rule("ovd_key_unique", "_dup_key_count = 1"),
+        Rule("ovd_balance_numeric", "port_bal IS NOT NULL AND ovd_bal IS NOT NULL"),
+        Rule("ovd_balance_not_negative", "port_bal >= 0 AND ovd_bal >= 0"),
+        Rule("ovd_not_above_portfolio", "ovd_bal <= port_bal", "WARN"),
+        Rule("ovd_del_grp_known",
+             "del_grp IN ('0', '1-10', '11-90', '91-180', '181-360', '361+')", "WARN"),
+    ],
+)
+
 INSURANCE_POLICIES = SilverTable(
     name="ins_policies", source="insurance_policies",
     key=["policy_id"],
@@ -387,13 +414,14 @@ INSURANCE_POLICIES = SilverTable(
 
 TABLES = {t.name: t for t in [BRANCHES, PRODUCTS, CUSTOMERS, ACCOUNTS, LOANS, TRANSACTIONS,
                                FX_RATES, TARGETS, CARDS, CARD_TRANSACTIONS, CARD_STATEMENTS,
-                               CARD_KPI, DEPOSIT_SUMMARY, INSURANCE_POLICIES]}
+                               CARD_KPI, DEPOSIT_SUMMARY, CARD_OVERDUE,
+                               INSURANCE_POLICIES]}
 # Thứ tự chạy: bảng tham chiếu trước (FK: accounts -> customers, transactions -> accounts,
 # card_transactions / card_statements -> cards)
 ORDER = ["ref_branches", "ref_products", "core_customers", "core_accounts", "loan_snapshots",
          "core_transactions", "ref_fx_rates", "ref_targets", "card_master",
          "card_transactions_hist", "card_statements_hist", "card_kpi_source",
-         "dep_summary_source", "ins_policies"]
+         "dep_summary_source", "card_overdue_source", "ins_policies"]
 
 
 # ---------------------------------------------------------------- các bước

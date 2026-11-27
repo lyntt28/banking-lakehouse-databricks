@@ -12,13 +12,15 @@ resources:
           default: ${var.catalog}
         - name: as_of_date        # trống = mọi ngày chưa xử lý sau watermark (ops.pipeline_runs)
           default: ""
-        # data contract: ngày nguồn bắt đầu gửi file HẰNG NGÀY. Trước ngày này lịch nghiệp vụ
-        # chỉ gồm ngày cuối tháng (lịch sử 13 tháng nạp 1 lần) -> không đòi file giữa tháng.
-        - name: daily_feed_start
-          default: ${var.daily_feed_start}
-        # SLA: job chạy ngày T phải có dữ liệu ngày T - lag; thiếu -> FAIL + email (trống = tắt)
-        - name: sla_lag_days
-          default: ${var.sla_lag_days}
+        # Ngày dự kiến + SLA: "" = tắt (dev/test chạy theo file có sẵn). Prod = 1: mỗi lần chạy
+        # phải có file của hôm qua; thiếu trước sla_hour -> WAITING, quá giờ -> FAILED + email
+        - name: expected_lag_days
+          default: ${var.expected_lag_days}
+        - name: sla_hour
+          default: "9"
+        # Ngày bắt đầu lịch hằng ngày; trước đó chỉ đòi snapshot cuối tháng. "" = tự suy ra
+        - name: daily_from
+          default: ""
 
       tasks:
         - task_key: setup

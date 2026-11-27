@@ -50,7 +50,7 @@ def marts(spark, results):
 
 
 def _local(sql: str) -> str:
-    for schema in ("gold", "silver", "ops"):
+    for schema in ("gold_serving", "gold", "silver", "ops"):
         sql = sql.replace("{catalog}." + schema + ".", "")
     return sql
 

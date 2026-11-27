@@ -84,7 +84,7 @@ Reconciliation: `dep_mart_daily` vs `deposit_summary` (bang1247) source files.
 
 ## AI/BI dashboards vs the original (what matches, what cannot)
 
-Built from the original dashboards (their source code is not kept in this repo; this document is the spec): same sections and order, same
+Built from the original source (the old Flask + Chart.js dashboards, since removed from the repo): same sections and order, same
 titles, same chart type per visual, same colour per series, same relative widths
 (Lakeview grid = 6 columns: `1fr 1fr` → 3+3, `1fr 1.5fr` → 2+4, `1fr 2fr` → 2+4).
 Filters: report date (latest data on or before the date), customer type (Card),

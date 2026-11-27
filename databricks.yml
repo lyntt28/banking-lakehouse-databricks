@@ -25,15 +25,10 @@ variables:
       true = chỉ in SQL governance (Free Edition không có account groups);
       false = áp dụng GRANT / column mask / row filter. Prod luôn false (xem target prod).
     default: "true"
-  daily_feed_start:
+  expected_lag_days:
     description: >
-      Ngày nguồn bắt đầu gửi file hằng ngày (data contract). Trước ngày này chỉ có snapshot
-      cuối tháng. Mặc định = start_date của dữ liệu mẫu (00_setup/02_generate_sample_data).
-    default: "2026-11-01"
-  sla_lag_days:
-    description: >
-      Số ngày trễ cho phép của file nguồn: job chạy ngày T phải có dữ liệu ngày T - lag, không
-      thì FAIL (SourceFilesMissing). Trống = tắt (dev/test chạy trên dữ liệu mẫu cố định).
+      Ngày dữ liệu phải có = hôm nay - N (1 = file hôm qua). "" = tắt kiểm tra ngày dự kiến / SLA
+      (dev, test chạy theo file có sẵn). Prod = 1.
     default: ""
   run_as_sp:
     description: >
@@ -78,8 +73,7 @@ targets:
       catalog: bank_prod
       # Prod enforce governance thật; Free Edition (không có account group) chỉ chạy dev/test.
       governance_dry_run: "false"
-      # 06:30 ngày T phải có đủ file ngày T-1 (core chốt số cuối ngày)
-      sla_lag_days: "1"
+      expected_lag_days: "1"
     run_as:
       service_principal_name: ${var.run_as_sp}
     workspace:
@@ -88,9 +82,11 @@ targets:
     resources:
       jobs:
         banking_lakehouse_daily:
-          # Chỉ prod chạy theo lịch: 06:30 hằng ngày giờ Việt Nam (sau khi file nguồn về)
+          # Chỉ prod chạy theo lịch: mỗi giờ 06:30 -> 10:30 giờ Việt Nam. File chưa về trước
+          # SLA (09:00) -> WAITING, lần sau chạy tiếp; 09:30 vẫn thiếu -> FAILED + email.
+          # Đã xử lý xong thì các lần sau không có ngày chờ (idempotent).
           schedule:
-            quartz_cron_expression: "0 30 6 * * ?"
+            quartz_cron_expression: "0 30 6-10 * * ?"
             timezone_id: Asia/Ho_Chi_Minh
             pause_status: UNPAUSED
           email_notifications:

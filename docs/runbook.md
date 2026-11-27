@@ -52,11 +52,7 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
 ## 4. `src/00_setup/05_backfill` (Silver + Gold cho mọi ngày, cũ → mới)
 - **MỤC ĐÍCH:** gọi `02_silver/00_daily_silver_gold` không truyền ngày: xử lý mọi ngày sau
   watermark trong `ops.pipeline_runs`, mỗi ngày Silver rồi Gold.
-- **Widget:** `catalog = bank_dev`, `reset = false`, `daily_feed_start = 2026-11-01`
-- **Lịch nghiệp vụ:** trước `daily_feed_start` chỉ ngày cuối tháng là ngày dự kiến (lịch sử
-  `history_months` là snapshot cuối tháng); từ `daily_feed_start` mọi ngày. Phải bằng
-  `start_date` của bước 2, không thì backfill dừng ở ngày giữa tháng đầu tiên
-  (`SourceFilesMissing`) vì nguồn không bao giờ gửi file ngày đó.
+- **Widget:** `catalog = bank_dev`, `reset = false`
 - **`reset = true`:** chỉ dev/test (bị chặn khi catalog là `*_prod`). Drop Silver, Gold, gold_stage
   và trạng thái batch rồi dựng lại; sau đó chạy lại governance.
 - **Lưu ý SCD2:** `silver.core_customers` từ chối nạp ngày cũ hơn bản hiện hành (báo lỗi
@@ -88,7 +84,7 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
 
 ## 5. `src/03_gold/02_dashboard_views`
 - **MỤC ĐÍCH:** tạo 21 view `gold.v_*`, mỗi view = 1 chart của 3 dashboard
-  (đặc tả: `docs/gold_dashboards.md`).
+  (`docs/gold_dashboards.md`).
 - **KIỂM TRA:** `SHOW VIEWS IN bank_dev.gold;` và `SELECT * FROM bank_dev.gold.v_overdue_tickers;`
 
 ## 6. `src/00_setup/03_governance`
@@ -152,23 +148,8 @@ chỉ giữ trạng thái mới nhất: Gold ngày D phải dựng trước khi 
 2. Gold: tính mart dùng để đối soát → ghi `gold_stage` → đối soát (dư nợ Silver–Gold, KPI thẻ,
    tiền gửi bang1247) → lệch thì dừng, **bảng Gold mà dashboard đọc không bị đụng tới**;
    đạt thì mới publish vào `gold` và ghi `ops.published_batches`.
-   Lưu ý: publish ghi nhiều bảng lần lượt (Delta atomic theo từng bảng). Lỗi giữa chừng (hạ
-   tầng) ở Silver hoặc Gold → job tự `RESTORE` mọi bảng đã ghi về version trước publish
-   (`ops.publish_versions`), ngày đó FAILED; chạy lại job là đủ (publish idempotent).
-   Trong lúc publish Gold đang chạy, mart snapshot/day đọc theo `ops.published_batches` thấy
-   batch cũ; bảng `full` (`dim_*`, `loan_mart_npl_daily`, `cust_mart_360`) có thể đã là bản
-   mới trước khi batch được ghi vào `published_batches` (vài phút, không trộn ngày).
-
-**Lịch nghiệp vụ & SLA file thiếu** (`common/batch.py: business_dates / pending_dates`)
-- Ngày dự kiến = ngày cuối tháng trước `daily_feed_start`, mọi ngày từ `daily_feed_start`
-  (tham số job, biến bundle `daily_feed_start`). Ngày dự kiến không có file → `SourceFilesMissing`,
-  watermark đứng yên, không nhảy qua.
-- Ngày cuối của lịch = max(ngày Bronze mới nhất, ngày SLA). SLA = `sla_lag_days` (biến bundle,
-  chỉ bật ở prod = 1): job 06:30 ngày T (giờ VN) phải có đủ file ngày T-1, không thì FAIL +
-  email kèm `ops.file_manifest` MISSING. Không có SLA thì nguồn ngừng gửi hẳn sẽ **không** bị
-  phát hiện (không có ngày Bronze mới nào để thấy thiếu). dev/test tắt vì dữ liệu mẫu cố định.
-- Ngày nghỉ của nguồn (nếu có) chưa cấu hình được qua job: `business_dates(holidays=...)` có sẵn
-  nhưng job không truyền; nguồn hiện gửi file mọi ngày.
+   Lưu ý: publish ghi nhiều bảng lần lượt (Delta atomic theo từng bảng). Nếu lỗi giữa chừng
+   (hạ tầng), chạy lại ngày đó: mọi bước publish idempotent (replaceWhere / MERGE / overwrite).
 
 | Tình huống | Làm gì | Cơ chế |
 |---|---|---|
@@ -176,7 +157,7 @@ chỉ giữ trạng thái mới nhất: Gold ngày D phải dựng trước khi 
 | **Gián đoạn nhiều ngày** | Chạy job như thường, `as_of_date` trống | Xử lý mọi ngày sau watermark |
 | **File về trễ** | Chờ file, chạy lại job | Ngày thiếu file FAILED, watermark đứng yên. Ngày KHÔNG có file nào (kể cả loans) cũng được tính theo lịch nghiệp vụ nên không bị nhảy qua |
 | **Rerun 1 ngày** (cùng dữ liệu) | Job với `as_of_date=<ngày>` | Không đổi kết quả |
-| **Correction** (nguồn gửi lại file sửa của ngày D = ngày mới nhất đã xử lý) | Đặt file mới (tên khác, đủ nội dung cả ngày) vào landing; chạy job như thường | Job tự nhận ra (Bronze có file nạp sau lần Silver SUCCESS) → chạy lại Silver rồi Gold ngày D. File nạp sau cùng **thay thế toàn bộ** file trước của cùng bảng / nhóm file (`latest_delivery`), manifest báo `MULTIPLE_FILES`. `loan_snapshots` và mart snapshot/day: ghi đè cả ngày → dòng bị rút biến mất. Bảng snapshot MERGE (`core_accounts`, `card_master`, ...): giá trị sửa được cập nhật, nhưng thực thể bị rút khỏi file sửa **vẫn còn** bản ngày D → cần replay (mục dưới). SCD2 cùng ngày: sửa tại chỗ phiên bản ngày D. Giao dịch (`core_transactions`, insert-only): **không** cập nhật bản đã có – cần quy trình sửa riêng (reversal/adjustment từ nguồn) |
+| **Correction** (nguồn gửi lại file sửa của ngày D = ngày mới nhất đã xử lý) | Đặt file mới (tên khác, đủ nội dung cả ngày) vào landing; chạy job như thường | Job tự nhận ra file nạp sau lần Silver SUCCESS → chạy lại Silver rồi Gold ngày D. File nạp sau cùng **thay thế toàn bộ** file trước của cùng bảng / nhóm file (`latest_delivery`, log `file_superseded`). `loan_snapshots` + snapshot Gold: ghi đè cả ngày → dòng bị rút cũng biến mất. Bảng snapshot MERGE (`core_accounts`, `card_master`, ...): giá trị sửa được cập nhật, nhưng thực thể bị rút khỏi file sửa **vẫn còn** → cần replay. SCD2 cùng ngày: sửa tại chỗ phiên bản ngày D. Giao dịch (`core_transactions`, insert-only): **không** cập nhật bản đã có – cần quy trình sửa riêng (reversal/adjustment từ nguồn) |
 | **Correction / backfill ngày cũ hơn watermark** | dev/test: `05_backfill reset=true`. prod: dựng catalog song song từ Bronze, kiểm tra, rồi chuyển consumer (`docs/incident_runbook.md`) | Bị chặn (`OutOfOrder`): snapshot MERGE + SCD2 không cho ghi vào quá khứ |
 
 **SCD2 (`silver.core_customers`)**: ngữ nghĩa *daily snapshot* – tối đa 1 phiên bản / khách hàng /
@@ -206,8 +187,7 @@ ngày, khoảng `[valid_from, valid_to]` không chồng lấn → as-of join ra 
 | Generator, Bronze, Silver, Gold, views, governance SQL, ML features | ✅ | ⬜ |
 | MERGE / SCD2 / replaceWhere trên Delta (local) | ✅ (PR #13) | ⬜ |
 | Batch control, SCD2 cùng ngày, governance grants (unit test) | ✅ | ⬜ |
-| Silver → Gold end-to-end + kịch bản lỗi (thiếu file, file trễ, file trùng, chạy lại, gate lệch, lỗi giữa publish Silver/Gold + rollback, chạy sai thứ tự, correction cùng / khác nội dung) | ✅ integration test, Delta local, mỗi kịch bản chạy riêng được | ⬜ |
-| Lịch cuối tháng → hằng ngày (backfill qua notebook daily), SLA file thiếu | ✅ unit + integration (lịch); SLA: unit test | ⬜ |
+| Silver → Gold end-to-end + kịch bản lỗi (thiếu file, file trễ, file trùng, chạy lại, gate lệch, chạy sai thứ tự) | ✅ integration test, Delta local | ⬜ |
 | Bundle validate / deploy, CD | ⬜ (`CD_ENABLED` chưa bật) | ⬜ |
 
 ## Quy ước tên bảng (tiền tố theo nghiệp vụ)
@@ -232,19 +212,17 @@ nguồn); Silver map qua `SilverTable.source`. Dimension dùng chung giữ `dim_
 Sau khi đổi tên: deploy lại bundle, chạy lại `05_backfill` (Silver/Gold tạo bảng mới), chạy
 `02_dashboard_views` và import lại dashboard. Bảng tên cũ không còn dùng, xoá bằng `DROP TABLE` khi đã kiểm tra.
 
-## Test end-to-end nhiều ngày (`tests/integration/test_notebooks_e2e.py`)
+## Test end-to-end nhiều ngày (`tests/test_pipeline_e2e.py`)
 
-Chạy **chính notebook** `02_silver/00_daily_silver_gold` 1 lần (như `05_backfill`) qua 3 ngày
-(snapshot cuối tháng 10-31 + ngày daily 11-02, 11-03 với `daily_feed_start = 2026-11-02`) trên
-Spark + Delta local; rerun ngày cuối bằng `01_silver_transform` / `03_gold/01_gold_build`. Chỉ giả
+Chạy **chính notebook** `02_silver/01_silver_transform` và `03_gold/01_gold_build` qua 3 ngày
+(cuối tháng + 2 ngày liên tiếp) trên Spark + Delta local, giống vòng lặp `05_backfill`; chỉ giả
 lập `dbutils` / `display`. Bronze nạp thẳng từ file (Auto Loader không chạy local).
 Kiểm tra: mọi ngày qua được assert đối soát trong Gold, `ops.recon_*` toàn MATCH, chạy lại
 ngày cuối không đổi số dòng. Lỗi kiểu "ngày đầu chạy được, ngày 2 lỗi" phải đỏ ở đây (CI) trước
 khi lên Databricks.
 
 ```bash
-pytest -q -m integration                                   # cả bộ
-pytest -q "tests/integration/test_pipeline_scenarios.py::test_5b_failure_midway_through_gold_publish_is_rolled_back"
+pytest -q tests/test_pipeline_e2e.py
 ```
 
 Quy tắc file nguồn bang1247 (generator): cộng mọi TK tiền gửi, trừ TK có `customer_id` chưa

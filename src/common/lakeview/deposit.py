@@ -5,7 +5,7 @@ from __future__ import annotations
 from common.lakeview.core import USD_RATE, Dash, _arrow_pct, _q, _report_day
 
 # ============================================================ 3. RETAIL DEPOSIT (DEPOSIT)
-DEP_COLORS = {   # màu của dashboard cũ (Chart.js), giữ để nhận diện
+DEP_COLORS = {   # từ dashboard Chart.js gốc (đã xóa khỏi repo)
     "gauge": {"all": "#22AFFF", "casa": "#10B981", "tda": "#F47B20"},
     "ticker": {"bal": "#223A5E", "mavg": "#009688", "cust": "#F4A300"},
     "daily": "#223A5E",
@@ -24,7 +24,7 @@ DEP_COLORS = {   # màu của dashboard cũ (Chart.js), giữ để nhận diệ
 def deposit_dashboard(catalog: str) -> dict:
     """1 trang, cùng kiểu với Card: header + bộ lọc (Date, Region, Branch) bên phải, các mục
     có tiêu đề 🟧. Số dư: nghìn USD (như bản gốc 'Unit: USD 1,000')."""
-    G, S = _q(catalog, "gold"), _q(catalog, "silver")
+    G, S = _q(catalog, "gold_serving"), _q(catalog, "silver")
     d = Dash("retail_deposit", "Retail Deposit Performance")
     d.param("report_date", "Report date", "DATE", "now/d")
     d.param("region", "Region", "STRING", "all")

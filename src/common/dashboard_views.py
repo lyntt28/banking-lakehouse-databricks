@@ -17,7 +17,7 @@ def _v(dash: str, order: int, name: str, desc: str, sql: str) -> None:
     VIEWS.append((dash, order, name, desc, " ".join(sql.split())))
 
 
-G = "{catalog}.gold"
+G = "{catalog}.gold_serving"   # view batch đang dùng (common.serving)
 # ngày Gold đang phục vụ: chỉ đổi khi publish đủ 17 bảng (pipelines/gold.py)
 PUB = "(SELECT max(as_of_date) FROM {catalog}.ops.published_batches)"
 

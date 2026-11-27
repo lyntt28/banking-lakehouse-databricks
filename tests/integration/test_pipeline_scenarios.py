@@ -57,6 +57,10 @@ def table_version(spark, name):
     return v(spark, name)
 
 
+def _table_id(spark, name):
+    return spark.sql(f"DESCRIBE DETAIL {name}").first()["id"]
+
+
 def _tables(spark, schema):
     return [r.tableName for r in spark.sql(f"SHOW TABLES IN {schema}").collect()
             if not r.isTemporary]
@@ -97,8 +101,8 @@ def baseline(spark, tmp_path_factory):
         for t in base["tables"][schema]:
             spark.sql(f"CREATE TABLE snap_{schema}.{t} USING DELTA AS SELECT * FROM {schema}.{t}")
             v = table_version(spark, f"{schema}.{t}")
-            # (version có nội dung baseline, version hiện tại được biết là "sạch")
-            base["versions"][f"{schema}.{t}"] = [v, v]
+            # (version có nội dung baseline, version hiện tại được biết là "sạch", table id)
+            base["versions"][f"{schema}.{t}"] = [v, v, _table_id(spark, f"{schema}.{t}")]
     yield base
     _drop_all(spark, SCHEMAS + [f"snap_{s}" for s in SCHEMAS])
 
@@ -114,10 +118,15 @@ def published(spark, baseline):
             spark.sql(f"DROP TABLE {schema}.{t}")
         for t in tables:
             name = f"{schema}.{t}"
+            # bảng bị test trước DROP + tạo lại: số version không còn ứng với baseline
+            # (RESTORE theo version sẽ ra nội dung sai) -> dựng lại từ snapshot
+            if t in existing and _table_id(spark, name) != versions[name][2]:
+                spark.sql(f"DROP TABLE {name}")
+                existing.discard(t)
             if t not in existing:
                 spark.sql(f"CREATE TABLE {name} USING DELTA AS SELECT * FROM snap_{name}")
                 v = table_version(spark, name)
-                versions[name] = [v, v]
+                versions[name] = [v, v, _table_id(spark, name)]
             elif table_version(spark, name) != versions[name][1]:   # test trước đã ghi
                 spark.sql(f"RESTORE TABLE {name} TO VERSION AS OF {versions[name][0]}")
                 versions[name][1] = table_version(spark, name)
@@ -142,8 +151,9 @@ def _checksum(spark, table):
     from pyspark.sql import functions as F
 
     df = spark.table(table)
-    # bỏ cột lineage kỹ thuật (thời điểm nạp, tên file); so nội dung nghiệp vụ
-    cols = sorted(c for c in df.columns if c not in ("_load_ts", "_source_file", "_rescued_data"))
+    # bỏ cột lineage kỹ thuật (thời điểm nạp, tên file, batch publish); so nội dung nghiệp vụ
+    cols = sorted(c for c in df.columns
+                  if c not in ("_load_ts", "_source_file", "_rescued_data", "batch_id"))
     r = df.select(F.count("*").alias("n"),
                   F.sum(F.xxhash64(*cols).cast("decimal(38,0)")).alias("h")).first()
     return (r.n, r.h)
@@ -214,6 +224,15 @@ def test_1_missing_file_stops_at_that_day_then_late_file_is_picked_up(spark, bas
     steps = spark.sql("SELECT step, status FROM ops.task_runs "
                       f"WHERE as_of_date = '{D2}'").collect()
     assert ("file_manifest", "FAILED") in [(r.step, r.status) for r in steps]
+
+    # (1b) bật ngày dự kiến + SLA (prod): sáng 03/11 phải có file 02/11, hạn 09:00.
+    # Trước hạn -> WAITING, không báo lỗi; quá hạn mà vẫn thiếu -> FAILED (cảnh báo)
+    sla = dict(catalog="", expected_lag_days=1, sla_hour=9)
+    assert daily.run(spark, SilverConfig(**sla, now="2026-11-03T07:00:00")) == []
+    assert _runs(spark, "silver")[-1] == (D2, "WAITING")
+    with pytest.raises(SourceFilesMissing):
+        daily.run(spark, SilverConfig(**sla, now="2026-11-03T09:30:00"))
+    assert _runs(spark, "silver")[-1] == (D2, "FAILED")
 
     # (2) file về trễ -> chạy lại job: chỉ xử lý ngày còn thiếu, Gold publish đủ 2 ngày
     baseline["frames"]["transactions"].filter(F.col("_as_of_date") == F.lit(D2).cast("date")) \
@@ -312,7 +331,7 @@ def test_4_duplicate_file_does_not_double_count(spark, published):
 def test_5_reconciliation_failure_keeps_serving_gold(spark, published):
     from pyspark.sql import functions as F
 
-    from pipelines.gold import GateFailed, GoldConfig
+    from pipelines.gold import PUBLISHED_TABLES, GateFailed, GoldConfig
     from pipelines.gold import run as gold_run
 
     n_pub = spark.table("ops.published_batches").count()
@@ -335,7 +354,7 @@ def test_5_reconciliation_failure_keeps_serving_gold(spark, published):
     assert spark.table("ops.published_batches").count() == n_pub
     # có version trước publish của mọi bảng Gold (để RESTORE)
     assert spark.sql("SELECT count(DISTINCT table_name) FROM ops.publish_versions "
-                     "WHERE layer = 'gold'").first()[0] == 17
+                     "WHERE layer = 'gold'").first()[0] == len(PUBLISHED_TABLES)
     assert _runs(spark, "gold")[-1] == (D2, "FAILED")
     gate = spark.sql("SELECT status, error FROM ops.task_runs WHERE layer = 'gold' "
                      "AND step = 'gold:gate' ORDER BY logged_at DESC LIMIT 1").first()
@@ -343,30 +362,30 @@ def test_5_reconciliation_failure_keeps_serving_gold(spark, published):
 
 
 def test_5b_failure_midway_through_gold_publish_is_rolled_back(spark, published, monkeypatch):
-    """Lỗi hạ tầng khi đang ghi bảng Gold thứ N/17: mọi bảng đã ghi phải được RESTORE,
+    """Lỗi hạ tầng khi đang ghi bảng Gold thứ N/18: mọi bảng đã ghi phải được RESTORE,
     published_batches không có dòng mới -> dashboard vẫn ở batch cũ, không trộn mới / cũ."""
     import pipelines.gold as pg
     from pipelines.gold import GoldConfig
     from pipelines.gold import run as gold_run
 
     n_pub = spark.table("ops.published_batches").count()
-    real = pg.overwrite_date
+    real = pg.sv.write_batch
 
-    def boom(df, target, *a, **k):
-        if target.endswith("card_mart_kpi_daily"):   # ~ bảng thứ 11: 10 bảng trước đã ghi
+    def boom(df, catalog, table, *a, **k):
+        if table == "card_mart_kpi_daily":   # ~ bảng thứ 11: 10 bảng trước đã ghi batch mới
             raise OSError("storage timeout (giả lập)")
-        return real(df, target, *a, **k)
+        return real(df, catalog, table, *a, **k)
 
-    monkeypatch.setattr(pg, "overwrite_date", boom)
+    monkeypatch.setattr(pg.sv, "write_batch", boom)
     with pytest.raises(OSError):
         gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
     assert _gold_fingerprint(spark) == published["gold_ok"]
-    assert spark.table("ops.published_batches").count() == n_pub
+    assert spark.table("ops.published_batches").count() == n_pub   # batch lỗi KHÔNG kích hoạt
     last = spark.sql("SELECT status, message FROM ops.pipeline_runs WHERE layer = 'gold' "
                      "ORDER BY started_at DESC, status LIMIT 1").first()
     assert last.status == "FAILED" and "rollback" in last.message
 
-    monkeypatch.setattr(pg, "overwrite_date", real)
+    monkeypatch.setattr(pg.sv, "write_batch", real)
     gold_run(spark, GoldConfig(catalog="", as_of_date=D2))      # hạ tầng ổn -> chạy lại
     assert _gold_fingerprint(spark) == published["gold_ok"]
     _assert_integrity(spark)

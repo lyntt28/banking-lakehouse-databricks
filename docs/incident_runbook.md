@@ -19,8 +19,6 @@ Gold chỉ ghi sau gate. Nếu lỗi ở `gold:publish` (hạ tầng giữa ch�
 ## 1. `SourceFilesMissing` (bước `file_manifest`)
 - Xem `ops.file_manifest` ngày đó, `status IN ('MISSING', 'INCOMPLETE')`. `INCOMPLETE` = đã
   nhận một phần (vd: 5/9 file KPI thẻ); thông báo lỗi liệt kê nhóm file còn thiếu.
-- Ngày lỗi có thể là ngày **chưa có file nào** (prod: SLA `sla_lag_days=1`, job 06:30 ngày T
-  đòi file ngày T-1) hoặc ngày giữa tháng trước `daily_feed_start` nếu tham số này đặt sai.
 - Liên hệ hệ thống nguồn; khi file về landing: chạy lại job (as_of_date trống). Bronze nạp file
   mới, pipeline tiếp tục từ ngày lỗi. Không cần thao tác dữ liệu.
 
@@ -43,9 +41,8 @@ Gold chỉ ghi sau gate. Nếu lỗi ở `gold:publish` (hạ tầng giữa ch�
 Silver và Gold đều **stage → kiểm tra tất cả → publish**: lỗi DQ / đối soát không bao giờ để lại
 bảng ghi dở. Chỉ lỗi hạ tầng trong chính bước publish mới có thể làm một số bảng đã ghi, số khác chưa.
 - Job TỰ rollback: mọi bảng Silver / Gold đã ghi trong lần publish lỗi được `RESTORE` về version
-  trước publish (log `silver_rolled_back` / `gold_rolled_back`, `pipeline_runs.message` có
-  "rollback N bảng"). Dashboard đọc mart theo ngày trong `ops.published_batches` nên không thấy
-  dữ liệu dở dang.
+  trước publish (log `silver_rolled_back` / `gold_rolled_back`, `pipeline_runs.message` có "rollback N bảng"). Dashboard chỉ đọc
+  tới ngày trong `ops.published_batches` nên không thấy dữ liệu dở dang.
 - `message` có "ROLLBACK FAILED": rollback tự động cũng lỗi -> làm tay theo Cách 2.
 - Cách 1 (thường dùng): chạy lại job. Publish idempotent (MERGE / replaceWhere / overwrite từ
   bản stage đã đạt) nên kết quả hội tụ.
@@ -59,9 +56,8 @@ bảng ghi dở. Chỉ lỗi hạ tầng trong chính bước publish mới có 
 ## 6. Correction / backfill ngày cũ (prod)
 Job daily tự nhận diện file sửa: Bronze có file nạp SAU lần Silver SUCCESS của ngày đó.
 - Ngày sửa = watermark Silver: job tự chạy lại Silver rồi Gold ngày đó (log `daily_correction`),
-  không dựng Gold từ Silver cũ; file nạp sau cùng thay thế file trước (log `file_superseded`).
-  Không cần thao tác, trừ khi file sửa **rút bớt** TK / thẻ / KH (bảng snapshot MERGE giữ bản
-  cũ của ngày đó) → replay như dưới.
+  không dựng Gold từ Silver cũ; file nạp sau cùng thay thế file trước. Không cần thao tác, trừ
+  khi file sửa **rút bớt** TK / thẻ / KH (bảng snapshot MERGE giữ bản cũ) → replay như dưới.
 - Ngày sửa < watermark: job dừng với `CorrectionNeedsReplay`, làm thủ công như dưới:
 1. Dựng catalog song song (vd `bank_prod_rebuild`) với `05_backfill reset=true` từ Bronze.
 2. So sánh với prod (đối soát, số dòng, tổng số dư).
@@ -70,4 +66,4 @@ Job daily tự nhận diện file sửa: Bronze có file nạp SAU lần Silver 
 
 ## Sau sự cố
 - Ghi lại: ngày, run_id, nguyên nhân, thời gian khắc phục.
-- Thêm regression test (`tests/integration/test_pipeline_scenarios.py` có mẫu kịch bản lỗi).
+- Thêm regression test (`tests/integration/test_pipeline_e2e.py` có mẫu kịch bản lỗi).

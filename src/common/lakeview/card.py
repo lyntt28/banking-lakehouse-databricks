@@ -5,7 +5,7 @@ from __future__ import annotations
 from common.lakeview.core import USD_RATE, Dash, _arrow_pct, _q, _report_day
 
 # ============================================================ 1. CARD BUSINESS
-CARD_COLORS = {   # màu của dashboard cũ (Chart.js), giữ để nhận diện
+CARD_COLORS = {   # từ dashboard Chart.js gốc (đã xóa khỏi repo)
     "kpi": ["#1F2937", "#2F5597", "#C55A11", "#2F5597", "#5B9BD5"],
     "smart_credit": "#4472C4", "branches": "#B4C7E7", "new_issuance": "#2F5597",
     "termination": "#A5A5A5",
@@ -19,7 +19,7 @@ CARD_COLORS = {   # màu của dashboard cũ (Chart.js), giữ để nhận di�
 
 
 def card_dashboard(catalog: str) -> dict:
-    G = _q(catalog, "gold")
+    G = _q(catalog, "gold_serving")   # view batch đang dùng (common.serving)
     d = Dash("card_business", "Card Business Dashboard")
     d.param("report_date", "Report date", "DATE", "now/d")
     d.param("customer_type", "Customer type", "STRING", "consumer")

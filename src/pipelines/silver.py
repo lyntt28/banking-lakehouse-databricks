@@ -21,9 +21,11 @@ from pyspark.sql import functions as F
 
 from common.batch import (
     ensure_ops_tables,
+    expected_processing_date,
     incomplete_tables,
     manifest_status,
     missing_file_groups,
+    missing_status,
     missing_tables,
     pending_dates,
     record_run,
@@ -44,11 +46,26 @@ class SilverConfig:
     catalog: str
     as_of_date: str = ""        # trống = mọi ngày sau watermark
     max_fail_pct: float = 5.0
-    # data contract: ngày nguồn bắt đầu gửi file HẰNG NGÀY; trước đó chỉ có snapshot cuối tháng
-    # (lịch sử nạp 1 lần). Trống = mọi ngày đều là ngày nghiệp vụ.
+    # lịch: trước daily_from chỉ đòi snapshot cuối tháng (lịch sử); trống = tự suy ra
     daily_from: str = ""
-    # SLA: ngày dữ liệu mới nhất phải có ở lần chạy này (batch.expected_through). Trống = tắt.
-    expected_until: str = ""
+    # ngày dự kiến + SLA: None = tắt (dev/test chạy theo file có sẵn). Prod: 1 = sáng nay phải
+    # có file của hôm qua; thiếu trước sla_hour (giờ VN) -> WAITING, quá giờ -> FAILED
+    expected_lag_days: int | None = None
+    sla_hour: int = 9
+    now: str = ""               # giờ hiện tại (ISO, giờ VN) - chỉ để test; trống = giờ thật
+
+    def now_local(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        if self.now:
+            return datetime.fromisoformat(self.now)
+        return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).replace(tzinfo=None)
+
+    def expected_until(self) -> str | None:
+        if self.expected_lag_days is None:
+            return None
+        return expected_processing_date(self.now_local(), self.expected_lag_days)
 
     def t(self, schema: str, table: str) -> str:
         return fq(self.catalog, schema, table)
@@ -214,8 +231,7 @@ def run(spark: SparkSession, cfg: SilverConfig) -> list[str]:
         raise OutOfOrder(f"Silver đã ở {wm}: không chạy lại {cfg.as_of_date} (sẽ ghi đè snapshot "
                          "mới bằng snapshot cũ). Dựng lại = replay từ ngày đó, xem runbook")
     days = pending_dates(bronze_dates, wm, cfg.as_of_date or None,
-                         daily_from=cfg.daily_from or None,
-                         expected_until=cfg.expected_until or None)
+                         daily_from=cfg.daily_from or None, expected_until=cfg.expected_until())
     log("silver_pending", catalog=cfg.catalog, days=days)
     done = []
     for day in days:
@@ -223,6 +239,18 @@ def run(spark: SparkSession, cfg: SilverConfig) -> list[str]:
         record_run(spark, cfg.catalog, day, "silver", rec.run_id, "RUNNING")
         try:
             process_day(spark, cfg, day, rec)
+        except SourceFilesMissing as e:
+            rec.flush(spark, cfg.t("ops", "task_runs"))
+            if cfg.expected_lag_days is not None and missing_status(
+                    day, cfg.now_local(), cfg.expected_lag_days, cfg.sla_hour) == "WAITING":
+                # chưa tới hạn SLA: chờ file về, không báo lỗi; lần chạy sau xử lý tiếp
+                record_run(spark, cfg.catalog, day, "silver", rec.run_id, "WAITING", str(e))
+                log("silver_waiting", as_of_date=day, run_id=rec.run_id, error=str(e))
+                return done
+            record_run(spark, cfg.catalog, day, "silver", rec.run_id, "FAILED",
+                       f"{type(e).__name__}: {e}")
+            log("silver_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
+            raise
         except Exception as e:
             msg = f"{type(e).__name__}: {e}"
             # lỗi giữa bước publish (bảng thứ N MERGE xong, bảng N+1 lỗi): đưa mọi bảng đã ghi
