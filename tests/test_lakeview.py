@@ -35,7 +35,8 @@ def tables(spark, results):
             r["core_accounts"], dim_product, r["ref_fx_rates"], AS_OF),
         "gold_dep_mart_casa_customer": gd.build_mart_casa_customer(
             r["core_accounts"], dim_product, dim_customer, AS_OF),
-        "gold_dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"]),
+        "gold_dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"])
+        .withColumn("as_of_date", F.lit(AS_OF).cast("date")),
         "silver_ref_targets": r["ref_targets"], "silver_ref_fx_rates": r["ref_fx_rates"],
     }
     ops = {
@@ -60,6 +61,10 @@ def tables(spark, results):
     }
     for name, schema in ops.items():
         m[f"ops_{name}"] = spark.createDataFrame([], schema)
+    # batch Gold đang phục vụ: dataset chỉ đọc tới ngày đã publish
+    m["ops_published_batches"] = spark.sql(
+        f"SELECT DATE'{AS_OF}' AS as_of_date, 'r1' AS run_id, "
+        "current_timestamp() AS published_at, '{}' AS checks")
     for name, df in m.items():
         df.createOrReplaceTempView(name)
     return m
@@ -170,14 +175,16 @@ def test_section_order_matches_original():
 
 
 def test_bundle_files_up_to_date():
-    """dashboards/*.lvdash.json phải khớp với generator (chạy lại: python -m common.lakeview)."""
+    """dashboards/*.lvdash.json phải khớp với generator.
+    Sinh lại: PYTHONPATH=src python -m common.lakeview dashboards"""
     import json
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "dashboards"
     for name, body in build_all("").items():
         on_disk = json.loads((root / name).read_text(encoding="utf-8"))
-        assert on_disk == body, f"{name} cũ - chạy: python src/common/lakeview.py dashboards"
+        assert on_disk == body, (f"{name} cũ - chạy: "
+                                 "PYTHONPATH=src python -m common.lakeview dashboards")
 
 
 def test_card_colors_from_original_palette():

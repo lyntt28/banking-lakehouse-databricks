@@ -1,5 +1,5 @@
 # 3 dashboard AI/BI (Lakeview) dựng lại từ dashboard Flask + Chart.js gốc.
-# File JSON sinh từ src/common/lakeview.py:  python src/common/lakeview.py dashboards
+# File JSON sinh từ src/common/lakeview/ (1 file / dashboard):  PYTHONPATH=src python -m common.lakeview dashboards
 # Bảng trong JSON không có catalog (gold.xxx, silver.xxx); dataset_catalog gắn catalog
 # của từng môi trường (bank_dev / bank_test / bank_prod).
 resources:

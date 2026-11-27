@@ -5,8 +5,9 @@ Bảng `ops.pipeline_runs` (1 dòng / ngày dữ liệu / layer / lần chạy):
     started_at, finished_at, message
 
 Watermark = ngày lớn nhất có status SUCCESS của 1 layer. Job hằng ngày không còn lấy
-"ngày mới nhất trong bronze" nữa mà xử lý MỌI ngày bronze > watermark, theo thứ tự tăng dần,
-nên job bị gián đoạn 2 ngày thì lần chạy sau tự bù đủ 3 ngày.
+"ngày mới nhất trong bronze" nữa mà xử lý MỌI ngày theo lịch nghiệp vụ > watermark (kể cả ngày
+chưa có file: dừng ở đó, không nhảy qua), theo thứ tự tăng dần, nên job bị gián đoạn 2 ngày thì
+lần chạy sau tự bù đủ 3 ngày.
 """
 
 from __future__ import annotations
@@ -93,16 +94,37 @@ def ensure_ops_tables(spark, catalog: str) -> None:
         spark.sql(ddl.format(table=fq(catalog, "ops", name)))
 
 
-# Số file nguồn gửi mỗi ngày theo hợp đồng dữ liệu (mặc định 1). card_kpi: 1 file / nhóm KPI.
-EXPECTED_FILES = {"card_kpi_source": 9}
+# Data contract: bảng gửi NHIỀU file / ngày, mỗi file 1 nhóm (tên file bắt đầu bằng mã nhóm).
+# card_kpi_source: 1 file / nhóm KPI. Phải khớp data_generator.summaries.KPI_FILES.
+REQUIRED_FILE_GROUPS = {
+    "card_kpi_source": ("01_member_eop", "02_member_usage", "03_new_consumer",
+                        "04_member_closed", "05_balance_eop", "06_spend_sector",
+                        "07_spend_location", "08_spend_channel", "09_risk_dpd"),
+}
+# Số file nguồn gửi mỗi ngày theo hợp đồng dữ liệu (mặc định 1).
+EXPECTED_FILES = {t: len(g) for t, g in REQUIRED_FILE_GROUPS.items()}
 
 
-def manifest_status(table: str, file_count: int, order: list[str]) -> str:
+def _basename(path: str) -> str:
+    return path.rstrip("/").rsplit("/", 1)[-1]
+
+
+def missing_file_groups(table: str, files: list[str]) -> list[str]:
+    """Nhóm file theo data contract mà ngày đó chưa nhận (vd: 5/9 file KPI thẻ)."""
+    names = [_basename(f) for f in files]
+    return [g for g in REQUIRED_FILE_GROUPS.get(table, ())
+            if not any(n.startswith(g) for n in names)]
+
+
+def manifest_status(table: str, files: list[str], order: list[str]) -> str:
     """ARRIVED | MISSING (bảng bắt buộc chưa có file) | NOT_SENT (bảng tham chiếu không gửi)
-    | MULTIPLE_FILES (nhiều file hơn hợp đồng: nguồn gửi lại / sửa file - cần kiểm tra)."""
-    if file_count == 0:
+    | INCOMPLETE (mới nhận 1 phần: thiếu nhóm file theo data contract)
+    | MULTIPLE_FILES (đủ nhóm nhưng nhiều file hơn hợp đồng: nguồn gửi lại / sửa file)."""
+    if not files:
         return "MISSING" if table in required_tables(order) else "NOT_SENT"
-    return "MULTIPLE_FILES" if file_count > EXPECTED_FILES.get(table, 1) else "ARRIVED"
+    if missing_file_groups(table, files):
+        return "INCOMPLETE"
+    return "MULTIPLE_FILES" if len(files) > EXPECTED_FILES.get(table, 1) else "ARRIVED"
 
 
 def required_tables(order: list[str]) -> list[str]:
@@ -114,20 +136,59 @@ def missing_tables(row_counts: dict[str, int], order: list[str]) -> list[str]:
     return [t for t in required_tables(order) if row_counts.get(t, 0) == 0]
 
 
+def incomplete_tables(statuses: dict[str, str]) -> list[str]:
+    """Bảng đã có file nhưng chưa đủ theo data contract -> chưa được xử lý ngày đó."""
+    return sorted(t for t, st in statuses.items() if st == "INCOMPLETE")
+
+
+def business_dates(start: str, end: str, holidays: frozenset[str] = frozenset()) -> list[str]:
+    """Lịch ngày nghiệp vụ dự kiến [start, end]: nguồn phải gửi file MỖI ngày (kể cả cuối tuần,
+    hệ thống core chốt số hằng ngày), trừ ngày trong `holidays`."""
+    from datetime import date, timedelta
+
+    d, last = date.fromisoformat(check_date(start)), date.fromisoformat(check_date(end))
+    out = []
+    while d <= last:
+        if d.isoformat() not in holidays:
+            out.append(d.isoformat())
+        d += timedelta(days=1)
+    return out
+
+
 def pending_dates(bronze_dates: list[str], watermark: str | None,
-                  requested: str | None = None) -> list[str]:
+                  requested: str | None = None,
+                  holidays: frozenset[str] = frozenset()) -> list[str]:
     """Danh sách ngày cần xử lý (tăng dần).
 
     - requested: chạy đúng 1 ngày (rerun / backfill thủ công).
-    - không requested: mọi ngày trong bronze > watermark; chưa có watermark = mọi ngày.
+    - không requested: MỌI ngày theo lịch nghiệp vụ từ sau watermark (chưa có watermark: từ ngày
+      bronze đầu tiên) tới ngày bronze mới nhất. Ngày không có file vẫn nằm trong danh sách ->
+      Silver dừng ở đó với SourceFilesMissing thay vì nhảy qua (watermark không vượt ngày thiếu,
+      file gửi trễ của ngày đó vẫn được xử lý khi về).
     """
     if requested:
         return [check_date(requested)]
-    days = sorted({check_date(str(d)) for d in bronze_dates})
+    received = sorted({check_date(str(d)) for d in bronze_dates})
+    if not received:
+        return []
     if watermark:
-        wm = check_date(str(watermark))
-        days = [d for d in days if d > wm]
-    return days
+        from datetime import date, timedelta
+
+        start = (date.fromisoformat(check_date(str(watermark))) + timedelta(days=1)).isoformat()
+    else:
+        start = received[0]
+    return business_dates(start, received[-1], holidays) if start <= received[-1] else []
+
+
+def corrected_days(last_loaded: dict[str, object], silver_done_at: dict[str, object]) -> list[str]:
+    """Ngày đã Silver SUCCESS nhưng Bronze lại nhận file SAU lần SUCCESS đó (nguồn gửi file
+    sửa / correction) -> Silver của ngày đó đã cũ, phải xử lý lại Silver trước khi dựng Gold.
+
+    last_loaded:    ngày -> _load_ts lớn nhất trong Bronze (mọi bảng nguồn)
+    silver_done_at: ngày -> finished_at của lần Silver SUCCESS gần nhất
+    """
+    return sorted(d for d, done in silver_done_at.items()
+                  if d in last_loaded and last_loaded[d] > done)
 
 
 def run_row(as_of_date: str, layer: str, run_id: str, status: str,
@@ -213,3 +274,33 @@ def record_versions(spark, catalog: str, run_id: str, as_of_date: str, layer: st
      .withColumn("as_of_date", F.col("as_of_date").cast("date"))
      .withColumn("captured_at", F.current_timestamp())
      .write.format("delta").mode("append").saveAsTable(fq(catalog, "ops", "publish_versions")))
+
+
+def rollback_statements(versions: list[tuple[str, int | None, int | None]]) -> list[str]:
+    """SQL đưa các bảng về trạng thái TRƯỚC publish. versions: (bảng, version_before, hiện tại).
+
+    - version_before NULL + bảng đang tồn tại: bảng được tạo trong lần publish lỗi -> DROP
+    - hiện tại == version_before: bảng chưa bị ghi -> bỏ qua
+    - còn lại: RESTORE về version_before
+    """
+    out = []
+    for table, before, current in versions:
+        if before is None:
+            if current is not None:
+                out.append(f"DROP TABLE IF EXISTS {table}")
+        elif current != before:
+            out.append(f"RESTORE TABLE {table} TO VERSION AS OF {int(before)}")
+    return out
+
+
+def rollback_publish(spark, catalog: str, run_id: str) -> list[str]:
+    """Publish Gold lỗi giữa chừng (vd: bảng thứ 3/17): đưa MỌI bảng đã ghi về version trước
+    publish -> Gold toàn vẹn ở batch cũ, không trộn bảng mới / cũ. Trả về các lệnh đã chạy."""
+    t = fq(catalog, "ops", "publish_versions")
+    rows = spark.sql(f"SELECT table_name, version_before FROM {t} "
+                     f"WHERE run_id = '{run_id}'").collect()
+    stmts = rollback_statements([(r.table_name, r.version_before,
+                                  table_version(spark, r.table_name)) for r in rows])
+    for sql in stmts:
+        spark.sql(sql)
+    return stmts

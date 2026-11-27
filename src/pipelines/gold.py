@@ -6,7 +6,9 @@ Mỗi ngày dữ liệu:
                 tiền gửi vs bang1247. Lệch -> GateFailed, bảng `gold` KHÔNG bị ghi
                 (dashboard vẫn thấy batch hợp lệ gần nhất)
     3. publish - ghi vào `gold` (idempotent: replaceWhere / MERGE / overwrite) rồi thêm dòng
-                vào `ops.published_batches`
+                vào `ops.published_batches`. Lỗi giữa chừng (bảng thứ N/17) -> tự RESTORE mọi bảng
+                về version trước publish (rollback) -> Gold không bị trộn bảng mới / cũ.
+                Dashboard chỉ đọc tới ngày trong `published_batches` (dòng cuối cùng được ghi).
 
 Ngày cần dựng = ngày Silver SUCCESS mà Gold chưa SUCCESS (hoặc đúng `as_of_date`).
 """
@@ -23,7 +25,13 @@ from pyspark.sql import functions as F
 from common import gold as g
 from common import gold_cards as gc
 from common import gold_deposit as gd
-from common.batch import ensure_ops_tables, record_run, record_versions, watermark
+from common.batch import (
+    ensure_ops_tables,
+    record_run,
+    record_versions,
+    rollback_publish,
+    watermark,
+)
 from common.dates import check_date
 from common.delta_io import merge_upsert, overwrite, overwrite_date
 from common.names import fq
@@ -85,6 +93,20 @@ def pending_days(spark: SparkSession, cfg: GoldConfig) -> list[str]:
     return [str(r[0]) for r in spark.sql(
         f"SELECT DISTINCT as_of_date FROM {cfg.t('ops', 'pipeline_runs')} "
         f"WHERE layer = 'silver' AND status = 'SUCCESS' {cond} ORDER BY as_of_date").collect()]
+
+
+def publish_batch_snapshot(df, target: str, day_s: str) -> None:
+    """Mart tính lại TOÀN BỘ mỗi ngày (tháng, luỹ kế) nhưng dashboard đọc: lưu 1 snapshot / batch
+    (cột as_of_date = ngày batch) thay vì ghi đè cả bảng -> trong lúc publish đang chạy, view
+    (lọc as_of_date = batch đã publish) vẫn đọc bản cũ, không thấy bản mới dở dang.
+    Bảng cũ chưa có cột as_of_date (trước nâng cấp): ghi đè 1 lần để đổi schema."""
+    spark = df.sparkSession
+    df = df.withColumn("as_of_date", F.lit(day_s).cast("date"))
+    if spark.catalog.tableExists(target) and \
+            "as_of_date" not in spark.table(target).columns:
+        overwrite(df, target)
+        return
+    overwrite_date(df, target, "as_of_date", day_s)
 
 
 def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
@@ -183,9 +205,9 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         overwrite_date(card_daily, G("card_mart_kpi_daily"), "as_of_date", day_s)
         overwrite_date(gc.build_mart_card_spend_mix(ctx_day, day_s), G("card_mart_spend_mix"),
                        "as_of_date", day_s)
-        overwrite(gc.build_mart_card_kpi_monthly(spark.table(G("card_mart_kpi_daily")),
-                                                 spark.table(S("ref_targets"))),
-                  G("card_mart_kpi_monthly"))
+        publish_batch_snapshot(gc.build_mart_card_kpi_monthly(
+            spark.table(G("card_mart_kpi_daily")), spark.table(S("ref_targets"))),
+            G("card_mart_kpi_monthly"), day_s)
 
         fx_day = spark.table(S("ref_fx_rates")).filter(F.col("rate_date") == day)
         trend_hist = (spark.table(G("dep_mart_trend"))
@@ -200,8 +222,8 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         overwrite_date(gd.build_mart_casa_customer(acc_day, dim_product,
                                                    dim_customer_g.filter("is_current"), day_s),
                        G("dep_mart_casa_customer"), "as_of_date", day_s)
-        overwrite(gd.build_mart_deposit_new_accounts(spark.table(S("core_accounts"))),
-                  G("dep_mart_new_accounts"))
+        publish_batch_snapshot(gd.build_mart_deposit_new_accounts(spark.table(S("core_accounts"))),
+                               G("dep_mart_new_accounts"), day_s)
 
         (spark.createDataFrame([(day_s, rec.run_id, json.dumps(checks))],
                                "as_of_date string, run_id string, checks string")
@@ -227,9 +249,18 @@ def run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
         try:
             build_and_publish(spark, cfg, day, rec)
         except Exception as e:
+            msg = f"{type(e).__name__}: {e}"
+            # lỗi trong bước publish: đã có version trước publish của run này -> rollback
+            try:
+                undone = rollback_publish(spark, cfg.catalog, rec.run_id)
+                if undone:
+                    log("gold_rolled_back", as_of_date=day, run_id=rec.run_id, statements=undone)
+                    msg += f" | rollback {len(undone)} bảng về version trước publish"
+            except Exception as rb:  # rollback cũng lỗi: phải xử lý tay (runbook mục 5)
+                msg += f" | ROLLBACK FAILED {type(rb).__name__}: {rb}"
+                log("gold_rollback_failed", as_of_date=day, run_id=rec.run_id, error=str(rb))
             rec.flush(spark, cfg.t("ops", "task_runs"))
-            record_run(spark, cfg.catalog, day, "gold", rec.run_id, "FAILED",
-                       f"{type(e).__name__}: {e}")
+            record_run(spark, cfg.catalog, day, "gold", rec.run_id, "FAILED", msg)
             log("gold_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
             raise
         rec.flush(spark, cfg.t("ops", "task_runs"))

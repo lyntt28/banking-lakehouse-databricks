@@ -17,7 +17,8 @@ SELECT max(as_of_date) FROM <c>.ops.published_batches;
 Gold chỉ ghi sau gate. Nếu lỗi ở `gold:publish` (hạ tầng giữa chừng) → mục 5.
 
 ## 1. `SourceFilesMissing` (bước `file_manifest`)
-- Xem `ops.file_manifest` ngày đó, `status = 'MISSING'`.
+- Xem `ops.file_manifest` ngày đó, `status IN ('MISSING', 'INCOMPLETE')`. `INCOMPLETE` = đã
+  nhận một phần (vd: 5/9 file KPI thẻ); thông báo lỗi liệt kê nhóm file còn thiếu.
 - Liên hệ hệ thống nguồn; khi file về landing: chạy lại job (as_of_date trống). Bronze nạp file
   mới, pipeline tiếp tục từ ngày lỗi. Không cần thao tác dữ liệu.
 
@@ -39,6 +40,10 @@ Gold chỉ ghi sau gate. Nếu lỗi ở `gold:publish` (hạ tầng giữa ch�
 ## 5. Lỗi giữa `silver:publish` / `gold:publish` (lỗi hạ tầng sau khi đã qua mọi gate)
 Silver và Gold đều **stage → kiểm tra tất cả → publish**: lỗi DQ / đối soát không bao giờ để lại
 bảng ghi dở. Chỉ lỗi hạ tầng trong chính bước publish mới có thể làm một số bảng đã ghi, số khác chưa.
+- Job TỰ rollback: mọi bảng Gold đã ghi trong lần publish lỗi được `RESTORE` về version trước
+  publish (log `gold_rolled_back`, `pipeline_runs.message` có "rollback N bảng"). Dashboard chỉ đọc
+  tới ngày trong `ops.published_batches` nên không thấy dữ liệu dở dang.
+- `message` có "ROLLBACK FAILED": rollback tự động cũng lỗi -> làm tay theo Cách 2.
 - Cách 1 (thường dùng): chạy lại job. Publish idempotent (MERGE / replaceWhere / overwrite từ
   bản stage đã đạt) nên kết quả hội tụ.
 - Cách 2 (cần quay lại ngay): version trước publish được lưu ở `ops.publish_versions`:
@@ -49,6 +54,10 @@ bảng ghi dở. Chỉ lỗi hạ tầng trong chính bước publish mới có 
   `version_before` NULL = bảng được tạo trong lần chạy đó → DROP nếu cần.
 
 ## 6. Correction / backfill ngày cũ (prod)
+Job daily tự nhận diện file sửa: Bronze có file nạp SAU lần Silver SUCCESS của ngày đó.
+- Ngày sửa = watermark Silver: job tự chạy lại Silver rồi Gold ngày đó (log `daily_correction`),
+  không dựng Gold từ Silver cũ. Không cần thao tác.
+- Ngày sửa < watermark: job dừng với `CorrectionNeedsReplay`, làm thủ công như dưới:
 1. Dựng catalog song song (vd `bank_prod_rebuild`) với `05_backfill reset=true` từ Bronze.
 2. So sánh với prod (đối soát, số dòng, tổng số dư).
 3. Chuyển consumer (view / dashboard `dataset_catalog`) hoặc `DEEP CLONE` từng bảng vào prod
