@@ -86,10 +86,12 @@ def test_least_privilege_grants():
     # branch_users chỉ đọc gold, không đụng silver / bronze / ops data
     bu = [s for s in SQL if s.endswith("TO `branch_users`") and "ON SCHEMA" in s]
     assert {s.split("ON SCHEMA ")[1].split(" ")[0] for s in bu} == {"bank_test.gold",
+                                                                    "bank_test.gold_serving",
                                                                     "bank_test.ops"}
     assert all("MODIFY" not in s for s in SQL if "risk_analysts" in s or "branch_users" in s)
     # nhóm đọc giới hạn không có SELECT cả schema gold (branch_users) / ops (cả hai)
-    for g, schema in [("branch_users", "gold"), ("branch_users", "ops"),
+    for g, schema in [("branch_users", "gold"), ("branch_users", "gold_serving"),
+                      ("branch_users", "ops"),
                       ("risk_analysts", "ops")]:
         assert not any(f"ON SCHEMA bank_test.{schema} TO `{g}`" in s and "SELECT" in s
                        for s in SQL), (g, schema)

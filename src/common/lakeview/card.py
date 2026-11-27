@@ -19,7 +19,7 @@ CARD_COLORS = {   # reference/dashboards/card: card_dashboard_final.html (Dashbo
 
 
 def card_dashboard(catalog: str) -> dict:
-    G = _q(catalog, "gold")
+    G = _q(catalog, "gold_serving")   # view batch đang dùng (common.serving)
     d = Dash("card_business", "Card Business Dashboard")
     d.param("report_date", "Report date", "DATE", "now/d")
     d.param("customer_type", "Customer type", "STRING", "consumer")

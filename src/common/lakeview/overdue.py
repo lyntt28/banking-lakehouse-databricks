@@ -17,7 +17,7 @@ OVD_COLORS = {   # reference/dashboards/overdue/dashboardv200.js
 
 
 def overdue_dashboard(catalog: str) -> dict:
-    G = _q(catalog, "gold")
+    G = _q(catalog, "gold_serving")   # view batch đang dùng (common.serving)
     T = f"{G}.card_mart_overdue_daily"
     d = Dash("overdue", "Retail Loan Overdue Tracking")
     d.param("report_date", "Report date", "DATE", "now/d")

@@ -149,8 +149,9 @@ def _checksum(spark, table):
     from pyspark.sql import functions as F
 
     df = spark.table(table)
-    # bỏ cột lineage kỹ thuật (thời điểm nạp, tên file); so nội dung nghiệp vụ
-    cols = sorted(c for c in df.columns if c not in ("_load_ts", "_source_file", "_rescued_data"))
+    # bỏ cột lineage kỹ thuật (thời điểm nạp, tên file, batch publish); so nội dung nghiệp vụ
+    cols = sorted(c for c in df.columns
+                  if c not in ("_load_ts", "_source_file", "_rescued_data", "batch_id"))
     r = df.select(F.count("*").alias("n"),
                   F.sum(F.xxhash64(*cols).cast("decimal(38,0)")).alias("h")).first()
     return (r.n, r.h)
