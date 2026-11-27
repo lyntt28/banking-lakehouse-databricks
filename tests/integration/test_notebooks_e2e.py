@@ -118,7 +118,7 @@ def pipeline(spark, tmp_path_factory):
 
 def test_backfill_runs_every_day(pipeline):
     # Gold tự assert đối soát (dư nợ, KPI thẻ, tiền gửi) -> tới đây là mọi ngày đều qua
-    got = {str(r[0]) for r in pipeline.table(f"{CATALOG}.gold.loan_mart_npl_daily")
+    got = {str(r[0]) for r in pipeline.table(f"{CATALOG}.gold_serving.loan_mart_npl_daily")
            .select("as_of_date").collect()}
     assert got == set(DAYS)
 

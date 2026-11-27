@@ -39,13 +39,13 @@ def clean(spark):
 
 def test_new_batch_invisible_until_activated_then_old_cleaned(spark, clean):
     t = "loan_mart_overdue_daily"
-    sv.write_batch(_mart(spark, D1, 10.0), "", t, "b1")
+    sv.write_batch(_mart(spark, D1, 10.0), "", t, "b1", day_s=D1)
     _activate(spark, D1, "b1", "2026-11-01 07:00:00")
     sv.create_serving_views(spark, "")
     assert _serving(spark, t) == {(D1, 10.0)}
 
     # file sửa cho D1 (đã publish): batch b2 ghi THÊM -> người đọc vẫn thấy b1
-    sv.write_batch(_mart(spark, D1, 99.0), "", t, "b2")
+    sv.write_batch(_mart(spark, D1, 99.0), "", t, "b2", day_s=D1)
     assert _serving(spark, t) == {(D1, 10.0)}
     # mart luỹ kế dựng từ trạng thái "sau kích hoạt" thấy đúng b2
     assert {r.ovd for r in sv.candidate(spark, "", t, D1, "b2").collect()} == {99.0}
@@ -57,7 +57,7 @@ def test_new_batch_invisible_until_activated_then_old_cleaned(spark, clean):
     assert {r.batch_id for r in spark.table(f"gold.{t}").collect()} == {"b1", "b2"}
     assert _serving(spark, t) == {(D1, 99.0)}
     # batch sửa tiếp theo (b3): b1 bị dọn, giữ b2 + b3
-    sv.write_batch(_mart(spark, D1, 7.0), "", t, "b3")
+    sv.write_batch(_mart(spark, D1, 7.0), "", t, "b3", day_s=D1)
     _activate(spark, D1, "b3", "2026-11-01 11:00:00")
     sv.cleanup_superseded(spark, "", t, D1, "b3")
     assert {r.batch_id for r in spark.table(f"gold.{t}").collect()} == {"b2", "b3"}
@@ -66,18 +66,50 @@ def test_new_batch_invisible_until_activated_then_old_cleaned(spark, clean):
 
 def test_daily_keeps_other_days_and_failed_batch_stays_hidden(spark, clean):
     t = "loan_mart_overdue_daily"
-    sv.write_batch(_mart(spark, D1, 1.0), "", t, "b1")
+    sv.write_batch(_mart(spark, D1, 1.0), "", t, "b1", day_s=D1)
     _activate(spark, D1, "b1", "2026-11-01 07:00:00")
-    sv.write_batch(_mart(spark, D2, 2.0), "", t, "b2")      # publish D2 lỗi, chưa kích hoạt
+    sv.write_batch(_mart(spark, D2, 2.0), "", t, "b2", day_s=D2)  # D2 lỗi, chưa kích hoạt
     sv.create_serving_views(spark, "")
     assert _serving(spark, t) == {(D1, 1.0)}
     cand = {(str(r.as_of_date), r.ovd) for r in sv.candidate(spark, "", t, D2, "b3").collect()}
     assert cand == {(D1, 1.0)}                               # b2 không lọt vào mart luỹ kế
-    sv.write_batch(_mart(spark, D2, 3.0), "", t, "b3")
+    sv.write_batch(_mart(spark, D2, 3.0), "", t, "b3", day_s=D2)
     _activate(spark, D2, "b3", "2026-11-02 07:00:00")
     sv.cleanup_superseded(spark, "", t, D2, "b3")             # dọn luôn rác của b2
     assert _serving(spark, t) == {(D1, 1.0), (D2, 3.0)}
-    assert spark.table(f"gold.{t}").count() == 2
+    assert spark.table(f"gold.{t}").filter("NOT _batch_marker").count() == 2
+
+
+def test_valid_empty_batch_does_not_fall_back_to_old_batch(spark, clean):
+    """Batch mới hợp lệ nhưng 0 dòng cho bảng này (vd: ngày không có thẻ quá hạn): người đọc
+    phải thấy 0 dòng của batch mới, KHÔNG được lùi về số liệu của batch cũ."""
+    t = "card_mart_overdue_daily"
+    sv.write_batch(_mart(spark, D1, 10.0), "", t, "b1", day_s=D1)
+    _activate(spark, D1, "b1", "2026-11-01 07:00:00")
+    sv.create_serving_views(spark, "")
+    assert _serving(spark, t) == {(D1, 10.0)}
+
+    sv.write_batch(_mart(spark, D1, 0.0).limit(0), "", t, "b2", day_s=D1)   # 0 dòng
+    _activate(spark, D1, "b2", "2026-11-01 09:00:00")
+    assert _serving(spark, t) == set()
+    assert sv.candidate(spark, "", t, D1, "b2").count() == 0
+
+
+def test_valid_empty_snapshot_batch_does_not_fall_back(spark, clean):
+    t = "dim_branch"
+    schema = "branchnbr string, br_name string"
+    sv.write_batch(spark.createDataFrame([("101", "A")], schema), "", t, "b1")
+    _activate(spark, D1, "b1", "2026-11-01 07:00:00")
+    sv.create_serving_views(spark, "")
+    sv.write_batch(spark.createDataFrame([], schema), "", t, "b2")
+    _activate(spark, D2, "b2", "2026-11-02 07:00:00")
+    assert spark.table(f"gold_serving.{t}").count() == 0
+    assert "_batch_marker" not in spark.table(f"gold_serving.{t}").columns
+
+
+def test_daily_batch_requires_day_for_marker(spark, clean):
+    with pytest.raises(ValueError):
+        sv.write_batch(_mart(spark, D1, 1.0), "", "loan_mart_overdue_daily", "b1")
 
 
 def test_snapshot_table_switches_whole_table(spark, clean):
@@ -115,7 +147,7 @@ def test_concurrent_reader_sees_old_or_new_batch_never_mixed_or_empty(spark, cle
         return spark.createDataFrame(rows, "as_of_date string, branchnbr string, ovd double") \
             .withColumn("as_of_date", F.col("as_of_date").cast("date"))
 
-    sv.write_batch(mart(1.0), "", t, "b1")
+    sv.write_batch(mart(1.0), "", t, "b1", day_s=D1)
     _activate(spark, D1, "b1", "2026-11-01 07:00:00")
     sv.create_serving_views(spark, "")
 
@@ -133,7 +165,7 @@ def test_concurrent_reader_sees_old_or_new_batch_never_mixed_or_empty(spark, cle
     th = threading.Thread(target=reader)
     th.start()
     try:
-        sv.write_batch(mart(2.0), "", t, "b2")                 # ghi THÊM, chưa kích hoạt
+        sv.write_batch(mart(2.0), "", t, "b2", day_s=D1)                 # ghi THÊM, chưa kích hoạt
         _activate(spark, D1, "b2", "2026-11-01 09:00:00")      # 1 commit
         sv.cleanup_superseded(spark, "", t, D1, "b2")           # xoá batch cũ
         for _ in range(3):                                      # cho reader đọc thêm sau dọn

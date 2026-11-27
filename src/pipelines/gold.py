@@ -211,7 +211,7 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
     cat = cfg.catalog
 
     def put(df, table: str, key: list[str] | None = None) -> None:
-        sv.write_batch(df, cat, table, batch, key)
+        sv.write_batch(df, cat, table, batch, key, day_s=day_s)
 
     def cand(table: str):
         """Bảng như sau khi batch này được kích hoạt (cho mart đọc lại Gold)."""
