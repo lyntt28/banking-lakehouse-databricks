@@ -54,6 +54,13 @@ def latest_batch_sql(catalog: str) -> str:
     return f"(SELECT max_by(run_id, published_at) FROM {_pointer(catalog)})"
 
 
+def is_activated(spark, catalog: str, batch_id: str) -> bool:
+    """Batch đã có dòng kích hoạt trong con trỏ (người đọc gold_serving đang / đã thấy nó)."""
+    ptr = _pointer(catalog)
+    return spark.catalog.tableExists(ptr) and spark.table(ptr) \
+        .filter(F.col("run_id") == batch_id).limit(1).count() > 0
+
+
 def serving_view_sql(catalog: str, table: str, columns: list[str]) -> str:
     """View đọc batch đang dùng của bảng Gold (bỏ cột batch_id)."""
     src = fq(catalog, "gold", table)

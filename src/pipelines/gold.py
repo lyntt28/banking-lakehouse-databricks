@@ -221,14 +221,22 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         put(gd.build_mart_deposit_new_accounts(spark.table(S("core_accounts")))
             .withColumn("as_of_date", day), "dep_mart_new_accounts")
 
-        # KÍCH HOẠT batch: từ commit này người đọc gold_serving thấy toàn bộ batch mới
+        s.rows_out = fact_loan_day.count()
+        # KÍCH HOẠT batch: từ commit này người đọc gold_serving thấy toàn bộ batch mới.
+        # Phải là lệnh CUỐI của publish: lỗi sau dòng này không được rollback (xem run()).
         (spark.createDataFrame([(day_s, rec.run_id, json.dumps(checks))],
                                "as_of_date string, run_id string, checks string")
          .select(F.col("as_of_date").cast("date"), "run_id",
                  F.current_timestamp().alias("published_at"), "checks")
          .write.format("delta").mode("append").saveAsTable(ops("published_batches")))
-        s.rows_out = fact_loan_day.count()
     return checks
+
+
+def _record_failure(spark, cfg: GoldConfig, day: str, rec: StepRecorder, msg: str) -> None:
+    try:
+        rec.flush(spark, cfg.t("ops", "task_runs"))
+    finally:
+        record_run(spark, cfg.catalog, day, "gold", rec.run_id, "FAILED", msg)
 
 
 def run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
@@ -247,7 +255,16 @@ def run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
             build_and_publish(spark, cfg, day, rec)
         except Exception as e:
             msg = f"{type(e).__name__}: {e}"
-            # lỗi trong bước publish: đã có version trước publish của run này -> rollback
+            if sv.is_activated(spark, cfg.catalog, rec.run_id):
+                # lỗi SAU khi kích hoạt (vd: ghi task_runs): con trỏ đã trỏ vào batch này và
+                # batch đầy đủ. KHÔNG rollback - RESTORE sẽ xoá dòng mà con trỏ đang trỏ tới
+                # -> dashboard trống. Báo FAILED để lần chạy sau dựng lại (batch mới, idempotent).
+                msg += " | batch đã kích hoạt trước khi lỗi -> không rollback"
+                log("gold_failed_after_activation", as_of_date=day, run_id=rec.run_id,
+                    error=str(e))
+                _record_failure(spark, cfg, day, rec, msg)
+                raise
+            # lỗi TRƯỚC khi kích hoạt: batch vô hình với người đọc -> rollback dọn dòng dở dang
             try:
                 undone = rollback_publish(spark, cfg.catalog, rec.run_id)
                 if undone:
@@ -256,8 +273,7 @@ def run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
             except Exception as rb:  # rollback cũng lỗi: phải xử lý tay (runbook mục 5)
                 msg += f" | ROLLBACK FAILED {type(rb).__name__}: {rb}"
                 log("gold_rollback_failed", as_of_date=day, run_id=rec.run_id, error=str(rb))
-            rec.flush(spark, cfg.t("ops", "task_runs"))
-            record_run(spark, cfg.catalog, day, "gold", rec.run_id, "FAILED", msg)
+            _record_failure(spark, cfg, day, rec, msg)
             log("gold_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
             raise
         # batch đã kích hoạt: dọn dòng batch cũ (người đọc không còn thấy) + cập nhật view.

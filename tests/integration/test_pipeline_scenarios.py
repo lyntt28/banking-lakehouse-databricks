@@ -18,6 +18,7 @@ Kịch bản sự cố:
     4. file trùng (gửi lại)        -> không nhân đôi dữ liệu, manifest báo MULTIPLE_FILES
     5. đối soát lệch               -> GateFailed, Gold đang phục vụ KHÔNG đổi, không publish
     5b. lỗi GIỮA bước publish Gold -> tự rollback mọi bảng đã ghi, không publish batch
+    5c. lỗi SAU khi kích hoạt batch -> KHÔNG rollback (con trỏ vẫn trỏ vào batch đầy đủ)
     6. backfill ngày cũ hơn SCD2   -> bị từ chối, dữ liệu hiện tại không đổi
     6b. file sửa (correction)      -> ngày mới nhất: chạy lại Silver rồi Gold; ngày cũ: dừng
     7. gián đoạn nhiều ngày        -> daily chạy bù xen kẽ Silver/Gold = chạy từng ngày
@@ -358,6 +359,38 @@ def test_5b_failure_midway_through_gold_publish_is_rolled_back(spark, published,
 
     monkeypatch.setattr(pg.sv, "write_batch", real)
     gold_run(spark, GoldConfig(catalog="", as_of_date=D2))      # hạ tầng ổn -> chạy lại
+    assert _gold_fingerprint(spark) == published["gold_ok"]
+    _assert_integrity(spark)
+
+
+def test_5c_failure_after_activation_is_not_rolled_back(spark, published, monkeypatch):
+    """Lỗi xảy ra SAU khi batch đã kích hoạt: không được RESTORE (sẽ xoá dòng mà con trỏ
+    published_batches đang trỏ tới -> dashboard trống). Batch mới vẫn phục vụ đầy đủ."""
+    import pipelines.gold as pg
+    from pipelines.gold import GoldConfig
+    from pipelines.gold import run as gold_run
+
+    real = pg.build_and_publish
+
+    def boom(*a, **k):
+        real(*a, **k)                          # publish + kích hoạt xong
+        raise OSError("ghi log lỗi sau kích hoạt (giả lập)")
+
+    monkeypatch.setattr(pg, "build_and_publish", boom)
+    with pytest.raises(OSError):
+        gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
+    run_id = spark.sql("SELECT run_id, message FROM ops.pipeline_runs WHERE layer = 'gold' "
+                       "AND status = 'FAILED' ORDER BY started_at DESC LIMIT 1").first()
+    assert "không rollback" in run_id.message
+    active = spark.sql(f"SELECT max_by(run_id, published_at) FROM ops.published_batches "
+                       f"WHERE as_of_date = '{D2}'").first()[0]
+    assert active == run_id.run_id                       # con trỏ đã trỏ vào batch mới
+    n = spark.sql(f"SELECT count(*) FROM gold.loan_fact_daily WHERE batch_id = '{active}'"
+                  ).first()[0]
+    assert n > 0                                         # ... và dòng của nó vẫn còn
+
+    monkeypatch.setattr(pg, "build_and_publish", real)
+    gold_run(spark, GoldConfig(catalog="", as_of_date=D2))      # chạy lại -> batch mới
     assert _gold_fingerprint(spark) == published["gold_ok"]
     _assert_integrity(spark)
 
