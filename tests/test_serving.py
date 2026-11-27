@@ -104,3 +104,17 @@ def test_view_sql_kinds():
     assert "`batch_id`" not in sql
     from pipelines.gold import PUBLISHED_TABLES
     assert set(PUBLISHED_TABLES) == set(sv.TABLE_KIND)
+
+
+def test_serving_view_problems_detects_missing_and_stale_views(spark, clean):
+    t = "loan_mart_overdue_daily"
+    sv.write_batch(_mart(spark, D1, 1.0), "", t, "b1")
+    _activate(spark, D1, "b1", "2026-11-01 07:00:00")
+    assert sv.serving_view_problems(spark, "") == [f"{t}: thiếu view"]
+    sv.create_serving_views(spark, "")
+    assert sv.serving_view_problems(spark, "") == []
+    # batch mới thêm cột nhưng view chưa được tạo lại -> dashboard không thấy cột mới
+    sv.write_batch(_mart(spark, D2, 2.0).withColumn("npl", F.lit(0.0)), "", t, "b2")
+    assert sv.serving_view_problems(spark, "") == [f"{t}: cột view ['npl'] lệch bảng gốc"]
+    sv.create_serving_views(spark, "")
+    assert sv.serving_view_problems(spark, "") == []

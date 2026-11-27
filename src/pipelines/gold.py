@@ -232,6 +232,10 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
     return checks
 
 
+class ServingViewsInvalid(RuntimeError):
+    """Batch đã kích hoạt nhưng view gold_serving thiếu / lệch cột: dashboard không dùng được."""
+
+
 def _record_failure(spark, cfg: GoldConfig, day: str, rec: StepRecorder, msg: str) -> None:
     try:
         rec.flush(spark, cfg.t("ops", "task_runs"))
@@ -276,16 +280,31 @@ def run(spark: SparkSession, cfg: GoldConfig) -> list[str]:
             _record_failure(spark, cfg, day, rec, msg)
             log("gold_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
             raise
-        # batch đã kích hoạt: dọn dòng batch cũ (người đọc không còn thấy) + cập nhật view.
-        # Lỗi ở đây không làm hỏng batch đã publish -> chỉ ghi log, lần chạy sau dọn tiếp.
+        # batch đã kích hoạt. (a) view gold_serving: BẮT BUỘC đúng - view thiếu / lệch cột
+        # (bảng thêm cột) = dashboard hỏng -> FAILED, không báo SUCCESS.
+        try:
+            sv.create_serving_views(spark, cfg.catalog)
+            problems = sv.serving_view_problems(spark, cfg.catalog)
+        except Exception as e:  # noqa: BLE001
+            problems = [f"tạo view lỗi {type(e).__name__}: {e}"]
+        if problems:
+            msg = ("batch đã kích hoạt nhưng view gold_serving sai -> sửa rồi chạy lại "
+                   f"02_dashboard_views / Gold: {problems}")
+            log("gold_serving_views_invalid", as_of_date=day, run_id=rec.run_id,
+                problems=problems)
+            _record_failure(spark, cfg, day, rec, msg)
+            raise ServingViewsInvalid(msg)
+        # (b) dọn dòng batch cũ (người đọc không còn thấy): lỗi không ảnh hưởng dữ liệu đang
+        # phục vụ, lần chạy sau dọn tiếp -> SUCCESS nhưng ghi rõ cảnh báo vào message.
+        warning = None
         try:
             for t in PUBLISHED_TABLES:
                 sv.cleanup_superseded(spark, cfg.catalog, t, day, rec.run_id)
-            sv.create_serving_views(spark, cfg.catalog)
         except Exception as e:  # noqa: BLE001
+            warning = f"WARN dọn batch cũ lỗi {type(e).__name__}: {e}"
             log("gold_cleanup_failed", as_of_date=day, run_id=rec.run_id, error=str(e))
         rec.flush(spark, cfg.t("ops", "task_runs"))
-        record_run(spark, cfg.catalog, day, "gold", rec.run_id, "SUCCESS")
+        record_run(spark, cfg.catalog, day, "gold", rec.run_id, "SUCCESS", warning or "")
         log("gold_published", as_of_date=day, run_id=rec.run_id)
         done.append(day)
     return done

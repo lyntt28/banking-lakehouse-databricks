@@ -90,6 +90,28 @@ def create_serving_views(spark, catalog: str) -> list[str]:
     return done
 
 
+def serving_view_problems(spark, catalog: str) -> list[str]:
+    """Mỗi bảng gold phải có view gold_serving cùng cột (trừ batch_id) và đọc được.
+    Rỗng = ổn. Dùng sau create_serving_views: view thiếu / lệch cột = dashboard hỏng."""
+    problems = []
+    for t in TABLE_KIND:
+        src, view = fq(catalog, "gold", t), fq(catalog, "gold_serving", t)
+        if not spark.catalog.tableExists(src):
+            continue
+        if not spark.catalog.tableExists(view):
+            problems.append(f"{t}: thiếu view")
+            continue
+        want = [c for c in spark.table(src).columns if c != BATCH_COL]
+        try:
+            got = spark.table(view).limit(0).columns
+        except Exception as e:  # noqa: BLE001 - view hỏng (vd: bảng gốc đổi kiểu cột)
+            problems.append(f"{t}: không đọc được view ({type(e).__name__})")
+            continue
+        if got != want:
+            problems.append(f"{t}: cột view {sorted(set(want) ^ set(got))} lệch bảng gốc")
+    return problems
+
+
 def ensure_batch_column(spark, catalog: str, table: str) -> None:
     """Bảng cũ (trước nâng cấp) chưa có batch_id: thêm cột và gán batch đang dùng hiện tại
     (theo ngày với bảng daily, batch mới nhất với bảng còn lại) để view không mất dữ liệu."""
