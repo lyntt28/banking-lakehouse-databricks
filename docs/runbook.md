@@ -79,7 +79,7 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
   Đúng: fail_pct các rule FAIL < 5%; NPL ~3%; recon toàn `MATCH`.
 - **NẾU LỖI:**
   - `DQ gate: ... > 5%` → xem `ops.dq_results` rule nào vượt; data sinh lỗi quá nhiều?
-  - `Đối soát lệch` → bronze ≠ silver + quarantine + exact_dupes; gửi bảng report cuối notebook.
+  - `Đối soát lệch` → bronze ≠ silver + quarantine + exact_dupes + superseded; gửi bảng report cuối notebook.
   - recon `MISMATCH` → gửi `SELECT * FROM bank_dev.ops.recon_card_kpi WHERE status <> 'MATCH'`.
 
 ## 5. `src/03_gold/02_dashboard_views`
@@ -157,7 +157,7 @@ chỉ giữ trạng thái mới nhất: Gold ngày D phải dựng trước khi 
 | **Gián đoạn nhiều ngày** | Chạy job như thường, `as_of_date` trống | Xử lý mọi ngày sau watermark |
 | **File về trễ** | Chờ file, chạy lại job | Ngày thiếu file FAILED, watermark đứng yên. Ngày KHÔNG có file nào (kể cả loans) cũng được tính theo lịch nghiệp vụ nên không bị nhảy qua |
 | **Rerun 1 ngày** (cùng dữ liệu) | Job với `as_of_date=<ngày>` | Không đổi kết quả |
-| **Correction** (nguồn gửi lại file sửa của ngày D = ngày mới nhất đã xử lý) | Đặt file mới (tên khác) vào landing → Bronze nạp; chạy `as_of_date=D` | Snapshot (loan fact, mart): ghi đè cả ngày → dòng bị rút cũng biến mất. SCD2 cùng ngày: sửa tại chỗ phiên bản ngày D. Giao dịch (`core_transactions`, insert-only): **không** cập nhật bản đã có – cần quy trình sửa riêng (reversal/adjustment từ nguồn) |
+| **Correction** (nguồn gửi lại file sửa của ngày D = ngày mới nhất đã xử lý) | Đặt file mới (tên khác, đủ nội dung cả ngày) vào landing; chạy job như thường | Job tự nhận ra file nạp sau lần Silver SUCCESS → chạy lại Silver rồi Gold ngày D. File nạp sau cùng **thay thế toàn bộ** file trước của cùng bảng / nhóm file (`latest_delivery`, log `file_superseded`). `loan_snapshots` + snapshot Gold: ghi đè cả ngày → dòng bị rút cũng biến mất. Bảng snapshot MERGE (`core_accounts`, `card_master`, ...): giá trị sửa được cập nhật, nhưng thực thể bị rút khỏi file sửa **vẫn còn** → cần replay. SCD2 cùng ngày: sửa tại chỗ phiên bản ngày D. Giao dịch (`core_transactions`, insert-only): **không** cập nhật bản đã có – cần quy trình sửa riêng (reversal/adjustment từ nguồn) |
 | **Correction / backfill ngày cũ hơn watermark** | dev/test: `05_backfill reset=true`. prod: dựng catalog song song từ Bronze, kiểm tra, rồi chuyển consumer (`docs/incident_runbook.md`) | Bị chặn (`OutOfOrder`): snapshot MERGE + SCD2 không cho ghi vào quá khứ |
 
 **SCD2 (`silver.core_customers`)**: ngữ nghĩa *daily snapshot* – tối đa 1 phiên bản / khách hàng /

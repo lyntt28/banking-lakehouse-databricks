@@ -10,6 +10,7 @@ from common.silver import (
     ORDER,
     TABLES,
     add_dup_key_count,
+    latest_delivery,
     merge_condition,
     prepare_silver,
     quarantine_records,
@@ -21,7 +22,8 @@ AS_OF = "2026-11-01"
 @pytest.mark.parametrize("table", ORDER)
 def test_row_counts_reconcile(bronze, results, table):
     r = results[table]
-    assert bronze[table].count() == r.valid.count() + r.quarantine.count() + r.exact_dupes
+    assert bronze[table].count() == r.valid.count() + r.quarantine.count() + r.exact_dupes \
+        + r.superseded
 
 
 @pytest.mark.parametrize("table", ORDER)
@@ -96,3 +98,30 @@ def test_quarantine_records_shape(results):
 def test_merge_condition():
     assert merge_condition(["as_of_date", "acctnbr"]) == \
         "t.`as_of_date` = s.`as_of_date` AND t.`acctnbr` = s.`acctnbr`"
+
+
+def test_correction_file_replaces_earlier_delivery(spark):
+    """File gửi lại cùng ngày thay thế file trước: giá trị sửa được dùng, dòng bị rút khỏi file
+    sửa biến mất (không phải cả 2 bản cùng khóa bị quarantine vì trùng khóa)."""
+    rows = [("A1", "100", "loans.csv", "2026-11-03 06:00:00"),
+            ("A2", "200", "loans.csv", "2026-11-03 06:00:00"),
+            ("A1", "150", "loans_fix.csv", "2026-11-03 09:00:00")]
+    df = (spark.createDataFrame(rows, "acct string, bal string, _source_file string, ts string")
+          .withColumn("_load_ts", F.col("ts").cast("timestamp")).drop("ts")
+          .withColumn("_as_of_date", F.lit("2026-11-02").cast("date")))
+    kept, n = latest_delivery(df, "loan_snapshots")
+    assert n == 2
+    assert [(r.acct, r.bal) for r in kept.collect()] == [("A1", "150")]
+
+
+def test_correction_replaces_only_its_file_group(spark):
+    """Bảng nhiều file / ngày (9 nhóm KPI thẻ): file sửa nhóm 05 không xoá nhóm khác."""
+    rows = [("x", "/v/as_of_date=2026-11-02/01_member_eop_20261102.txt", "2026-11-03 06:00:00"),
+            ("y", "/v/as_of_date=2026-11-02/05_balance_eop_20261102.txt", "2026-11-03 06:00:00"),
+            ("z", "/v/as_of_date=2026-11-02/05_balance_eop_20261102_v2.txt",
+             "2026-11-03 09:00:00")]
+    df = (spark.createDataFrame(rows, "v string, _source_file string, ts string")
+          .withColumn("_load_ts", F.col("ts").cast("timestamp")).drop("ts"))
+    kept, n = latest_delivery(df, "card_kpi_source")
+    assert n == 1
+    assert sorted(r.v for r in kept.collect()) == ["x", "z"]
