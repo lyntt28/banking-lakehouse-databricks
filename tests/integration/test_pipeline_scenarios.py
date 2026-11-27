@@ -223,6 +223,15 @@ def test_1_missing_file_stops_at_that_day_then_late_file_is_picked_up(spark, bas
                       f"WHERE as_of_date = '{D2}'").collect()
     assert ("file_manifest", "FAILED") in [(r.step, r.status) for r in steps]
 
+    # (1b) bật ngày dự kiến + SLA (prod): sáng 03/11 phải có file 02/11, hạn 09:00.
+    # Trước hạn -> WAITING, không báo lỗi; quá hạn mà vẫn thiếu -> FAILED (cảnh báo)
+    sla = dict(catalog="", expected_lag_days=1, sla_hour=9)
+    assert daily.run(spark, SilverConfig(**sla, now="2026-11-03T07:00:00")) == []
+    assert _runs(spark, "silver")[-1] == (D2, "WAITING")
+    with pytest.raises(SourceFilesMissing):
+        daily.run(spark, SilverConfig(**sla, now="2026-11-03T09:30:00"))
+    assert _runs(spark, "silver")[-1] == (D2, "FAILED")
+
     # (2) file về trễ -> chạy lại job: chỉ xử lý ngày còn thiếu, Gold publish đủ 2 ngày
     baseline["frames"]["transactions"].filter(F.col("_as_of_date") == F.lit(D2).cast("date")) \
         .write.format("delta").mode("append").saveAsTable("bronze.transactions")

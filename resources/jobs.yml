@@ -12,6 +12,15 @@ resources:
           default: ${var.catalog}
         - name: as_of_date        # trống = mọi ngày chưa xử lý sau watermark (ops.pipeline_runs)
           default: ""
+        # Ngày dự kiến + SLA: "" = tắt (dev/test chạy theo file có sẵn). Prod = 1: mỗi lần chạy
+        # phải có file của hôm qua; thiếu trước sla_hour -> WAITING, quá giờ -> FAILED + email
+        - name: expected_lag_days
+          default: ${var.expected_lag_days}
+        - name: sla_hour
+          default: "9"
+        # Ngày bắt đầu lịch hằng ngày; trước đó chỉ đòi snapshot cuối tháng. "" = tự suy ra
+        - name: daily_from
+          default: ""
 
       tasks:
         - task_key: setup
