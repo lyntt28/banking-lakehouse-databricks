@@ -19,7 +19,7 @@ def spark(tmp_path_factory):
         .appName("unit-tests")
         .config("spark.sql.shuffle.partitions", "1")
         .config("spark.ui.enabled", "false")
-        .config("spark.driver.memory", "2g")  # nhiều fixture + plan lớn khi chạy cả bộ test
+        .config("spark.driver.memory", "4g")  # nhiều fixture + plan lớn khi chạy cả bộ test
         # Delta Lake local: test MERGE / SCD2 / replaceWhere như trên Databricks
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config("spark.sql.catalog.spark_catalog",
