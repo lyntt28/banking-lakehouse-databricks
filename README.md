@@ -6,7 +6,27 @@ two consumers: **BI dashboards** (credit risk, card business, deposits) and an
 **ML feature table** (insurance cross-sell). Every step is tested, quality-gated and
 reconciled against the source system's own summary reports.
 
-> 🚧 Work in progress — see [Roadmap](#roadmap).
+> 🚧 Work in progress — see [Roadmap](#roadmap). Daily job runs end-to-end on Databricks: see [Run on Databricks](#run-on-databricks-free-edition-serverless).
+
+## Run on Databricks (Free Edition, serverless)
+
+First full end-to-end run of the daily job on `bank_dev`, 2026-11-27: all 5 tasks succeeded.
+The run rebuilt Silver and Gold from scratch for 15 business dates (12 month-end snapshots
+2025-10-31 → 2026-10-31, then daily 2026-11-01 → 2026-11-03), each date passing the DQ gate,
+the reconciliation gate and the atomic Gold publish.
+
+![Daily job DAG on Databricks](docs/images/databricks_job_dag.png)
+
+| Task | Runtime |
+|---|---|
+| setup | 24s |
+| bronze (Auto Loader, 15 sources) | 1m 19s |
+| silver_gold (15 dates, from scratch) | 1h 45m 15s (~7 min per date) |
+| dashboard_views | 18s |
+| governance (dry-run on Free Edition) | 10s |
+
+`silver_gold` is the bottleneck: each date runs ~15 Silver tables plus 18 Gold tables
+sequentially on serverless. A normal daily run only processes one new date.
 
 ## Architecture
 
@@ -100,16 +120,16 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [x] Project skeleton, bundle config, CI
 - [x] Reusable DQ, SCD2 and debt-classification logic with unit tests
 - [x] Fake data generator: core banking, cards, insurance, reconciliation summaries
-- [x] Bronze ingestion (Auto Loader) — code ready, run on Databricks pending
-- [x] Silver: typing, DQ gate, MERGE, SCD2 — code + unit tests, run on Databricks pending
-- [x] Gold BI star schema + marts (loan overdue / NPL with D-1·M-1·Y-1, deposit, customer 360), Silver↔Gold reconciliation — run on Databricks pending
+- [x] Bronze ingestion (Auto Loader) — ✅ ran on Databricks
+- [x] Silver: typing, DQ gate, MERGE, SCD2 — ✅ ran on Databricks (15 dates)
+- [x] Gold BI star schema + marts (loan overdue / NPL with D-1·M-1·Y-1, deposit, customer 360), Silver↔Gold reconciliation — ✅ ran on Databricks
 - [x] Gold card marts (daily, spend mix, monthly MoM/YoY + % target) and reconciliation with source summary files (card KPI, bang1247)
 - [x] Deposit marts (trend D-1/M-1/Y-1, tenor, CASA customers, Edu-Save new accounts) + 13-month history generation and backfill notebook
 - [x] 3 AI/BI dashboards (Card, Overdue, Deposit) rebuilt from the original Chart.js dashboards: same order, chart types and colours (`dashboards/`, deployed by the bundle) — not yet opened on a workspace
 - [x] Gold ML feature table + insurance cross-sell propensity model (MLflow, UC registry, scored list) — run on Databricks pending
 - [x] CD: main → test (deploy + smoke test that must reprocess the latest day through both gates and Gold publish) → manual approval → prod, OIDC auth only (needs GitHub environments + secrets; optional `DATABRICKS_WAREHOUSE_ID` variable for non-Free-Edition workspaces) — not yet run against a workspace
 - [x] Unity Catalog governance as code: RBAC grants (readers only see `gold_serving` views), PII column masks + tags, branch row filter (dry-run on Free Edition)
-- [x] Atomic Gold publish: batch IDs + activation pointer (`ops.published_batches`), serving views, rollback only before activation, shared writer lock across jobs (ADR-012) — integration-tested on local Delta, run on Databricks pending
+- [x] Atomic Gold publish: batch IDs + activation pointer (`ops.published_batches`), serving views, rollback only before activation, shared writer lock across jobs (ADR-012) — integration-tested on local Delta, ✅ ran on Databricks
 - [x] Performance tuning code: liquid clustering, OPTIMIZE/VACUUM weekly job, before/after benchmark notebook (numbers pending a Databricks run)
 - [ ] Azure Databricks deployment (ADLS Gen2, Terraform, service principal)
 - [ ] Streaming AML alerts
