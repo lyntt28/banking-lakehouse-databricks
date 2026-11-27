@@ -340,23 +340,23 @@ def test_5b_failure_midway_through_gold_publish_is_rolled_back(spark, published,
     from pipelines.gold import run as gold_run
 
     n_pub = spark.table("ops.published_batches").count()
-    real = pg.overwrite_date
+    real = pg.sv.write_batch
 
-    def boom(df, target, *a, **k):
-        if target.endswith("card_mart_kpi_daily"):   # ~ bảng thứ 11: 10 bảng trước đã ghi
+    def boom(df, catalog, table, *a, **k):
+        if table == "card_mart_kpi_daily":   # ~ bảng thứ 11: 10 bảng trước đã ghi batch mới
             raise OSError("storage timeout (giả lập)")
-        return real(df, target, *a, **k)
+        return real(df, catalog, table, *a, **k)
 
-    monkeypatch.setattr(pg, "overwrite_date", boom)
+    monkeypatch.setattr(pg.sv, "write_batch", boom)
     with pytest.raises(OSError):
         gold_run(spark, GoldConfig(catalog="", as_of_date=D2))
     assert _gold_fingerprint(spark) == published["gold_ok"]
-    assert spark.table("ops.published_batches").count() == n_pub
+    assert spark.table("ops.published_batches").count() == n_pub   # batch lỗi KHÔNG kích hoạt
     last = spark.sql("SELECT status, message FROM ops.pipeline_runs WHERE layer = 'gold' "
                      "ORDER BY started_at DESC, status LIMIT 1").first()
     assert last.status == "FAILED" and "rollback" in last.message
 
-    monkeypatch.setattr(pg, "overwrite_date", real)
+    monkeypatch.setattr(pg.sv, "write_batch", real)
     gold_run(spark, GoldConfig(catalog="", as_of_date=D2))      # hạ tầng ổn -> chạy lại
     assert _gold_fingerprint(spark) == published["gold_ok"]
     _assert_integrity(spark)
