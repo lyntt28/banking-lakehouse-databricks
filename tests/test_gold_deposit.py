@@ -12,6 +12,7 @@ from common.gold_deposit import (
     build_mart_deposit_new_accounts,
     build_mart_deposit_trend,
     compare_with_history,
+    nation_group,
 )
 from common.silver import TABLES, prepare_silver
 from data_generator.generate import Sizes, generate, month_ends_before
@@ -126,3 +127,11 @@ def test_new_accounts_ytd(silver_days):
         key = (r.branchnbr, r.open_month[:4])
         run[key] = run.get(key, 0) + r.new_accounts
         assert r.new_accounts_ytd == run[key]
+
+
+def test_nation_group_all_foreign_codes(spark):
+    rows = [("VN",), ("vn",), ("KR",), ("JP",), ("US",), ("SG",), (None,), ("",)]
+    df = spark.createDataFrame(rows, "nationality string")
+    got = [r.g for r in df.select(nation_group().alias("g")).collect()]
+    assert got == ["VIETNAMESE", "VIETNAMESE", "FOREIGN", "FOREIGN", "FOREIGN", "FOREIGN",
+                   "OTHER", "OTHER"]
