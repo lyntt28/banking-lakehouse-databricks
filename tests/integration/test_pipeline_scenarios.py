@@ -55,6 +55,11 @@ def table_version(spark, name):
     return v(spark, name)
 
 
+def _state(spark, name):
+    """(Delta table id, version): id đổi = bảng đã bị drop & tạo lại, version cũ vô nghĩa."""
+    return spark.sql(f"DESCRIBE DETAIL {name}").first()["id"], table_version(spark, name)
+
+
 def _tables(spark, schema):
     return [r.tableName for r in spark.sql(f"SHOW TABLES IN {schema}").collect()
             if not r.isTemporary]
@@ -94,9 +99,9 @@ def baseline(spark, tmp_path_factory):
         base["tables"][schema] = _tables(spark, schema)
         for t in base["tables"][schema]:
             spark.sql(f"CREATE TABLE snap_{schema}.{t} USING DELTA AS SELECT * FROM {schema}.{t}")
-            v = table_version(spark, f"{schema}.{t}")
-            # (version có nội dung baseline, version hiện tại được biết là "sạch")
-            base["versions"][f"{schema}.{t}"] = [v, v]
+            # (trạng thái có nội dung baseline, trạng thái hiện tại được biết là "sạch")
+            st = _state(spark, f"{schema}.{t}")
+            base["versions"][f"{schema}.{t}"] = [st, st]
     yield base
     _drop_all(spark, SCHEMAS + [f"snap_{s}" for s in SCHEMAS])
 
@@ -112,13 +117,16 @@ def published(spark, baseline):
             spark.sql(f"DROP TABLE {schema}.{t}")
         for t in tables:
             name = f"{schema}.{t}"
-            if t not in existing:
-                spark.sql(f"CREATE TABLE {name} USING DELTA AS SELECT * FROM snap_{name}")
-                v = table_version(spark, name)
-                versions[name] = [v, v]
-            elif table_version(spark, name) != versions[name][1]:   # test trước đã ghi
-                spark.sql(f"RESTORE TABLE {name} TO VERSION AS OF {versions[name][0]}")
-                versions[name][1] = table_version(spark, name)
+            base_st, clean_st = versions[name]
+            cur = _state(spark, name) if t in existing else None
+            if cur is None or cur[0] != base_st[0]:      # mất hoặc bị tạo lại -> copy snapshot
+                spark.sql(f"CREATE OR REPLACE TABLE {name} USING DELTA "
+                          f"AS SELECT * FROM snap_{name}")
+                st = _state(spark, name)
+                versions[name] = [st, st]
+            elif cur != clean_st:                        # test trước đã ghi
+                spark.sql(f"RESTORE TABLE {name} TO VERSION AS OF {base_st[1]}")
+                versions[name][1] = _state(spark, name)
     return baseline
 
 
