@@ -1,7 +1,7 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # 03.2 - View cho 3 dashboard (Card, Overdue, Deposit)
-# MAGIC Mỗi visual = 1 view `gold.v_*`, COMMENT ghi dashboard, thứ tự và mô tả visual.
+# MAGIC Mỗi visual = 1 view `gold_serving.v_*`, COMMENT ghi dashboard, thứ tự và mô tả visual.
 # MAGIC Dashboard chỉ cần `SELECT * FROM <view>`. Row filter / column mask của bảng gốc
 # MAGIC vẫn áp dụng khi người dùng đọc qua view.
 

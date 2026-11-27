@@ -83,9 +83,9 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
   - recon `MISMATCH` → gửi `SELECT * FROM bank_dev.ops.recon_card_kpi WHERE status <> 'MATCH'`.
 
 ## 5. `src/03_gold/02_dashboard_views`
-- **MỤC ĐÍCH:** tạo 21 view `gold.v_*`, mỗi view = 1 chart của 3 dashboard
+- **MỤC ĐÍCH:** tạo 21 view `gold_serving.v_*`, mỗi view = 1 chart của 3 dashboard
   (`docs/gold_dashboards.md`).
-- **KIỂM TRA:** `SHOW VIEWS IN bank_dev.gold;` và `SELECT * FROM bank_dev.gold.v_overdue_tickers;`
+- **KIỂM TRA:** `SHOW VIEWS IN bank_dev.gold_serving;` và `SELECT * FROM bank_dev.gold_serving.v_overdue_tickers;`
 
 ## 6. `src/00_setup/03_governance`
 - **MỤC ĐÍCH:** GRANT theo nhóm, che PII (CCCD, SĐT, email, tên…), lọc dòng theo chi nhánh.
@@ -110,7 +110,7 @@ Trước mỗi lần chạy: Git folder → nút nhánh **main** → **Pull** đ
   cho README (số liệu trước/sau).
 
 ## 9. Dashboard Databricks SQL
-Dashboards → Create → mỗi chart chọn 1 view `gold.v_*` (tên view = tên chart). Bộ lọc:
+Dashboards → Create → mỗi chart chọn 1 view `gold_serving.v_*` (tên view = tên chart). Bộ lọc:
 ngày, vùng, chi nhánh, sản phẩm. Chụp ảnh 3 dashboard cho README.
 
 ## 10. Deploy Job bằng bundle

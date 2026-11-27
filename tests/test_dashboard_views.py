@@ -81,8 +81,13 @@ def test_three_dashboards_in_order():
 
 def test_view_statements_qualified():
     sql = view_statements("bank_dev")
-    assert len(sql) == len(VIEWS)
-    assert all(s.startswith("CREATE OR REPLACE VIEW bank_dev.gold.v_") for s in sql)
+    assert sql[0] == "CREATE SCHEMA IF NOT EXISTS bank_dev.gold_serving"
+    views = [s for s in sql if s.startswith("CREATE OR REPLACE VIEW")]
+    assert len(views) == len(VIEWS)
+    # người đọc chỉ có quyền trên gold_serving -> view dashboard phải nằm ở đó
+    assert all(s.startswith("CREATE OR REPLACE VIEW bank_dev.gold_serving.v_") for s in views)
+    assert len([s for s in sql if s.startswith("DROP VIEW IF EXISTS bank_dev.gold.v_")]) \
+        == len(VIEWS)
     assert not any("{catalog}" in s for s in sql)
 
 

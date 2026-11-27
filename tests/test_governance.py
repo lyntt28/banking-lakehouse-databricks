@@ -1,5 +1,6 @@
 """Governance: nội dung câu lệnh SQL + logic che cột / lọc dòng chạy trên Spark local."""
 
+import re
 from datetime import date
 
 import pytest
@@ -83,11 +84,14 @@ def test_row_filter_on_branch_tables():
 def test_least_privilege_grants():
     joined = "\n".join(SQL)
     assert "TO `branch_users`" in joined
-    # branch_users chỉ đọc gold, không đụng silver / bronze / ops data
+    # branch_users chỉ đọc gold_serving, không đụng gold (bảng gốc) / silver / bronze / ops data
     bu = [s for s in SQL if s.endswith("TO `branch_users`") and "ON SCHEMA" in s]
-    assert {s.split("ON SCHEMA ")[1].split(" ")[0] for s in bu} == {"bank_test.gold",
-                                                                    "bank_test.gold_serving",
+    assert {s.split("ON SCHEMA ")[1].split(" ")[0] for s in bu} == {"bank_test.gold_serving",
                                                                     "bank_test.ops"}
+    # người đọc không có quyền gì trên schema gold (dòng batch chưa kích hoạt / batch cũ)
+    for g in ["risk_analysts", "branch_users"]:
+        assert not [s for s in SQL if s.startswith("GRANT") and s.endswith(f"`{g}`")
+                    and re.search(r"bank_test\.gold[. ]", s)], g
     assert all("MODIFY" not in s for s in SQL if "risk_analysts" in s or "branch_users" in s)
     # nhóm đọc giới hạn không có SELECT cả schema gold (branch_users) / ops (cả hai)
     for g, schema in [("branch_users", "gold"), ("branch_users", "gold_serving"),
@@ -116,11 +120,10 @@ def test_branch_users_only_get_row_filtered_or_dimension_tables():
 
     granted = {s.split("ON TABLE bank_test.")[1].split(" ")[0] for s in SQL
                if s.startswith("GRANT SELECT ON TABLE") and s.endswith("`branch_users`")}
-    allowed = set(BRANCH_FILTERED) | {"gold.dim_date", "gold.dim_branch", "gold.dim_product"}
-    # view gold_serving.* của đúng các bảng đó (lọc dòng vẫn áp dụng qua bảng gốc)
-    allowed |= {t.replace("gold.", "gold_serving.", 1) for t in allowed}
-    assert granted <= allowed
-    assert set(BRANCH_FILTERED) <= granted
+    base = set(BRANCH_FILTERED) | {"gold.dim_date", "gold.dim_branch", "gold.dim_product"}
+    # chỉ view gold_serving.* của đúng các bảng đó (lọc dòng vẫn áp dụng qua bảng gốc)
+    allowed = {t.replace("gold.", "gold_serving.", 1) for t in base}
+    assert granted == allowed
 
 
 def test_table_grants_after_row_filters():

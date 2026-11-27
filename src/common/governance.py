@@ -6,11 +6,16 @@ unit test kiểm tra nội dung câu lệnh và logic che/lọc (chạy biểu t
 Nhóm (tạo ở Account Console / SCIM, code chỉ GRANT):
     bank_admins       toàn quyền catalog
     data_engineers    đọc/ghi bronze, silver, gold, ops; thấy PII
-    risk_analysts     đọc silver, gold; PII bị che; thấy mọi chi nhánh; ở ops chỉ đọc bảng
-                      kết quả DQ / đối soát / batch (KHÔNG đọc dq_quarantine - record_json
+    risk_analysts     đọc silver, gold_serving; PII bị che; thấy mọi chi nhánh; ở ops chỉ đọc
+                      bảng kết quả DQ / đối soát / batch (KHÔNG đọc dq_quarantine - record_json
                       chứa PII gốc chưa che)
-    branch_users      chỉ đọc các bảng gold CÓ row filter chi nhánh + dim không nhạy cảm
-                      (cấp theo bảng, không cấp SELECT cả schema gold)
+    branch_users      chỉ đọc view gold_serving của bảng CÓ row filter chi nhánh + dim không
+                      nhạy cảm (cấp theo view, không cấp SELECT cả schema)
+
+Người đọc KHÔNG được quyền gì trên schema `gold`: bảng gốc chứa cả dòng của batch chưa kích
+hoạt / batch cũ chờ dọn (common.serving). Chỉ đọc qua view `gold_serving.*` (lọc đúng batch
+đang dùng). Row filter / column mask gắn trên bảng gold vẫn áp dụng khi đọc qua view, với
+danh tính của người truy vấn.
 
 Least privilege: SELECT cấp theo BẢNG ở TABLE_GRANTS, schema chỉ cấp USE SCHEMA cho nhóm
 đọc giới hạn. Bảng mới thêm vào gold/ops mặc định KHÔNG lộ cho branch_users / risk_analysts.
@@ -30,10 +35,9 @@ SCHEMA_GRANTS: dict[str, dict[str, list[str]]] = {
     "bronze": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"]},
     "silver": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"],
                "risk_analysts": ["USE SCHEMA", "SELECT"]},
-    "gold": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"],
-             "risk_analysts": ["USE SCHEMA", "SELECT"],
-             "branch_users": ["USE SCHEMA"]},
-    # view batch đang dùng (common.serving): dashboard / người đọc chỉ đọc ở đây
+    # bảng gốc: chỉ pipeline (có dòng batch chưa kích hoạt / batch cũ chờ dọn)
+    "gold": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"]},
+    # view batch đang dùng (common.serving) + view dashboard v_*: người đọc chỉ đọc ở đây
     "gold_serving": {"data_engineers": ["USE SCHEMA", "SELECT", "MODIFY", "CREATE TABLE"],
                      "risk_analysts": ["USE SCHEMA", "SELECT"],
                      "branch_users": ["USE SCHEMA"]},
@@ -57,9 +61,9 @@ TABLE_GRANTS: dict[str, list[str]] = {
     "risk_analysts": ["ops.dq_results", "ops.recon_card_kpi", "ops.recon_deposit",
                       "ops.pipeline_runs", "ops.published_batches", "ops.task_runs",
                       "ops.file_manifest"],
-    "branch_users": BRANCH_FILTERED + ["gold.dim_date", "gold.dim_branch", "gold.dim_product"]
-    + [t.replace("gold.", "gold_serving.", 1) for t in BRANCH_FILTERED
-       + ["gold.dim_date", "gold.dim_branch", "gold.dim_product"]],
+    # chỉ view gold_serving.* của bảng có row filter + dim không nhạy cảm (không cấp bảng gốc)
+    "branch_users": [t.replace("gold.", "gold_serving.", 1) for t in BRANCH_FILTERED
+                     + ["gold.dim_date", "gold.dim_branch", "gold.dim_product"]],
 }
 
 

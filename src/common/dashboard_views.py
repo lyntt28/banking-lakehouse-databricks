@@ -286,10 +286,12 @@ GROUP BY open_month
 
 
 def view_statements(catalog: str) -> list[str]:
-    out = []
+    """View dashboard ở gold_serving (người đọc không có quyền trên schema gold)."""
+    out = [f"CREATE SCHEMA IF NOT EXISTS {catalog}.gold_serving"]
     for dash, order, name, desc, sql in sorted(VIEWS, key=lambda v: (v[0], v[1])):
         body = sql.replace("{catalog}", catalog)
         comment = f"[{dash} #{order}] {desc}".replace("'", "''")
-        out.append(f"CREATE OR REPLACE VIEW {catalog}.gold.{name} "
+        out.append(f"DROP VIEW IF EXISTS {catalog}.gold.{name}")   # vị trí cũ
+        out.append(f"CREATE OR REPLACE VIEW {catalog}.gold_serving.{name} "
                    f"COMMENT '{comment}' AS {body}")
     return out
