@@ -4,6 +4,8 @@
                    số có dấu phẩy ("219,627"), tỷ lệ có dấu % ("56.78%")
 - deposit_summary: số dư tiền gửi theo nhóm TK x chi nhánh (layout bang1247),
                    STND_DT dạng YYYYMMDD, BAL đơn vị triệu VND
+- card_overdue   : dư nợ / nợ quá hạn thẻ tín dụng theo nhóm SP x CN quản lý x CN bán x
+                   nhóm nợ (layout credit_card_overdue_YYYYMMDD.txt), số dư VND
 
 Số liệu tính từ bản ghi HỢP LỆ (không tính dòng bị cài lỗi FAIL), nên sau khi Silver
 loại lỗi, Gold tính lại phải khớp đúng các file này.
@@ -129,3 +131,33 @@ def deposit_summary(accounts: list[dict], failed: set[str], as_of: date,
                      f"{b - prev.get(key, b):.4f}", f"{sum(hist) / len(hist):.2f}"])
         prev[key] = b
     return rows
+
+
+CARD_OVERDUE_HEADER = ["REPORT_DT", "PRDT_CODE", "PRODUCT_TYPE", "PRODUCT_GROUP", "PRODUCT_NAME",
+                       "MNG_BR", "SAL_BR", "DEL_GRP", "PORT_ACC", "OVD_ACC", "PORT_BAL",
+                       "OVD_BAL"]
+DEL_GROUPS = [(0, "0"), (10, "1-10"), (90, "11-90"), (180, "91-180"), (360, "181-360")]
+ONLINE_SALE_BRANCH = 1   # thẻ mở qua Smart Credit (online) ghi nhận cho CN hội sở
+
+
+def del_grp(dpd: int) -> str:
+    """Số ngày quá hạn -> nhóm nợ của file credit_card_overdue."""
+    return next((g for limit, g in DEL_GROUPS if dpd <= limit), "361+")
+
+
+def card_overdue(cards: list[dict], as_of: date) -> list[list]:
+    """Tổng hợp thẻ ACTIVE (trạng thái cuối ngày, sau card_statements) theo
+    (hạng thẻ, sản phẩm, CN quản lý, CN bán, nhóm nợ). Quá hạn = DPD > 0."""
+    agg: dict[tuple, list] = defaultdict(lambda: [0, 0, 0.0, 0.0])
+    for c in cards:
+        if c["status"] != "ACTIVE":
+            continue
+        sal = ONLINE_SALE_BRANCH if c["channel"] == "SMART_CREDIT" else c["branchnbr"]
+        a = agg[(c["grade"], c["product"], c["branchnbr"], sal, del_grp(c["dpd"]))]
+        a[0] += 1
+        a[2] += c["balance"]
+        if c["dpd"] > 0:
+            a[1] += 1
+            a[3] += c["balance"]
+    return [[as_of.strftime("%Y%m%d"), "", "Credit Card", k[0], k[1], k[2], k[3], k[4],
+             v[0], v[1], f"{v[2]:.2f}", f"{v[3]:.2f}"] for k, v in sorted(agg.items())]

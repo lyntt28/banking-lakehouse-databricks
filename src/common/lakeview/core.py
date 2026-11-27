@@ -190,6 +190,7 @@ def _number_format(fmt: str) -> dict:
     return {"pct": {"type": "number-plain", "decimalPlaces": {"type": "exact", "places": 2},
                     "suffix": "%"},
             "int": {"type": "number-plain", "decimalPlaces": {"type": "exact", "places": 0}},
+            "num": {"type": "number-plain", "decimalPlaces": {"type": "max", "places": 3}},
             "compact": {"type": "number-plain", "abbreviation": "compact",
                         "decimalPlaces": {"type": "max", "places": 1}}}[fmt]
 
