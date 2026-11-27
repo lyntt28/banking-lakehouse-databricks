@@ -409,11 +409,13 @@ def latest_delivery(df: DataFrame, table: str) -> tuple[DataFrame, int]:
     grp = (F.regexp_extract(base, "^(" + "|".join(groups) + ")", 1) if groups else F.lit(""))
     w = Window.partitionBy("_as_of_date", "_grp") if "_as_of_date" in df.columns \
         else Window.partitionBy("_grp")
-    marked = (df.withColumn("_grp", grp)
-              .withColumn("_file", F.struct(F.col("_load_ts"), F.col("_source_file"))))
-    kept = (marked.withColumn("_latest", F.max("_file").over(w))
-            .filter(F.col("_file") == F.col("_latest"))
-            .drop("_grp", "_file", "_latest"))
+    # 2 bước cột phẳng (không dùng struct: plan lớn + struct làm optimizer Spark tốn bộ nhớ)
+    kept = (df.withColumn("_grp", grp)
+            .withColumn("_latest", F.max("_load_ts").over(w))
+            .filter(F.col("_load_ts") == F.col("_latest"))
+            .withColumn("_latest", F.max("_source_file").over(w))
+            .filter(F.col("_source_file") == F.col("_latest"))
+            .drop("_grp", "_latest"))
     return kept, df.count() - kept.count()
 
 
