@@ -6,6 +6,9 @@ Mọi bảng Gold chỉ được ghi sau khi ngày đó qua gate đối soát (`
 Gold: mỗi dòng có `batch_id`; publish ghi THÊM batch mới rồi kích hoạt qua `ops.published_batches`,
 sau đó mới dọn batch lỗi và batch cũ (giữ lại batch đang dùng ngay trước cho truy vấn đang chạy). "snapshot/day" ở Gold = batch mới thay cả ngày khi được kích hoạt.
 Người đọc dùng view `gold_serving.<bảng>` (lọc batch đang dùng), không đọc `gold.<bảng>` trực tiếp.
+Bảng daily / snapshot có thêm cột kỹ thuật `_batch_marker`: 1 dòng đánh dấu / batch (mọi cột khác
+NULL) để batch hợp lệ 0 dòng vẫn được nhận ra; view `gold_serving` đã loại dòng này. Đọc bảng gốc
+(chỉ data_engineers) phải lọc `NOT coalesce(_batch_marker, false)`.
 
 ## Lineage
 ```

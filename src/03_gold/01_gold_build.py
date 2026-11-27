@@ -37,5 +37,5 @@ days = run(spark, cfg)
 # COMMAND ----------
 
 if days:
-    display(spark.table(f"{cfg.catalog}.gold.loan_mart_npl_daily")
+    display(spark.table(f"{cfg.catalog}.gold_serving.loan_mart_npl_daily")
             .orderBy("as_of_date", ascending=False).limit(10))

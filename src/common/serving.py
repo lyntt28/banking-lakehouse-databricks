@@ -16,6 +16,9 @@ Cách làm:
        snapshot nhiều bảng cùng lúc, xem serving_view_sql).
 
 Batch lỗi giữa chừng: chưa kích hoạt -> vô hình với người đọc; rollback (RESTORE) vẫn dọn nó.
+
+Giới hạn: Delta nguyên tử theo TỪNG bảng. 1 truy vấn join nhiều view gold_serving đúng lúc kích
+hoạt có thể lấy batch mới của bảng này + batch trước của bảng kia (cùng ngày). Xem ADR-012.
 """
 
 from __future__ import annotations
@@ -26,6 +29,11 @@ from pyspark.sql import functions as F
 from common.names import fq
 
 BATCH_COL = "batch_id"
+# Dòng đánh dấu "batch này đã ghi vào bảng" (bảng daily / snapshot), ghi CÙNG commit với dữ liệu.
+# Batch hợp lệ nhưng 0 dòng (vd: ngày không có thẻ quá hạn) vẫn có mặt trong snapshot bảng ->
+# view không lùi về batch cũ. View / candidate luôn loại dòng này ra.
+MARKER_COL = "_batch_marker"
+HIDDEN_COLS = {BATCH_COL, MARKER_COL}
 LEGACY_BATCH = "legacy"
 
 # daily   : 1 snapshot / ngày (as_of_date). Batch đang dùng của ngày = batch mới nhất ngày đó.
@@ -67,7 +75,8 @@ def serving_view_sql(catalog: str, table: str, columns: list[str]) -> str:
     src = fq(catalog, "gold", table)
     view = fq(catalog, "gold_serving", table)
     ptr = _pointer(catalog)
-    cols = ", ".join(f"s.`{c}`" for c in columns if c != BATCH_COL)
+    cols = ", ".join(f"s.`{c}`" for c in columns if c not in HIDDEN_COLS)
+    data_only = (f" AND NOT coalesce(s.{MARKER_COL}, false)" if MARKER_COL in columns else "")
     kind = TABLE_KIND[table]
     if kind == "daily":
         active = (f"SELECT p.as_of_date, max_by(p.run_id, p.published_at) AS batch_id "
@@ -75,11 +84,11 @@ def serving_view_sql(catalog: str, table: str, columns: list[str]) -> str:
                   f"ON p.as_of_date = b.as_of_date AND p.run_id = b.{BATCH_COL} "
                   "GROUP BY p.as_of_date")
         body = (f"SELECT {cols} FROM {src} s JOIN ({active}) a "
-                f"ON s.as_of_date = a.as_of_date AND s.{BATCH_COL} = a.batch_id")
+                f"ON s.as_of_date = a.as_of_date AND s.{BATCH_COL} = a.batch_id{data_only}")
     elif kind == "snapshot":
         latest = (f"(SELECT max_by(run_id, published_at) FROM {ptr} WHERE run_id IN "
                   f"(SELECT DISTINCT {BATCH_COL} FROM {src}))")
-        body = f"SELECT {cols} FROM {src} s WHERE s.{BATCH_COL} = {latest}"
+        body = f"SELECT {cols} FROM {src} s WHERE s.{BATCH_COL} = {latest}{data_only}"
     else:
         body = (f"SELECT {cols} FROM {src} s WHERE s.{BATCH_COL} IN "
                 f"(SELECT run_id FROM {_pointer(catalog)})")
@@ -119,12 +128,27 @@ def ensure_batch_column(spark, catalog: str, table: str) -> None:
         spark.sql(f"UPDATE {target} SET {BATCH_COL} = '{latest}'")
 
 
+def with_marker(df: DataFrame, kind: str, day_s: str | None) -> DataFrame:
+    """Dữ liệu của batch + 1 dòng đánh dấu (mọi cột NULL trừ as_of_date / marker)."""
+    spark = df.sparkSession
+    if kind == "daily" and not day_s:
+        raise ValueError("Bảng daily cần ngày của batch để ghi dòng đánh dấu")
+    marker = spark.range(1).select(*[
+        (F.lit(day_s).cast(f.dataType) if kind == "daily" and f.name == "as_of_date"
+         else F.lit(None).cast(f.dataType)).alias(f.name) for f in df.schema])
+    return (df.withColumn(MARKER_COL, F.lit(False))
+            .unionByName(marker.withColumn(MARKER_COL, F.lit(True))))
+
+
 def write_batch(df: DataFrame, catalog: str, table: str, batch_id: str,
-                key: list[str] | None = None) -> None:
-    """Ghi THÊM dòng của batch (không xoá / ghi đè dòng đang được đọc)."""
+                key: list[str] | None = None, day_s: str | None = None) -> None:
+    """Ghi THÊM dòng của batch (không xoá / ghi đè dòng đang được đọc). Bảng daily / snapshot
+    ghi kèm dòng đánh dấu trong cùng commit (xem MARKER_COL)."""
     spark = df.sparkSession
     target = fq(catalog, "gold", table)
     ensure_batch_column(spark, catalog, table)
+    if TABLE_KIND[table] != "append":
+        df = with_marker(df, TABLE_KIND[table], day_s)
     df = df.withColumn(BATCH_COL, F.lit(batch_id))
     if not spark.catalog.tableExists(target):
         df.write.format("delta").saveAsTable(target)
@@ -142,6 +166,8 @@ def candidate(spark, catalog: str, table: str, day_s: str, batch_id: str) -> Dat
     dòng của batch này cho ngày `day_s` + dòng đang dùng của các ngày khác."""
     target = fq(catalog, "gold", table)
     t = spark.table(target)
+    if MARKER_COL in t.columns:
+        t = t.filter(~F.coalesce(F.col(MARKER_COL), F.lit(False))).drop(MARKER_COL)
     kind = TABLE_KIND[table]
     if kind == "snapshot":
         return t.filter(F.col(BATCH_COL) == batch_id).drop(BATCH_COL)
