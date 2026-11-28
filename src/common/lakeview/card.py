@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from common.lakeview.core import NEUTRAL, S1, S2, S3, S4, TEXT, Dash, _q, kpi_cards_sql, lit
+from common.lakeview.core import Dash, _q, kpi_cards_sql, lit
 
 # ============================================================ 1. CARD BUSINESS
-CARD_COLORS = {   # bảng màu chung (core.SERIES): màu theo thực thể, giống nhau ở 3 dashboard
-    "kpi": [TEXT] * 5,
-    "smart_credit": S1, "branches": S2, "new_issuance": S1, "termination": NEUTRAL,
-    "base": S1, "using": S2, "balance": S1, "revolving": S2,
-    "volume": S1, "ticket": S2, "risk": TEXT,
-    "sector": {"Purchasing": S1, "Installment": S2, "Cash Advance": S3, "Flexi": S4},
-    "location": {"Domestic": S1, "X-Border": S2},
-    "channel": {"POS (Offline)": S1, "Online": S2},
+CARD_COLORS = {   # từ dashboard Chart.js gốc (đã xóa khỏi repo)
+    "kpi": ["#1F2937", "#2F5597", "#C55A11", "#2F5597", "#5B9BD5"],
+    "smart_credit": "#4472C4", "branches": "#B4C7E7", "new_issuance": "#2F5597",
+    "termination": "#A5A5A5",
+    "base": "#B4C7E7", "using": "#A5A5A5", "balance": "#4472C4", "revolving": "#BF9000",
+    "volume": "#4472C4", "ticket": "#70AD47", "risk": "#2F5597",
+    "sector": {"Purchasing": "#2F5597", "Installment": "#BF9000", "Cash Advance": "#7F7F7F",
+               "Flexi": "#B4C7E7"},
+    "location": {"Domestic": "#2F5597", "X-Border": "#BF9000"},
+    "channel": {"POS (Offline)": "#2F5597", "Online": "#BF9000"},
 }
 
 

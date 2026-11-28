@@ -49,8 +49,8 @@
               "Online"
             ],
             "range": [
-              "#257de0",
-              "#f47230"
+              "#2F5597",
+              "#BF9000"
             ]
           },
           "legend": {
@@ -75,7 +75,7 @@
         "type": "text",
         "fontSize": 16,
         "fontWeight": "bold",
-        "color": "#257de0"
+        "color": "#2F5597"
       },
       "encoding": {
         "text": {
