@@ -240,6 +240,8 @@ def test_card_colors_from_original_palette():
 def test_filters_bound_on_every_page():
     """Nhiều trang: mỗi bộ lọc phải gắn với dataset của chính trang đó."""
     for name, body in DASHES.items():
+        if len(body["pages"]) < 2:   # 1 trang: gắn mọi dataset có tham số (kể cả chưa dùng)
+            continue
         for pg in body["pages"]:
             on_page = {q["query"]["datasetName"] for i in pg["layout"]
                        for q in i["widget"].get("queries", []) if q["name"] == "main_query"}
