@@ -111,7 +111,8 @@ def using_members_by_month(card_txns: DataFrame, cards: DataFrame,
     tính DIMS của thẻ cố định -> 1 thẻ chỉ thuộc 1 tổ hợp DIMS, cộng qua DIMS không đếm trùng.
     KHÔNG xấp xỉ bằng SUM / MAX của số thẻ dùng theo ngày."""
     c = cards.select("card_no", *DIMS).dropDuplicates(["card_no"])
-    return (card_txns.join(c, "card_no", "inner")
+    # chỉ lấy khoá + ngày: fact giao dịch có thể đã mang sẵn branchnbr / customer_id
+    return (card_txns.select("card_no", date_col).join(c, "card_no", "inner")
             .withColumn("year_month", F.date_format(F.col(date_col), "yyyy-MM"))
             .groupBy("year_month", *DIMS)
             .agg(F.countDistinct("card_no").alias("using_members")))
