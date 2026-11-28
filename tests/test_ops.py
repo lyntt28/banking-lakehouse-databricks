@@ -132,3 +132,13 @@ def test_gate_money_stays_decimal_beyond_float_precision():
     assert as_money(None) == 0
     with pytest.raises(TypeError):
         as_money(1.5)
+
+
+def test_gate_blocks_overdue_reconciliation_mismatch():
+    from decimal import Decimal
+
+    checks = {"silver_balance": Decimal(1), "gold_balance": Decimal(1), "recon_card_bad": 0,
+              "recon_deposit_bad": 0, "recon_overdue_bad": []}
+    assert gate_errors(checks) == []
+    errors = gate_errors({**checks, "recon_overdue_bad": ["ovd_bal"]})
+    assert len(errors) == 1 and "Overdue" in errors[0] and "ovd_bal" in errors[0]

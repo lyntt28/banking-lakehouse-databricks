@@ -306,3 +306,26 @@ def build_mart_card_overdue_daily(src: DataFrame) -> DataFrame:
         .agg(F.sum("port_acc").alias("port_acc"), F.sum("ovd_acc").alias("ovd_acc"),
              F.sum("port_bal").alias("port_bal"), F.sum("ovd_bal").alias("ovd_bal"))
     )
+
+
+OVD_MEASURES = ("port_acc", "ovd_acc", "port_bal", "ovd_bal")
+
+
+def overdue_reconciliation(silver: DataFrame, gold: DataFrame) -> dict[str, dict]:
+    """Đối soát Silver (card_overdue_source, 1 ngày) vs Gold (card_mart_overdue_daily, cùng
+    ngày): tổng 4 chỉ tiêu phải khớp TUYỆT ĐỐI. Một lần agg mỗi bên; tiền giữ Decimal (Spark
+    decimal -> Python Decimal), không qua float. Trả về {measure: {silver, gold, match}}."""
+    from decimal import Decimal
+
+    def totals(df: DataFrame) -> dict:
+        row = df.agg(*[F.sum(m).alias(m) for m in OVD_MEASURES]).first()
+        out = {}
+        for m in OVD_MEASURES:
+            v = row[m] if row is not None else None
+            if isinstance(v, float):
+                raise TypeError(f"{m}: số tiền / số lượng phải là DECIMAL / BIGINT, không float")
+            out[m] = Decimal(v) if v is not None else Decimal(0)
+        return out
+
+    s, g = totals(silver), totals(gold)
+    return {m: {"silver": s[m], "gold": g[m], "match": s[m] == g[m]} for m in OVD_MEASURES}

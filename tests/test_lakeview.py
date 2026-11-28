@@ -9,6 +9,7 @@ from pyspark.sql import functions as F
 from common import gold as g
 from common import gold_cards as gc
 from common import gold_deposit as gd
+from common import serving as sv
 from common.lakeview import CARD_COLORS, build_all
 
 AS_OF = "2026-11-01"
@@ -69,6 +70,10 @@ def tables(spark, results):
         "current_timestamp() AS published_at, '{}' AS checks")
     for name, df in m.items():
         df.createOrReplaceTempView(name)
+    # lịch báo cáo Overdue: test không có batch -> mọi ngày của mart là ngày đã publish
+    spark.sql(sv.report_calendar_body(
+        "SELECT DISTINCT as_of_date FROM gold_card_mart_overdue_daily")) \
+        .createOrReplaceTempView("gold_overdue_report_calendar")
     return m
 
 
@@ -104,7 +109,7 @@ def test_dataset_runs(spark, tables, item, params):
 
 def test_core_datasets_return_rows(spark, tables):
     for _, ds in ALL_DS:
-        if ds["name"] in ("ovd_last5", "card_kpi", "ovd_tickers", "dep_tickers",
+        if ds["name"] in ("ovd_daily_trend", "card_kpi", "ovd_kpi", "dep_tickers",
                           "dep_by_product", "card_mix_sector", "ovd_debt_groups"):
             rows = spark.sql(_local_sql(ds, PARAMS[0])).collect()
             assert rows, ds["name"]
@@ -170,7 +175,8 @@ def test_section_order_matches_original():
                    "Ending Balance (USD) vs Last Day / Month / Year",
                    "Overdue Trend (Last 5 Days)", "Overdue Trend (Monthly)",
                    "Overdue Amount by Debt Groups", "Overdue Amount by Product Groups",
-                   "Overdue Ratio by Product Groups"]
+                   "Overdue Ratio by Product Groups", "Top 5 Branches by Overdue Ratio",
+                   "Top 5 Branches - Overdue Amount"]
     assert len(DASHES["retail_deposit.lvdash.json"]["pages"]) == 1
     assert titles("retail_deposit.lvdash.json") == [
         "Ending Balance", "Monthly Avg Balance", "Retail Customers", "", "All Products Target (%)",

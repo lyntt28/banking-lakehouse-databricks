@@ -22,6 +22,11 @@ File tổng hợp để đối soát (tính từ bản ghi hợp lệ):
 Lỗi cài cố ý (~2% mỗi loại, dưới ngưỡng dừng Job 5%): xem docstring từng module.
 
 Chạy:  python -m data_generator.generate --out ./data/landing --start-date 2026-11-01 --days 3
+Demo Overdue (13 snapshot cuối tháng + 30 ngày gần nhất, đủ cho D-1 / M-1 / Y-1, Monthly,
+Last 5 Days, Debt Group theo năm):
+       python -m data_generator.generate --start-date 2026-10-30 --days 30 --history-months 13
+Đây là cấu hình dữ liệu DEMO, không phải chính sách retention production; dữ liệu đủ từng ngày
+vẫn chạy được (dashboard tự chọn ngày từ lịch báo cáo).
 """
 
 from __future__ import annotations
@@ -170,9 +175,13 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
             path("deposit_summary", f"bang1247_{as_of:%Y%m%d}.txt"), sm.DEPOSIT_HEADER,
             sm.deposit_summary(all_accounts, acc_failed, as_of, dep_prev, dep_month),
             delimiter="\t"))
+        ovd_rows = sm.card_overdue(cards, as_of)
+        errs = sm.card_overdue_errors(ovd_rows)
+        if errs:   # file Overdue hợp lệ: sai quy tắc nghiệp vụ là lỗi generator
+            raise ValueError(f"card_overdue {as_of}: {errs[:3]}")
         add("card_overdue", write_csv(
             path("card_overdue", f"credit_card_overdue_{as_of:%Y%m%d}.txt"),
-            sm.CARD_OVERDUE_HEADER, sm.card_overdue(cards, as_of), delimiter="\t"))
+            sm.CARD_OVERDUE_HEADER, ovd_rows, delimiter="\t"))
     return counts
 
 

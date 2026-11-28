@@ -138,3 +138,30 @@ def test_new_accounts_open_after_first_day(out):
     assert new, "không có TK mở mới ở ngày 2"
     assert all(r["account_id"].startswith("25") for r in new)
     assert all(r["product_type"] != "LOAN" for r in new)
+
+
+def test_card_overdue_business_rules_and_continuity(out):
+    from data_generator import summaries as sm
+
+    tot = {}
+    for d in (D1, D2):
+        rows = _t(out, "card_overdue", d, f"credit_card_overdue_{d.replace('-', '')}.txt", "\t")
+        assert rows and all(r["REPORT_DT"] == d.replace("-", "") for r in rows)
+        typed = [[r[c] for c in sm.CARD_OVERDUE_HEADER[:8]]
+                 + [int(r["PORT_ACC"]), int(r["OVD_ACC"]), r["PORT_BAL"], r["OVD_BAL"]]
+                 for r in rows]
+        for t in typed:   # mã CN đọc từ file là chuỗi
+            t[5], t[6] = int(t[5]), int(t[6])
+        assert sm.card_overdue_errors(typed) == []
+        tot[d] = sum(float(r["PORT_BAL"]) for r in rows)
+    # danh mục tiến hoá từ trạng thái hôm trước, không random lại toàn bộ
+    assert tot[D2] == pytest.approx(tot[D1], rel=0.2)
+
+
+def test_card_overdue_errors_detects_invalid_rows():
+    from data_generator import summaries as sm
+
+    bad = ["20261101", "", "Credit Card", "GOLD", "VISA_CLASSIC", 999, 101, "31-90", 1, 2,
+           "10.00", "20.00"]
+    errs = sm.card_overdue_errors([bad])
+    assert len(errs) == 5

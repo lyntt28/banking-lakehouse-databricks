@@ -24,19 +24,19 @@ Common comparisons: vs last day (D-1), last month-end (M-1), last year-end/same 
 
 Reconciliation: same metric codes as `card_kpi` source files → `ops.dq_results`.
 
-## 2. Overdue Dashboard (retail loan overdue tracking, LOAN)
+## 2. Overdue Dashboard (credit card overdue tracking)
 
-| Visual | Metric | Gold source |
-|---|---|---|
-| 3 tickers | Overdue amount, overdue ratio = overdue balance / portfolio balance, vs D-1 / M-1 / Y-1 | `loan_mart_overdue_daily` |
-| Bar + line, daily trend (last N days) and monthly | Overdue amount (bar), overdue ratio % (line) | same |
-| Donut by debt group | Overdue balance by debt group 2–5 | same, `GROUP BY debt_group` |
-| Stacked bar by month x debt group | Overdue balance | same |
-| Bar by product group | Overdue amount / ratio | same + `dim_product` |
-| Branch ranking + treemap | Overdue amount and ratio by branch | same + `dim_branch` |
+Source `gold.card_mart_overdue_daily` (file `credit_card_overdue_YYYYMMDD.txt`) read through
+`gold_serving` + `gold_serving.overdue_report_calendar`. Rules, date logic, datasets and runbook:
+[overdue_dashboard.md](overdue_dashboard.md).
 
-Definitions: portfolio balance = `ducuoi` (VND equivalent), overdue balance = balance of
-loans with DPD > 0, debt group from DPD (TT 11/2021, `common.banking`).
+| Visual | Metric |
+|---|---|
+| 3 tickers + vs D-1 / M-1 / Y-1 (actual dates) | Overdue ratio, overdue balance, ending balance (USD) |
+| Bar + line, last 5 published days and 6 months | Overdue amount (K USD), overdue ratio % |
+| Stacked bar month x debt group | Overdue amount by `del_grp` |
+| Pie + bar by product group | Overdue amount / Top-5 ratio |
+| Top-5 branches (treemap rules) | Ratio + amount, excl. 8125, > 10,000 USD |
 
 ## 3. Retail Deposit Performance Dashboard (DEPOSIT)
 

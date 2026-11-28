@@ -30,6 +30,10 @@ def test_row_counts_reconcile(bronze, results, table):
 def test_valid_keys_unique_and_not_null(results, table):
     key = TABLES[table].key
     v = results[table].valid
+    if table == "card_overdue_source":   # grain chưa xác nhận duy nhất: dòng cùng khóa hợp lệ
+        key = ["report_dt", "mng_br", "del_grp"]
+        assert v.filter(" OR ".join(f"`{k}` IS NULL" for k in key)).count() == 0
+        return
     assert v.filter(" OR ".join(f"`{k}` IS NULL" for k in key)).count() == 0
     assert v.groupBy(*key).count().filter("count > 1").count() == 0
 
@@ -125,3 +129,38 @@ def test_correction_replaces_only_its_file_group(spark):
     kept, n = latest_delivery(df, "card_kpi_source")
     assert n == 1
     assert sorted(r.v for r in kept.collect()) == ["x", "z"]
+
+
+def _ovd_bronze(spark, rows):
+    cols = ["REPORT_DT", "PRDT_CODE", "PRODUCT_TYPE", "PRODUCT_GROUP", "PRODUCT_NAME", "MNG_BR",
+            "SAL_BR", "DEL_GRP", "PORT_ACC", "OVD_ACC", "PORT_BAL", "OVD_BAL"]
+    return spark.createDataFrame(rows, ", ".join(f"{c} string" for c in cols))
+
+
+def test_overdue_same_key_rows_kept_not_quarantined(spark):
+    """File mẫu gốc: nhiều dòng cùng khóa nghiệp vụ nhưng khác số liệu -> giữ cả (Gold SUM)."""
+    base = ["20261101", "", "Credit Card", "GOLD", "VISA_GOLD", "101", "101", "11-90"]
+    res = prepare_silver(_ovd_bronze(spark, [base + ["3", "1", "300", "100"],
+                                             base + ["2", "1", "200", "50"]]),
+                         TABLES["card_overdue_source"])
+    assert res.valid.count() == 2 and res.quarantine.count() == 0
+    assert TABLES["card_overdue_source"].write_mode == "replace_day"
+
+
+def test_overdue_dq_rules(spark):
+    ok = ["20261101", "", "Credit Card", "GOLD", "VISA_GOLD", "101", "101"]
+    rows = [
+        ok + ["11-90", "-1", "0", "300", "100"],        # tài khoản âm -> FAIL
+        ok + ["11-90", "1", "0", "-5", "0"],            # dư nợ âm -> FAIL
+        ok + ["11-90", "1", "0", "abc", "0"],           # số sai định dạng -> FAIL
+        ["2026-13-01"] + ok[1:] + ["11-90", "1", "0", "1", "0"],   # ngày sai -> FAIL
+        ok[:5] + ["", "101", "11-90", "1", "0", "1", "0"],          # thiếu CN quản lý -> FAIL
+        ok + ["31-90", "1", "0", "1", "0"],             # nhóm nợ lạ -> WARN (giữ)
+        ok + ["1-10", "1", "2", "100", "200"],          # quá hạn > danh mục -> WARN (giữ)
+    ]
+    res = prepare_silver(_ovd_bronze(spark, rows), TABLES["card_overdue_source"])
+    assert res.quarantine.count() == 5 and res.valid.count() == 2
+    rules = {r for x in res.quarantine.select("_failed_rules").collect()
+             for r in x._failed_rules}
+    assert {"ovd_acc_not_negative", "ovd_balance_not_negative", "ovd_balance_numeric",
+            "ovd_report_dt_valid", "ovd_key_not_null"} <= rules

@@ -122,6 +122,9 @@ def gate_errors(checks: dict) -> list[str]:
     if checks["recon_deposit_bad"]:
         errors.append(f"Đối soát tiền gửi lệch {checks['recon_deposit_bad']} dòng "
                       "(ops.recon_deposit)")
+    if checks.get("recon_overdue_bad"):
+        errors.append("Đối soát Overdue Silver-Gold lệch: "
+                      + ", ".join(checks["recon_overdue_bad"]))
     return errors
 
 
@@ -172,6 +175,8 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         stm_day = spark.table(S("card_statements_hist")).filter(F.col("stnd_dt") == day)
         card_daily = stage(gc.build_mart_card_kpi_daily(cards_day, ctx_day, stm_day, day_s),
                            "card_mart_kpi_daily")
+        ovd_src = spark.table(S("card_overdue_source")).filter(F.col("report_dt") == day)
+        card_overdue = stage(gc.build_mart_card_overdue_daily(ovd_src), "card_mart_overdue_daily")
         s.rows_in = loans_day.count()
         s.rows_out = fact_loan_day.count()
 
@@ -199,6 +204,9 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
                     & ~F.col("status").isin("MATCH", "WITHIN_TOLERANCE")).count(),
             "recon_deposit_bad": spark.table(ops("recon_deposit"))
             .filter((F.col("as_of_date") == day) & (F.col("status") != "MATCH")).count(),
+            # Overdue: Silver vs Gold khớp tuyệt đối 4 chỉ tiêu (Decimal / BIGINT)
+            "recon_overdue_bad": [m for m, r in gc.overdue_reconciliation(
+                ovd_src, card_overdue).items() if not r["match"]],
         }
         log("gold_gate", as_of_date=day_s, run_id=rec.run_id, **checks)
         errors = gate_errors(checks)
@@ -244,8 +252,7 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         put(gc.build_mart_card_kpi_monthly(cand("card_mart_kpi_daily"),
                                            spark.table(S("ref_targets")))
             .withColumn("as_of_date", day), "card_mart_kpi_monthly")
-        ovd_src = spark.table(S("card_overdue_source")).filter(F.col("report_dt") == day)
-        put(gc.build_mart_card_overdue_daily(ovd_src), "card_mart_overdue_daily")
+        put(card_overdue, "card_mart_overdue_daily")
 
         fx_day = spark.table(S("ref_fx_rates")).filter(F.col("rate_date") == day)
         trend_hist = (cand("dep_mart_trend") if spark.catalog.tableExists(G("dep_mart_trend"))

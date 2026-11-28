@@ -40,6 +40,8 @@ landing (CSV/JSON, Volume)
 | `card_mart_kpi_daily` | as_of_date × branchnbr × … | snapshot/day | card_master, card_transactions_hist, card_statements_hist | Gate: khớp file card_kpi |
 | `card_mart_spend_mix` | as_of_date × dimension | snapshot/day | card_transactions_hist | |
 | `card_mart_kpi_monthly` | as_of_date × month × branchnbr | snapshot/batch | card_mart_kpi_daily, ref_targets | Tính lại toàn bộ, lưu 1 bản / batch |
+| `card_mart_overdue_daily` | as_of_date × product_type × product_group × product_name × mng_br × sal_br × del_grp | snapshot/day | card_overdue_source | SUM port_acc / ovd_acc (BIGINT), port_bal / ovd_bal (DECIMAL VND); không lưu tỷ lệ. Gate: Σ 4 chỉ tiêu Silver = Gold tuyệt đối |
+| `gold_serving.overdue_report_calendar` (view) | report_date | – | ops.published_batches + card_mart_overdue_daily | Ngày Overdue đã publish + previous_date / previous_month_date / previous_year_date (NULL = không có data), is_month_last. Xem docs/overdue_dashboard.md |
 
 ## Ops
 | Bảng | Grain | Dùng để |

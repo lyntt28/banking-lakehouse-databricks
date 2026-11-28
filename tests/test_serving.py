@@ -190,3 +190,24 @@ def test_view_sql_kinds():
     assert "`batch_id`" not in sql
     from pipelines.gold import PUBLISHED_TABLES
     assert set(PUBLISHED_TABLES) == set(sv.TABLE_KIND)
+
+
+def test_overdue_calendar_only_published_dates(spark, clean):
+    """Lịch báo cáo: chỉ ngày có batch Overdue đã kích hoạt; batch lỗi / chưa kích hoạt vô hình;
+    D-1 / M-1 / Y-1 là ngày thực tế, thiếu thì NULL."""
+    t = "card_mart_overdue_daily"
+    days = ["2025-12-31", "2026-10-31", "2026-11-01", "2026-11-02"]
+    for i, d in enumerate(days):
+        sv.write_batch(_mart(spark, d, 1.0), "", t, f"b{i}", day_s=d)
+        _activate(spark, d, f"b{i}", f"{d} 07:00:00")
+    sv.write_batch(_mart(spark, "2026-11-03", 1.0), "", t, "failed", day_s="2026-11-03")
+    sv.create_serving_views(spark, "")
+    cal = {str(r.report_date): r for r in
+           spark.table(f"gold_serving.{sv.OVERDUE_CALENDAR}").collect()}
+    assert sorted(cal) == days                     # 2026-11-03 chưa kích hoạt -> không có
+    r = cal["2026-11-02"]
+    assert (str(r.previous_date), str(r.previous_month_date), str(r.previous_year_date)) == \
+        ("2026-11-01", "2026-10-31", "2025-12-31")
+    assert cal["2025-12-31"].previous_date is None
+    assert cal["2026-10-31"].previous_month_date is None   # không có data tháng 9 -> NULL
+    assert cal["2026-11-02"].is_month_last and not cal["2026-11-01"].is_month_last
