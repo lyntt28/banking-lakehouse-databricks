@@ -5,6 +5,7 @@ from __future__ import annotations
 from common.lakeview.core import (
     S1,
     S2,
+    S3,
     SERIES,
     SEVERITY,
     TEXT,
@@ -21,7 +22,7 @@ from common.lakeview.core import (
 # lọc chi nhánh theo mng_br, không lọc loại sản phẩm (All).
 OVD_COLORS = {   # bảng màu chung (core.SERIES)
     "amount": S1, "ratio": S2, "fx": TEXT,
-    "ticker": {"ratio": TEXT, "overdue": TEXT, "ending": TEXT},
+    "ticker": {"ratio": S3, "overdue": S1, "ending": S2},
     "products": SERIES,
 }
 

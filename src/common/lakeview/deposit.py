@@ -13,7 +13,6 @@ from common.lakeview.core import (
     S4,
     S5,
     S6,
-    TEXT,
     Dash,
     _q,
     kpi_cards_sql,
@@ -23,7 +22,7 @@ from common.lakeview.core import (
 # ============================================================ 3. RETAIL DEPOSIT (DEPOSIT)
 DEP_COLORS = {   # bảng màu chung (core.SERIES): CASA = S1, TD = S2, ISA = S3 ở mọi biểu đồ
     "gauge": {"all": S1, "casa": S1, "tda": S2},
-    "ticker": {"bal": TEXT, "mavg": TEXT, "cust": TEXT},
+    "ticker": {"bal": S3, "mavg": S1, "cust": S2},
     "daily": S1,
     "mom": {"1-CASA last year": S1_LIGHT, "1-CASA this year": S1,
             "2-TD last year": S2_LIGHT, "2-TD this year": S2,

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from common.lakeview.core import NEUTRAL, S1, S2, S3, S4, TEXT, Dash, _q, kpi_cards_sql, lit
+from common.lakeview.core import NEUTRAL, S1, S2, S3, S4, S5, S6, TEXT, Dash, _q, kpi_cards_sql, lit
 
 # ============================================================ 1. CARD BUSINESS
 CARD_COLORS = {   # bảng màu chung (core.SERIES): màu theo thực thể, giống nhau ở 3 dashboard
-    "kpi": [TEXT] * 5,
+    "kpi": [TEXT, S1, S5, S3, S6],   # màu số KPI như bản gốc
     "smart_credit": S1, "branches": S2, "new_issuance": S1, "termination": NEUTRAL,
     "base": S1, "using": S2, "balance": S1, "revolving": S2,
     "volume": S1, "ticket": S2, "risk": TEXT,

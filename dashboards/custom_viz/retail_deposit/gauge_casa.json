@@ -43,7 +43,7 @@
         "theta2": {
           "expr": "-PI / 2 + PI * clamp(isValid(datum.casa_pct) ? datum.casa_pct : 0, 0, 120) / 120"
         },
-        "color": "#17a2b8",
+        "color": "#4472c4",
         "y": {
           "expr": "height * 0.9"
         }
@@ -54,7 +54,7 @@
         "type": "text",
         "fontSize": 26,
         "fontWeight": "bold",
-        "color": "#17a2b8",
+        "color": "#4472c4",
         "y": {
           "expr": "height * 0.78"
         }
