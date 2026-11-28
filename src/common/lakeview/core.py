@@ -257,12 +257,12 @@ def lit(s: str) -> str:
 # Một bảng màu cho cả 3 dashboard (đã kiểm tra: dải sáng, độ bão hoà, tách màu cho người mù
 # màu ΔE >= 8, phân biệt mắt thường ΔE >= 15). Gán theo THỨ TỰ cố định, màu đi theo thực thể
 # (CASA luôn là S1...), không theo thứ hạng. Màu chữ / số KPI dùng màu chữ, không dùng màu series.
-S1, S2, S3, S4, S5, S6 = "#1e88e5", "#fb8c00", "#7e57c2", "#43a047", "#00acc1", "#e53935"
-SERIES = [S1, S2, S3, S4, S5, S6]   # tông "monitoring" tươi: xanh dương, cam, tím, xanh lá...
+S1, S2, S3, S4, S5, S6 = "#2a9d8f", "#8b6fd6", "#e0659a", "#d4a017", "#4a86e8", "#e07a5f"
+SERIES = [S1, S2, S3, S4, S5, S6]   # tông pastel đậm 1 bậc: bạc hà, tím lavender, hồng, vàng...
 NEUTRAL = "#9e9e9e"          # "Khác", phân khúc phụ (vd Dormant)
-TEXT = "#1f2937"             # số trên thẻ KPI
+TEXT = "#1a1a1a"             # số trên thẻ KPI
 GOOD, BAD = "#2e7d32", "#c62828"   # trạng thái: tốt / xấu (luôn kèm ▲▼ + chữ, không chỉ màu)
 # tông nhạt của S1..S3 cho "năm trước" (cùng thực thể, khác kỳ)
-S1_LIGHT, S2_LIGHT, S3_LIGHT = "#90caf9", "#ffcc80", "#b39ddb"
+S1_LIGHT, S2_LIGHT, S3_LIGHT = "#a8d8d2", "#cdbff0", "#f5c1d6"
 # thang tuần tự 1 màu (nhạt -> đậm) cho thứ bậc mức độ, vd nhóm nợ 1-10 ... 361+
-SEVERITY = ["#ffe0b2", "#ffb74d", "#fb8c00", "#e65100", "#8d3a00"]
+SEVERITY = ["#fbd5e3", "#f3a3c4", "#e0659a", "#b83f74", "#7a2450"]

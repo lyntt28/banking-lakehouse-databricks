@@ -49,8 +49,8 @@
               "X-Border"
             ],
             "range": [
-              "#1e88e5",
-              "#fb8c00"
+              "#2a9d8f",
+              "#8b6fd6"
             ]
           },
           "legend": {
@@ -75,7 +75,7 @@
         "type": "text",
         "fontSize": 16,
         "fontWeight": "bold",
-        "color": "#1e88e5"
+        "color": "#2a9d8f"
       },
       "encoding": {
         "text": {
