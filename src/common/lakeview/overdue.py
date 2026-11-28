@@ -2,23 +2,32 @@
 
 from __future__ import annotations
 
-from common.lakeview.core import USD_RATE, Dash, _q, kpi_cards_sql, lit
+from common.lakeview.core import (
+    S1,
+    S2,
+    SERIES,
+    SEVERITY,
+    TEXT,
+    USD_RATE,
+    Dash,
+    _q,
+    kpi_cards_sql,
+    lit,
+)
 
 # ============================================================ 2. OVERDUE (RAMC)
 # Nguồn: gold.card_mart_overdue_daily (file credit_card_overdue_YYYYMMDD.txt), logic theo
 # dashboard Chart.js gốc (đã xóa khỏi repo): tỷ lệ = sum(ovd_bal) / sum(port_bal),
 # lọc chi nhánh theo mng_br, không lọc loại sản phẩm (All).
-OVD_COLORS = {   # từ dashboard Chart.js gốc
-    "amount": "#3498DB", "ratio": "#E67E22", "fx": "#0077B6",
-    "ticker": {"ratio": "#48bb78", "overdue": "#4299e1", "ending": "#ed8936"},
-    "products": ["#3498DB", "#E74C3C", "#2ECC71", "#F39C12", "#9B59B6", "#1ABC9C", "#E67E22",
-                 "#34495E", "#E91E63", "#00BCD4"],
+OVD_COLORS = {   # bảng màu chung (core.SERIES)
+    "amount": S1, "ratio": S2, "fx": TEXT,
+    "ticker": {"ratio": TEXT, "overdue": TEXT, "ending": TEXT},
+    "products": SERIES,
 }
 
 
 DEBT_GROUPS = ["1-10", "11-90", "91-180", "181-360", "361+"]   # theo file nguồn (DEL_GRP)
-DEBT_COLORS = dict(zip(DEBT_GROUPS, ["#F6E05E", "#ED8936", "#E53E3E", "#9B2C2C", "#4A1D1D"],
-                       strict=True))
+DEBT_COLORS = dict(zip(DEBT_GROUPS, SEVERITY, strict=True))   # nhẹ -> nặng
 EXCLUDED_BRANCH = "8125"          # API gốc: bỏ CN 8125 khỏi treemap chi nhánh
 BRANCH_MIN_OVERDUE_USD = 10_000   # API gốc: chỉ CN có dư nợ quá hạn > 10.000 USD
 

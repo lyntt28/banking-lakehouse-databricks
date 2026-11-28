@@ -616,7 +616,7 @@
                     }
                   },
                   "style": {
-                    "color": "#0077B6"
+                    "color": "#191919"
                   }
                 }
               },
@@ -667,7 +667,7 @@
                     "suffix": "%"
                   },
                   "style": {
-                    "color": "#48bb78"
+                    "color": "#191919"
                   }
                 }
               },
@@ -717,7 +717,7 @@
                     }
                   },
                   "style": {
-                    "color": "#4299e1"
+                    "color": "#191919"
                   }
                 }
               },
@@ -767,7 +767,7 @@
                     }
                   },
                   "style": {
-                    "color": "#ed8936"
+                    "color": "#191919"
                   }
                 }
               },
@@ -998,11 +998,11 @@
                     "mappings": [
                       {
                         "value": "Overdue Amount (1000 USD)",
-                        "color": "#3498DB"
+                        "color": "#257de0"
                       },
                       {
                         "value": "Overdue Ratio (%)",
-                        "color": "#E67E22"
+                        "color": "#f47230"
                       }
                     ]
                   }
@@ -1088,11 +1088,11 @@
                     "mappings": [
                       {
                         "value": "Overdue Amount (1000 USD)",
-                        "color": "#3498DB"
+                        "color": "#257de0"
                       },
                       {
                         "value": "Overdue Ratio (%)",
-                        "color": "#E67E22"
+                        "color": "#f47230"
                       }
                     ]
                   }
@@ -1165,23 +1165,23 @@
                     "mappings": [
                       {
                         "value": "1-10",
-                        "color": "#F6E05E"
+                        "color": "#fcd9c4"
                       },
                       {
                         "value": "11-90",
-                        "color": "#ED8936"
+                        "color": "#f9a66e"
                       },
                       {
                         "value": "91-180",
-                        "color": "#E53E3E"
+                        "color": "#f47230"
                       },
                       {
                         "value": "181-360",
-                        "color": "#9B2C2C"
+                        "color": "#c4541b"
                       },
                       {
                         "value": "361+",
-                        "color": "#4A1D1D"
+                        "color": "#7f3410"
                       }
                     ]
                   },
@@ -1317,7 +1317,7 @@
               },
               "mark": {
                 "colors": [
-                  "#3498DB"
+                  "#257de0"
                 ]
               }
             }
@@ -1382,7 +1382,7 @@
               },
               "mark": {
                 "colors": [
-                  "#E67E22"
+                  "#f47230"
                 ]
               }
             }
@@ -1447,7 +1447,7 @@
               },
               "mark": {
                 "colors": [
-                  "#3498DB"
+                  "#257de0"
                 ]
               }
             }

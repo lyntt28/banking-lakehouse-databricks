@@ -2,22 +2,37 @@
 
 from __future__ import annotations
 
-from common.lakeview.core import Dash, _q, kpi_cards_sql, lit
+from common.lakeview.core import (
+    NEUTRAL,
+    S1,
+    S1_LIGHT,
+    S2,
+    S2_LIGHT,
+    S3,
+    S3_LIGHT,
+    S4,
+    S5,
+    S6,
+    TEXT,
+    Dash,
+    _q,
+    kpi_cards_sql,
+    lit,
+)
 
 # ============================================================ 3. RETAIL DEPOSIT (DEPOSIT)
-DEP_COLORS = {   # từ dashboard Chart.js gốc (đã xóa khỏi repo)
-    "gauge": {"all": "#22AFFF", "casa": "#10B981", "tda": "#F47B20"},
-    "ticker": {"bal": "#223A5E", "mavg": "#009688", "cust": "#F4A300"},
-    "daily": "#223A5E",
-    "mom": {"1-CASA last year": "#FFE082", "1-CASA this year": "#F4A300",
-            "2-TD last year": "#80CBC4", "2-TD this year": "#009688",
-            "3-ISA last year": "#90A4AE", "3-ISA this year": "#223A5E"},
-    "region": {"South 1": "#223A5E", "South 2": "#1A237E", "South 3": "#80CBC4",
-               "North 1": "#FFE082", "North 2": "#F4A300", "North": "#FFE082",
-               "Central": "#F4A300", "Others": "#F47B20"},
-    "term_bar": "#009688", "term_line": "#F4A300",
-    "casa": {"Non-CASA": "#223A5E", "Active": "#009688", "Dormant": "#b0b0b0"},
-    "edusave": "#223A5E",
+DEP_COLORS = {   # bảng màu chung (core.SERIES): CASA = S1, TD = S2, ISA = S3 ở mọi biểu đồ
+    "gauge": {"all": S1, "casa": S1, "tda": S2},
+    "ticker": {"bal": TEXT, "mavg": TEXT, "cust": TEXT},
+    "daily": S1,
+    "mom": {"1-CASA last year": S1_LIGHT, "1-CASA this year": S1,
+            "2-TD last year": S2_LIGHT, "2-TD this year": S2,
+            "3-ISA last year": S3_LIGHT, "3-ISA this year": S3},
+    "region": {"North": S1, "Central": S2, "South 1": S3, "South 2": S4, "South 3": S5,
+               "North 1": S1, "North 2": S6, "Others": NEUTRAL},
+    "term_bar": S1, "term_line": S2,
+    "casa": {"Active": S1, "Non-CASA": S2, "Dormant": NEUTRAL},
+    "edusave": S1,
 }
 
 
