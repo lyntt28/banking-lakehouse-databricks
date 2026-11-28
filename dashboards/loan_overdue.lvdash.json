@@ -1005,6 +1005,9 @@
                         "color": "#bf9000"
                       }
                     ]
+                  },
+                  "legend": {
+                    "position": "bottom"
                   }
                 },
                 "label": {
@@ -1095,6 +1098,9 @@
                         "color": "#bf9000"
                       }
                     ]
+                  },
+                  "legend": {
+                    "position": "bottom"
                   }
                 },
                 "label": {
@@ -1185,7 +1191,10 @@
                       }
                     ]
                   },
-                  "displayName": "Series"
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true
@@ -1245,7 +1254,10 @@
                   "scale": {
                     "type": "categorical"
                   },
-                  "displayName": "product_group"
+                  "displayName": "product_group",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true

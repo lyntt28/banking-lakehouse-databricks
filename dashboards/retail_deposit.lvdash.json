@@ -1452,7 +1452,10 @@
                       }
                     ]
                   },
-                  "displayName": "Series"
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 }
               },
               "frame": {
@@ -1559,7 +1562,10 @@
                       }
                     ]
                   },
-                  "displayName": "Region"
+                  "displayName": "Region",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true
@@ -1649,6 +1655,9 @@
                         "color": "#bf9000"
                       }
                     ]
+                  },
+                  "legend": {
+                    "position": "bottom"
                   }
                 },
                 "label": {
@@ -1736,7 +1745,10 @@
                       }
                     ]
                   },
-                  "displayName": "Segment"
+                  "displayName": "Segment",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true

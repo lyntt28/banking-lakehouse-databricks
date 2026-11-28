@@ -6,6 +6,8 @@ from __future__ import annotations
 
 # ============================================================ khung JSON
 _FIELD_ID = 0
+# legend dưới biểu đồ (đã kiểm chứng trên workspace: encodings.color.legend.position)
+LEGEND = {"position": "bottom"}
 
 
 class Dash:
@@ -92,7 +94,7 @@ class Dash:
             enc = {"angle": {"fieldName": agg, "scale": {"type": "quantitative"},
                              "displayName": val_title or val},
                    "color": {"fieldName": cat, "scale": _cat_scale(colors),
-                             "displayName": cat_title or cat}}
+                             "displayName": cat_title or cat, "legend": LEGEND}}
         else:
             c_enc = {"fieldName": cat, "scale": {"type": "categorical"},
                      "displayName": cat_title or cat}
@@ -103,7 +105,7 @@ class Dash:
             enc = {"x": v_enc, "y": c_enc} if horizontal else {"x": c_enc, "y": v_enc}
             if series:
                 enc["color"] = {"fieldName": series, "scale": _cat_scale(colors),
-                                "displayName": "Series"}
+                                "displayName": "Series", "legend": LEGEND}
         if labels:
             enc["label"] = {"show": True}
         spec = {"version": 3, "widgetType": kind, "encodings": enc,
@@ -128,7 +130,7 @@ class Dash:
                   "secondary": {"fields": [{"fieldName": fl, "displayName": line_title}]}},
             "color": {"scale": {"type": "categorical", "mappings": [
                 {"value": bar_title, "color": bar_color},
-                {"value": line_title, "color": line_color}]}},
+                {"value": line_title, "color": line_color}]}, "legend": LEGEND},
             "label": {"show": True}},
             "frame": {"showTitle": True, "title": title}}
         self.place({"name": self._wid("combo"), "queries": self._query(ds, fields, agg=True),

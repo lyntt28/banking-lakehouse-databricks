@@ -1691,7 +1691,10 @@
                       }
                     ]
                   },
-                  "displayName": "Series"
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true
@@ -1772,7 +1775,10 @@
                       }
                     ]
                   },
-                  "displayName": "Series"
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true
@@ -1869,7 +1875,10 @@
                       }
                     ]
                   },
-                  "displayName": "Series"
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 }
               },
               "frame": {
@@ -1947,7 +1956,10 @@
                       }
                     ]
                   },
-                  "displayName": "Series"
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 }
               },
               "frame": {
@@ -2156,7 +2168,10 @@
                       }
                     ]
                   },
-                  "displayName": "slice"
+                  "displayName": "slice",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true
@@ -2223,7 +2238,10 @@
                       }
                     ]
                   },
-                  "displayName": "slice"
+                  "displayName": "slice",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true
@@ -2290,7 +2308,10 @@
                       }
                     ]
                   },
-                  "displayName": "slice"
+                  "displayName": "slice",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true
