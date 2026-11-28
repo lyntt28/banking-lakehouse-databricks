@@ -203,39 +203,34 @@ def overdue_dashboard(catalog: str) -> dict:
     d.text("# RETAIL LOAN OVERDUE TRACKING", 0, 0, 3, 2)
     d.counter(ds["ovd_kpi"], "fx_vnd_usd", "FX (VND/USD)", 3, 0, w=1, h=2, color=c["fx"],
               fmt="num")
-    # main-stats repeat(3, 1fr)
-    for i, (col, title, key, fmt) in enumerate([
-            ("overdue_ratio", "Overdue Ratio", "ratio", "pct"),
-            ("overdue_usd", "Overdue Balance (USD)", "overdue", "int"),
-            ("ending_usd", "Ending Balance (USD)", "ending", "int")]):
-        d.counter(ds["ovd_kpi"], col, title, 2 * i, 2, w=2, color=c["ticker"][key], fmt=fmt)
-    # vs Last Day / Month / Year (kèm ngày thực tế của kỳ so sánh)
-    for i, (col, title) in enumerate([("ratio_txt", "Overdue Ratio"),
-                                      ("overdue_txt", "Overdue Balance (USD)"),
-                                      ("ending_txt", "Ending Balance (USD)")]):
-        d.table(ds["ovd_compare"], f"{title} vs Last Day / Month / Year",
-                [("cmp", "Compare", "text"), (col, "Change", "text")], 2 * i, 5, 2, 3)
+    # Thẻ KPI (Custom Viz): giá trị + 3 dòng so sánh D-1 / M-1 / Y-1 xanh / đỏ (thay ô + bảng)
+    for i, (kpi, key, bad) in enumerate([("overdue_ratio", "ratio", True),
+                                         ("overdue_usd", "overdue", True),
+                                         ("ending_usd", "ending", False)]):
+        d.custom_viz(ds["ovd_kpi_cards"], "", vega.kpi_card(kpi, c["ticker"][key],
+                                                            lower_is_better=bad),
+                     2 * i, 2, 2, 4)
     # Custom Viz: cột (trục trái) + đường tỷ lệ (trục phải) có nhãn, 2 biểu đồ rộng bằng nhau
     trends = [("ovd_daily_trend", "Overdue Trend (Last 5 Days)", "day"),
               ("ovd_monthly_trend", "Overdue Trend (Monthly)", "month")]
     for i, (name, title, cat) in enumerate(trends):
         d.custom_viz(ds[name], title, vega.dual_axis_combo(
             cat, "overdue_k_usd", "overdue_ratio", "Overdue Amount (1000 USD)",
-            "Overdue Ratio (%)", c["amount"], c["ratio"]), 3 * i, 8, 3, 7)
-    d.chart("bar", ds["ovd_debt_groups"], "Overdue Amount by Debt Groups", 0, 15, 6, 7,
+            "Overdue Ratio (%)", c["amount"], c["ratio"]), 3 * i, 6, 3, 7)
+    d.chart("bar", ds["ovd_debt_groups"], "Overdue Amount by Debt Groups", 0, 13, 6, 7,
             cat="month", series="del_grp", val="overdue_k_usd", colors=DEBT_COLORS,
             layout="stack", val_title="Overdue Amount (1000 USD)")
     # product-groups-grid 1fr 1fr
-    d.chart("pie", ds["ovd_product"], "Overdue Amount by Product Groups", 0, 22, 3, 7,
+    d.chart("pie", ds["ovd_product"], "Overdue Amount by Product Groups", 0, 20, 3, 7,
             cat="product_group", val="overdue_k_usd", val_title="1000 USD")
-    d.chart("bar", ds["ovd_product_top5"], "Overdue Ratio by Product Groups", 3, 22, 3, 7,
+    d.chart("bar", ds["ovd_product_top5"], "Overdue Ratio by Product Groups", 3, 20, 3, 7,
             cat="product_group", val="overdue_ratio", horizontal=True,
             single_color=c["amount"], sort_desc=True, val_title="Overdue Ratio (%)")
     # Treemap gốc -> bar ngang Top 5 (Lakeview: giữ nguyên quy tắc nghiệp vụ, xem overdue_sql)
-    d.chart("bar", ds["ovd_branch_top5"], "Top 5 Branches by Overdue Ratio", 0, 29, 3, 7,
+    d.chart("bar", ds["ovd_branch_top5"], "Top 5 Branches by Overdue Ratio", 0, 27, 3, 7,
             cat="branch", val="overdue_ratio", horizontal=True, single_color=c["ratio"],
             sort_desc=True, val_title="Overdue Ratio (%)")
-    d.chart("bar", ds["ovd_branch_top5"], "Top 5 Branches - Overdue Amount", 3, 29, 3, 7,
+    d.chart("bar", ds["ovd_branch_top5"], "Top 5 Branches - Overdue Amount", 3, 27, 3, 7,
             cat="branch", val="overdue_k_usd", horizontal=True, single_color=c["amount"],
             sort_desc=True, val_title="Overdue Amount (1000 USD)")
     d.param_filter("report_date", "Report date", "filter-date-picker", 4, 0)

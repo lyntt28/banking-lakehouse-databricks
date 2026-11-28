@@ -1060,20 +1060,68 @@
         },
         {
           "widget": {
-            "name": "counter_03",
+            "name": "viz_03",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_kpi_cards",
                   "fields": [
                     {
-                      "name": "new_acquisition",
-                      "expression": "`new_acquisition`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
                     },
                     {
-                      "name": "new_acquisition_lm",
-                      "expression": "`new_acquisition_lm`"
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -1081,31 +1129,67 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "new_acquisition",
-                  "displayName": "New Acquisition",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#000000"
-                  }
-                },
-                "target": {
-                  "fieldName": "new_acquisition_lm",
-                  "displayName": "vs Last Month"
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "New Acquisition"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'new_acquisition'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 4,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"title\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 32,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#000000\",\n    \"x\": 4,\n    \"y\": 26\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.02\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.35\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 104\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 120\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1113,25 +1197,73 @@
             "x": 0,
             "y": 3,
             "width": 1,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_04",
+            "name": "viz_04",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_kpi_cards",
                   "fields": [
                     {
-                      "name": "customer_base",
-                      "expression": "`customer_base`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
                     },
                     {
-                      "name": "customer_base_lm",
-                      "expression": "`customer_base_lm`"
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -1139,31 +1271,67 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "customer_base",
-                  "displayName": "Customer Base",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#4472c4"
-                  }
-                },
-                "target": {
-                  "fieldName": "customer_base_lm",
-                  "displayName": "vs Last Month"
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Customer Base"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'customer_base'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 4,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"title\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 32,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\",\n    \"x\": 4,\n    \"y\": 26\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.02\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.35\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 104\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 120\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1171,25 +1339,73 @@
             "x": 1,
             "y": 3,
             "width": 1,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_05",
+            "name": "viz_05",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_kpi_cards",
                   "fields": [
                     {
-                      "name": "using_customer",
-                      "expression": "`using_customer`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
                     },
                     {
-                      "name": "using_customer_lm",
-                      "expression": "`using_customer_lm`"
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -1197,31 +1413,67 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "using_customer",
-                  "displayName": "Using Customer",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#c55a11"
-                  }
-                },
-                "target": {
-                  "fieldName": "using_customer_lm",
-                  "displayName": "vs Last Month"
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Using Customer"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'using_customer'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 4,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"title\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 32,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#c55a11\",\n    \"x\": 4,\n    \"y\": 26\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.02\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.35\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 104\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 120\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1229,25 +1481,73 @@
             "x": 2,
             "y": 3,
             "width": 1,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_06",
+            "name": "viz_06",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_kpi_cards",
                   "fields": [
                     {
-                      "name": "sales_volume_k_usd",
-                      "expression": "`sales_volume_k_usd`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
                     },
                     {
-                      "name": "sales_volume_k_usd_lm",
-                      "expression": "`sales_volume_k_usd_lm`"
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -1255,31 +1555,67 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "sales_volume_k_usd",
-                  "displayName": "Sales Volume (K USD)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#2f5597"
-                  }
-                },
-                "target": {
-                  "fieldName": "sales_volume_k_usd_lm",
-                  "displayName": "vs Last Month"
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Sales Volume (K USD)"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'sales_volume'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 4,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"title\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 32,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#2f5597\",\n    \"x\": 4,\n    \"y\": 26\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.02\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.35\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 104\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 120\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1287,25 +1623,73 @@
             "x": 3,
             "y": 3,
             "width": 1,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_07",
+            "name": "viz_07",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_kpi_cards",
                   "fields": [
                     {
-                      "name": "balance_k_usd",
-                      "expression": "`balance_k_usd`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
                     },
                     {
-                      "name": "balance_k_usd_lm",
-                      "expression": "`balance_k_usd_lm`"
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -1313,31 +1697,67 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "balance_k_usd",
-                  "displayName": "Balance (K USD)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#5b9bd5"
-                  }
-                },
-                "target": {
-                  "fieldName": "balance_k_usd_lm",
-                  "displayName": "vs Last Month"
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Balance (K USD)"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'balance'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 4,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"title\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 32,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#5b9bd5\",\n    \"x\": 4,\n    \"y\": 26\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.02\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.35\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 104\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 120\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1345,7 +1765,7 @@
             "x": 4,
             "y": 3,
             "width": 1,
-            "height": 3
+            "height": 4
           }
         },
         {
@@ -1353,7 +1773,7 @@
             "name": "text_08",
             "multilineTextboxSpec": {
               "lines": [
-                "**Report scope**\n\nNew / Using / Sales = MTD; Base / Balance = tại ngày báo cáo. Using = số thẻ có giao dịch (card-level). So sánh trong ô = tháng trước."
+                "**Report scope**\n\nNew / Using / Sales = MTD; Base / Balance = tại ngày báo cáo. Using = số thẻ có giao dịch (card-level)."
               ]
             }
           },
@@ -1361,7 +1781,7 @@
             "x": 5,
             "y": 3,
             "width": 1,
-            "height": 3
+            "height": 4
           }
         },
         {
@@ -1375,7 +1795,7 @@
           },
           "position": {
             "x": 0,
-            "y": 6,
+            "y": 7,
             "width": 6,
             "height": 1
           }
@@ -1434,7 +1854,7 @@
           },
           "position": {
             "x": 1,
-            "y": 7,
+            "y": 8,
             "width": 1,
             "height": 3
           }
@@ -1493,7 +1913,7 @@
           },
           "position": {
             "x": 2,
-            "y": 7,
+            "y": 8,
             "width": 1,
             "height": 3
           }
@@ -1552,7 +1972,7 @@
           },
           "position": {
             "x": 3,
-            "y": 7,
+            "y": 8,
             "width": 1,
             "height": 3
           }
@@ -1611,7 +2031,7 @@
           },
           "position": {
             "x": 4,
-            "y": 7,
+            "y": 8,
             "width": 1,
             "height": 3
           }
@@ -1627,14 +2047,14 @@
           },
           "position": {
             "x": 0,
-            "y": 10,
+            "y": 11,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "bar_15",
+            "name": "viz_15",
             "queries": [
               {
                 "name": "main_query",
@@ -1642,76 +2062,57 @@
                   "datasetName": "card_new_acq",
                   "fields": [
                     {
-                      "name": "month",
-                      "expression": "`month`"
+                      "name": "cards",
+                      "expression": "`cards`"
                     },
                     {
                       "name": "channel",
                       "expression": "`channel`"
                     },
                     {
-                      "name": "sum(cards)",
-                      "expression": "SUM(`cards`)"
+                      "name": "month",
+                      "expression": "`month`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "month"
-                },
-                "y": {
-                  "fieldName": "sum(cards)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "cards"
-                },
-                "color": {
-                  "fieldName": "channel",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Smart Credit",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "Branches",
-                        "color": "#bf9000"
-                      }
-                    ]
-                  },
-                  "displayName": "Series",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "New Acquisition"
+                "title": {
+                  "value": "New Acquisition",
+                  "fields": []
+                }
               },
-              "mark": {
-                "layout": "stack"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"encoding\": {\n  \"x\": {\n   \"field\": \"month\",\n   \"type\": \"ordinal\",\n   \"title\": null,\n   \"axis\": {\n    \"labelAngle\": 0\n   }\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"width\": {\n     \"band\": 0.7\n    },\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"y\": {\n     \"field\": \"cards\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": null,\n     \"stack\": \"zero\"\n    },\n    \"color\": {\n     \"field\": \"channel\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"Smart Credit\",\n       \"Branches\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\"\n      ]\n     }\n    }\n   }\n  },\n  {\n   \"transform\": [\n    {\n     \"aggregate\": [\n      {\n       \"op\": \"sum\",\n       \"field\": \"cards\",\n       \"as\": \"_total\"\n      }\n     ],\n     \"groupby\": [\n      \"month\"\n     ]\n    }\n   ],\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"line\",\n      \"strokeDash\": [\n       6,\n       4\n      ],\n      \"strokeWidth\": 2,\n      \"color\": \"#7f7f7f\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"_total\",\n       \"type\": \"quantitative\"\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"dy\": -8,\n      \"fontSize\": 10,\n      \"color\": \"#444\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"_total\",\n       \"type\": \"quantitative\"\n      },\n      \"text\": {\n       \"field\": \"_total\",\n       \"format\": \",.0f\"\n      }\n     }\n    }\n   ]\n  }\n ],\n \"config\": {\n  \"legend\": {\n   \"orient\": \"bottom\"\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cards"
+                  },
+                  {
+                    "fieldName": "channel"
+                  },
+                  {
+                    "fieldName": "month"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 0,
-            "y": 11,
+            "y": 12,
             "width": 3,
             "height": 7
           }
@@ -1795,7 +2196,7 @@
           },
           "position": {
             "x": 3,
-            "y": 11,
+            "y": 12,
             "width": 3,
             "height": 7
           }
@@ -1811,7 +2212,7 @@
           },
           "position": {
             "x": 0,
-            "y": 18,
+            "y": 19,
             "width": 6,
             "height": 1
           }
@@ -1892,7 +2293,7 @@
           },
           "position": {
             "x": 0,
-            "y": 19,
+            "y": 20,
             "width": 3,
             "height": 7
           }
@@ -1973,7 +2374,7 @@
           },
           "position": {
             "x": 3,
-            "y": 19,
+            "y": 20,
             "width": 3,
             "height": 7
           }
@@ -2032,7 +2433,7 @@
           },
           "position": {
             "x": 0,
-            "y": 26,
+            "y": 27,
             "width": 3,
             "height": 7
           }
@@ -2091,7 +2492,7 @@
           },
           "position": {
             "x": 3,
-            "y": 26,
+            "y": 27,
             "width": 3,
             "height": 7
           }
@@ -2107,14 +2508,14 @@
           },
           "position": {
             "x": 0,
-            "y": 34,
+            "y": 35,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "pie_23",
+            "name": "viz_23",
             "queries": [
               {
                 "name": "main_query",
@@ -2122,77 +2523,57 @@
                   "datasetName": "card_mix_sector",
                   "fields": [
                     {
-                      "name": "slice",
-                      "expression": "`slice`"
+                      "name": "amount",
+                      "expression": "`amount`"
                     },
                     {
-                      "name": "sum(amount)",
-                      "expression": "SUM(`amount`)"
+                      "name": "slice",
+                      "expression": "`slice`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "pie",
-              "encodings": {
-                "angle": {
-                  "fieldName": "sum(amount)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "amount"
-                },
-                "color": {
-                  "fieldName": "slice",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Purchasing",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "Installment",
-                        "color": "#bf9000"
-                      },
-                      {
-                        "value": "Cash Advance",
-                        "color": "#2f5597"
-                      },
-                      {
-                        "value": "Flexi",
-                        "color": "#70ad47"
-                      }
-                    ]
-                  },
-                  "displayName": "slice",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "By Sectors"
+                "title": {
+                  "value": "By Sectors",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"joinaggregate\": [\n    {\n     \"op\": \"sum\",\n     \"field\": \"amount\",\n     \"as\": \"_tot\"\n    }\n   ]\n  },\n  {\n   \"calculate\": \"datum.amount / datum._tot\",\n   \"as\": \"_share\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height) * 0.30\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height) * 0.42\"\n    },\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"theta\": {\n     \"field\": \"amount\",\n     \"type\": \"quantitative\",\n     \"stack\": true\n    },\n    \"color\": {\n     \"field\": \"slice\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"Purchasing\",\n       \"Installment\",\n       \"Cash Advance\",\n       \"Flexi\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\",\n       \"#2f5597\",\n       \"#70ad47\"\n      ]\n     },\n     \"legend\": {\n      \"orient\": \"bottom\",\n      \"columns\": 2,\n      \"labelLimit\": 120\n     }\n    },\n    \"order\": {\n     \"field\": \"slice\",\n     \"sort\": \"ascending\"\n    }\n   }\n  },\n  {\n   \"transform\": [\n    {\n     \"filter\": \"datum.slice == 'Purchasing'\"\n    }\n   ],\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 16,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"_share\",\n     \"format\": \".1%\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "amount"
+                  },
+                  {
+                    "fieldName": "slice"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 0,
-            "y": 35,
+            "y": 36,
             "width": 2,
             "height": 6
           }
         },
         {
           "widget": {
-            "name": "pie_24",
+            "name": "viz_24",
             "queries": [
               {
                 "name": "main_query",
@@ -2200,69 +2581,57 @@
                   "datasetName": "card_mix_location",
                   "fields": [
                     {
-                      "name": "slice",
-                      "expression": "`slice`"
+                      "name": "amount",
+                      "expression": "`amount`"
                     },
                     {
-                      "name": "sum(amount)",
-                      "expression": "SUM(`amount`)"
+                      "name": "slice",
+                      "expression": "`slice`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "pie",
-              "encodings": {
-                "angle": {
-                  "fieldName": "sum(amount)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "amount"
-                },
-                "color": {
-                  "fieldName": "slice",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Domestic",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "X-Border",
-                        "color": "#bf9000"
-                      }
-                    ]
-                  },
-                  "displayName": "slice",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "By Locations"
+                "title": {
+                  "value": "By Locations",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"joinaggregate\": [\n    {\n     \"op\": \"sum\",\n     \"field\": \"amount\",\n     \"as\": \"_tot\"\n    }\n   ]\n  },\n  {\n   \"calculate\": \"datum.amount / datum._tot\",\n   \"as\": \"_share\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height) * 0.30\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height) * 0.42\"\n    },\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"theta\": {\n     \"field\": \"amount\",\n     \"type\": \"quantitative\",\n     \"stack\": true\n    },\n    \"color\": {\n     \"field\": \"slice\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"Domestic\",\n       \"X-Border\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\"\n      ]\n     },\n     \"legend\": {\n      \"orient\": \"bottom\",\n      \"columns\": 2,\n      \"labelLimit\": 120\n     }\n    },\n    \"order\": {\n     \"field\": \"slice\",\n     \"sort\": \"ascending\"\n    }\n   }\n  },\n  {\n   \"transform\": [\n    {\n     \"filter\": \"datum.slice == 'Domestic'\"\n    }\n   ],\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 16,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"_share\",\n     \"format\": \".1%\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "amount"
+                  },
+                  {
+                    "fieldName": "slice"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 2,
-            "y": 35,
+            "y": 36,
             "width": 2,
             "height": 6
           }
         },
         {
           "widget": {
-            "name": "pie_25",
+            "name": "viz_25",
             "queries": [
               {
                 "name": "main_query",
@@ -2270,62 +2639,50 @@
                   "datasetName": "card_mix_channel",
                   "fields": [
                     {
-                      "name": "slice",
-                      "expression": "`slice`"
+                      "name": "amount",
+                      "expression": "`amount`"
                     },
                     {
-                      "name": "sum(amount)",
-                      "expression": "SUM(`amount`)"
+                      "name": "slice",
+                      "expression": "`slice`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "pie",
-              "encodings": {
-                "angle": {
-                  "fieldName": "sum(amount)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "amount"
-                },
-                "color": {
-                  "fieldName": "slice",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "POS (Offline)",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "Online",
-                        "color": "#bf9000"
-                      }
-                    ]
-                  },
-                  "displayName": "slice",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "By Channels"
+                "title": {
+                  "value": "By Channels",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"joinaggregate\": [\n    {\n     \"op\": \"sum\",\n     \"field\": \"amount\",\n     \"as\": \"_tot\"\n    }\n   ]\n  },\n  {\n   \"calculate\": \"datum.amount / datum._tot\",\n   \"as\": \"_share\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height) * 0.30\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height) * 0.42\"\n    },\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"theta\": {\n     \"field\": \"amount\",\n     \"type\": \"quantitative\",\n     \"stack\": true\n    },\n    \"color\": {\n     \"field\": \"slice\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"POS (Offline)\",\n       \"Online\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\"\n      ]\n     },\n     \"legend\": {\n      \"orient\": \"bottom\",\n      \"columns\": 2,\n      \"labelLimit\": 120\n     }\n    },\n    \"order\": {\n     \"field\": \"slice\",\n     \"sort\": \"ascending\"\n    }\n   }\n  },\n  {\n   \"transform\": [\n    {\n     \"filter\": \"datum.slice == 'POS (Offline)'\"\n    }\n   ],\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 16,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"_share\",\n     \"format\": \".1%\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "amount"
+                  },
+                  {
+                    "fieldName": "slice"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 4,
-            "y": 35,
+            "y": 36,
             "width": 2,
             "height": 6
           }

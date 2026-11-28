@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from common.lakeview import vega
 from common.lakeview.core import (
     NEUTRAL,
     S1,
@@ -264,47 +265,44 @@ def deposit_dashboard(catalog: str) -> dict:
     # 1 trang: Overview & Performance rồi Customer & Product Insights (2 tab của bản gốc gộp lại)
     Y = 2   # chừa 1 hàng cho bộ lọc
     d.text("### Overview", 0, 2, 3)
-    for i, (col, title, key, fmt) in enumerate([
-            ("ending_balance", "Ending Balance", "bal", "int"),
-            ("monthly_avg_balance", "Monthly Avg Balance", "mavg", "int"),
-            ("retail_customers", "Retail Customers", "cust", "int")]):
-        d.counter(ds["dep_tickers"], col, title, 2 * i, 3 + Y, w=2, color=c["ticker"][key],
-                  fmt=fmt)
-    d.table(ds["dep_compare"], "", [
-        ("compare", "", "text"), ("ending_balance", "Ending Balance (+/-)", "num"),
-        ("monthly_avg_balance", "Monthly Avg Balance (+/-)", "num"),
-        ("retail_customers", "Retail Customers (+/-)", "num")], 0, 6 + Y, 6, 3)
-    d.text("### Target Achievement", 0, 9 + Y)
+    # Thẻ KPI (Custom Viz): giá trị + chênh lệch Last Day / Month / Year (thay ô + bảng)
+    for i, (kpi, key) in enumerate([("ending_balance", "bal"), ("monthly_avg_balance", "mavg"),
+                                    ("retail_customers", "cust")]):
+        d.custom_viz(ds["dep_kpi_cards"], "", vega.kpi_card(kpi, c["ticker"][key]),
+                     2 * i, 3 + Y, 2, 4)
+    d.text("### Target Achievement", 0, 7 + Y)
+    # Gauge bán nguyệt (Custom Viz) như bản gốc
     for i, (col, title, key) in enumerate([("all_pct", "All Products Target (%)", "all"),
                                            ("casa_pct", "CASA Target (%)", "casa"),
                                            ("tda_pct", "TDA/ISA Target (%)", "tda")]):
-        d.counter(ds["dep_gauges"], col, title, 2 * i, 10 + Y, w=2, color=c["gauge"][key],
-                  fmt="pct")
-    d.text("### Balance Trend", 0, 13 + Y)
-    d.chart("bar", ds["dep_daily30"], "Ending Balance - Last 30 Days", 0, 14 + Y, 6, 7,
+        d.custom_viz(ds["dep_gauges"], title, vega.gauge(c["gauge"][key], col),
+                     2 * i, 8 + Y, 2, 3)
+    d.text("### Balance Trend", 0, 11 + Y)
+    d.chart("bar", ds["dep_daily30"], "Ending Balance - Last 30 Days", 0, 12 + Y, 6, 7,
             cat="day", val="balance", single_color=c["daily"], labels=False,
             cat_title="Date", val_title="Balance (K USD)")
-    d.chart("bar", ds["dep_monthly"], MONTHLY_TITLE, 0, 21 + Y, 6, 8, cat="month",
-            series="series", val="ending_balance", layout="group", colors=c["mom"],
-            labels=False, cat_title="Month", val_title="Ending Balance (K USD)")
-    d.text("### Deposit Mix", 0, 29 + Y)
-    d.chart("pie", ds["dep_region"], "Regional Deposit Distribution", 0, 30 + Y, 2, 7,
+    d.custom_viz(ds["dep_monthly"], MONTHLY_TITLE, vega.grouped_stacked_years(
+        "month", "_year", "_class", "ending_balance",
+        {"1-CASA": c["mom"]["1-CASA this year"], "2-TD": c["mom"]["2-TD this year"],
+         "3-ISA": c["mom"]["3-ISA this year"]}, series="series"), 0, 19 + Y, 6, 8)
+    d.text("### Deposit Mix", 0, 27 + Y)
+    d.chart("pie", ds["dep_region"], "Regional Deposit Distribution", 0, 28 + Y, 2, 7,
             cat="region", val="balance", colors=c["region"], cat_title="Region",
             val_title="Balance (K USD)")
-    d.combo(ds["dep_term"], "Deposit by Term and IR (in Month)", 2, 30 + Y, 4, 7, cat="tenor",
-            bar="balance", line="avg_interest", bar_title="Balance (K USD)",
-            line_title="Avg Interest (%)", bar_color=c["term_bar"], line_color=c["term_line"])
-    d.text("### Customer & Product Insights", 0, 37 + Y)
-    d.chart("pie", ds["dep_casa_customer"], "CASA Customer Distribution", 0, 38 + Y, 2, 7,
+    d.custom_viz(ds["dep_term"], "Deposit by Term and IR (in Month)", vega.dual_axis_combo(
+        "tenor", "balance", "avg_interest", "Balance (K USD)", "Avg Interest (%)",
+        c["term_bar"], c["term_line"], x_sort=None, line_fmt=".2f"), 2, 28 + Y, 4, 7)
+    d.text("### Customer & Product Insights", 0, 35 + Y)
+    d.chart("pie", ds["dep_casa_customer"], "CASA Customer Distribution", 0, 36 + Y, 2, 7,
             cat="segment", val="customers", colors=c["casa"], cat_title="Segment",
             val_title="Customers")
     d.chart("bar", ds["dep_edusave"], "Edu-Save New open Account_ Accumulate by Month",
-            2, 38 + Y, 4, 7, cat="month", val="cumulative_accounts",
+            2, 36 + Y, 4, 7, cat="month", val="cumulative_accounts",
             single_color=c["edusave"], cat_title="Month", val_title="Accounts")
     d.table(ds["dep_by_product"], "Balance by Product (K USD)", [
         ("product", "Balance by Product", "text"), ("ending_balance", "Ending Balance", "num"),
         ("portion", "Portion (%)", "num"), ("diff_last_day", "+/- Last Day", "num"),
         ("diff_last_month", "+/- Last Month", "num"),
-        ("diff_last_year", "+/- Last Year", "num")], 0, 45 + Y, 6, 9)
+        ("diff_last_year", "+/- Last Year", "num")], 0, 43 + Y, 6, 9)
     header_and_filters(("region", "branch", "product", "currency", "nationality"))
     return d.to_json()

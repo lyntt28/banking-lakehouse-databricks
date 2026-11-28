@@ -151,7 +151,7 @@ class Dash:
         self.place({"name": self._wid("viz"),
                     "queries": self._query(ds, [(f, f"`{f}`") for f in fields], agg=False),
                     "spec": {"version": 1, "widgetType": "custom-vega-viz",
-                             "frame": {"showTitle": True,
+                             "frame": {"showTitle": bool(title),
                                        "title": {"value": title, "fields": []}},
                              "jsonSpec": {"type": "vega-lite",
                                           "spec": json.dumps(spec, indent=1)},

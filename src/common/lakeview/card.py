@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from common.lakeview import vega
 from common.lakeview.core import NEUTRAL, S1, S2, S3, S4, S5, S6, TEXT, Dash, _q, kpi_cards_sql, lit
 
 # ============================================================ 1. CARD BUSINESS
@@ -238,34 +239,30 @@ def card_dashboard(catalog: str) -> dict:
     # Distribution (3 donut, MTD), Delinquency (4 chỉ số + thay đổi pp). Lưới = 6 cột.
     d.text("# CARD BUSINESS DASHBOARD\n**Performance & Growth**", 0, 0, 4, 2)
     d.text("### 🟧 Overview", 0, 2)
-    for i, (col, title, fmt) in enumerate([
-            ("new_acquisition", "New Acquisition", "int"),
-            ("customer_base", "Customer Base", "int"),
-            ("using_customer", "Using Customer", "int"),
-            ("sales_volume_k_usd", "Sales Volume (K USD)", "int"),
-            ("balance_k_usd", "Balance (K USD)", "int")]):
-        d.counter(ds["card_kpi"], col, title, i, 3, color=c["kpi"][i], fmt=fmt,
-                  compare=(f"{col}_lm", "vs Last Month"))
+    # Thẻ KPI (Custom Viz): giá trị + MoM / vs YE xanh-đỏ + 2 dòng % chỉ tiêu (như bản gốc)
+    for i, kpi in enumerate(["new_acquisition", "customer_base", "using_customer",
+                             "sales_volume", "balance"]):
+        d.custom_viz(ds["card_kpi_cards"], "", vega.kpi_card(kpi, c["kpi"][i]), i, 3, 1, 4)
     d.text("**Report scope**\n\nNew / Using / Sales = MTD; Base / Balance = tại ngày báo cáo. "
-           "Using = số thẻ có giao dịch (card-level). So sánh trong ô = tháng trước.", 5, 3, 1, 3)
+           "Using = số thẻ có giao dịch (card-level).", 5, 3, 1, 4)
 
-    y = 6   # Delinquency ngay dưới Overview
+    y = 7   # Delinquency ngay dưới Overview
     d.text("### 🟧 Delinquency", 0, y)
     for i, (col, title) in enumerate([("dpd_1p", "DPD 1+ (%)"), ("dpd_10p", "DPD 10+ (%)"),
                                       ("dpd_30p", "DPD 30+ (%)"), ("npl", "NPL (%)")]):
         d.counter(ds["card_kpi"], col, title, 1 + i, y + 1, color=c["risk"], fmt="pct",
                   compare=(f"{col}_prev", "vs Last Day"))
 
-    y = 10
+    y = 11
     d.text("### 🟧 New Issuance vs. Termination", 0, y)
-    d.chart("bar", ds["card_new_acq"], "New Acquisition", 0, y + 1, 3, 7, cat="month",
-            series="channel", val="cards", layout="stack",
-            colors={"Smart Credit": c["smart_credit"], "Branches": c["branches"]})
+    d.custom_viz(ds["card_new_acq"], "New Acquisition", vega.stacked_with_total(
+        "month", "channel", "cards", {"Smart Credit": c["smart_credit"],
+                                      "Branches": c["branches"]}), 0, y + 1, 3, 7)
     d.chart("bar", ds["card_in_out"], "In & Out", 3, y + 1, 3, 7, cat="month", series="series",
             val="cards", layout="group",
             colors={"New Issuance": c["new_issuance"], "Termination": c["termination"]})
 
-    y = 18
+    y = 19
     d.text("### 🟧 Sales Performance", 0, y)
     d.chart("bar", ds["card_base_using"], "Customer Base & Using Mem", 0, y + 1, 3, 7,
             cat="month", series="series", val="members", layout="group", labels=False,
@@ -278,12 +275,12 @@ def card_dashboard(catalog: str) -> dict:
     d.chart("line", ds["card_ticket"], "Spend per Member (USD)", 3, y + 8, 3, 7, cat="month",
             val="spend_per_member", single_color=c["ticket"], labels=False)
 
-    y = 34
+    y = 35
     d.text("### 🟧 Spending Distribution (MTD)", 0, y)
     for i, (donut, title) in enumerate([("sector", "By Sectors"), ("location", "By Locations"),
                                         ("channel", "By Channels")]):
-        d.chart("pie", ds[f"card_mix_{donut}"], title, 2 * i, y + 1, 2, 6, cat="slice",
-                val="amount", colors=c[donut])
+        d.custom_viz(ds[f"card_mix_{donut}"], title, vega.donut("slice", "amount", c[donut]),
+                     2 * i, y + 1, 2, 6)
 
     d.param_filter("report_date", "Report date", "filter-date-picker", 4, 0)
     d.param_filter("customer_type", "Customer type", "filter-single-select", 5, 0,

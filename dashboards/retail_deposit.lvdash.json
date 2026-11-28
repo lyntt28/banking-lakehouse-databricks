@@ -919,16 +919,68 @@
         },
         {
           "widget": {
-            "name": "counter_02",
+            "name": "viz_02",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "dep_tickers",
+                  "datasetName": "dep_kpi_cards",
                   "fields": [
                     {
-                      "name": "ending_balance",
-                      "expression": "`ending_balance`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -936,27 +988,67 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "ending_balance",
-                  "displayName": "Ending Balance",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#2f5597"
-                  }
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Ending Balance"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'ending_balance'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 4,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"title\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 32,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#2f5597\",\n    \"x\": 4,\n    \"y\": 26\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.02\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.35\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 104\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 120\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -964,21 +1056,73 @@
             "x": 0,
             "y": 5,
             "width": 2,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_03",
+            "name": "viz_03",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "dep_tickers",
+                  "datasetName": "dep_kpi_cards",
                   "fields": [
                     {
-                      "name": "monthly_avg_balance",
-                      "expression": "`monthly_avg_balance`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -986,27 +1130,67 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "monthly_avg_balance",
-                  "displayName": "Monthly Avg Balance",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#4472c4"
-                  }
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Monthly Avg Balance"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'monthly_avg_balance'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 4,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"title\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 32,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\",\n    \"x\": 4,\n    \"y\": 26\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.02\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.35\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 104\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 120\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1014,21 +1198,73 @@
             "x": 2,
             "y": 5,
             "width": 2,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_04",
+            "name": "viz_04",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "dep_tickers",
+                  "datasetName": "dep_kpi_cards",
                   "fields": [
                     {
-                      "name": "retail_customers",
-                      "expression": "`retail_customers`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -1036,27 +1272,67 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "retail_customers",
-                  "displayName": "Retail Customers",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#bf9000"
-                  }
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Retail Customers"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'retail_customers'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 4,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"title\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 32,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#bf9000\",\n    \"x\": 4,\n    \"y\": 26\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.02\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.35\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 104\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 120\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1064,78 +1340,12 @@
             "x": 4,
             "y": 5,
             "width": 2,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "table_05",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "dep_compare",
-                  "fields": [
-                    {
-                      "name": "compare",
-                      "expression": "`compare`"
-                    },
-                    {
-                      "name": "ending_balance",
-                      "expression": "`ending_balance`"
-                    },
-                    {
-                      "name": "monthly_avg_balance",
-                      "expression": "`monthly_avg_balance`"
-                    },
-                    {
-                      "name": "retail_customers",
-                      "expression": "`retail_customers`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "compare",
-                    "displayName": "compare"
-                  },
-                  {
-                    "fieldName": "ending_balance",
-                    "displayName": "Ending Balance (+/-)"
-                  },
-                  {
-                    "fieldName": "monthly_avg_balance",
-                    "displayName": "Monthly Avg Balance (+/-)"
-                  },
-                  {
-                    "fieldName": "retail_customers",
-                    "displayName": "Retail Customers (+/-)"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": false,
-                "title": ""
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 8,
-            "width": 6,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "text_06",
+            "name": "text_05",
             "multilineTextboxSpec": {
               "lines": [
                 "### Target Achievement"
@@ -1144,14 +1354,14 @@
           },
           "position": {
             "x": 0,
-            "y": 11,
+            "y": 9,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "counter_07",
+            "name": "viz_06",
             "queries": [
               {
                 "name": "main_query",
@@ -1168,41 +1378,41 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "all_pct",
-                  "displayName": "All Products Target (%)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#4472c4"
-                  }
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "All Products Target (%)"
+                "title": {
+                  "value": "All Products Target (%)",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.32\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.45\"\n    },\n    \"theta\": {\n     \"expr\": \"-PI / 2\"\n    },\n    \"theta2\": {\n     \"expr\": \"PI / 2\"\n    },\n    \"color\": \"#e5e7eb\",\n    \"y\": {\n     \"expr\": \"height * 0.9\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.32\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.45\"\n    },\n    \"theta\": {\n     \"expr\": \"-PI / 2\"\n    },\n    \"theta2\": {\n     \"expr\": \"-PI / 2 + PI * clamp(isValid(datum.all_pct) ? datum.all_pct : 0, 0, 120) / 120\"\n    },\n    \"color\": \"#4472c4\",\n    \"y\": {\n     \"expr\": \"height * 0.9\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 26,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\",\n    \"y\": {\n     \"expr\": \"height * 0.78\"\n    }\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.all_pct) ? format(datum.all_pct, '.1f') + '%' : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"y\": {\n     \"expr\": \"height * 0.97\"\n    },\n    \"x\": {\n     \"expr\": \"width / 2 - min(width, height * 2) * 0.385\"\n    },\n    \"text\": \"0%\"\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"y\": {\n     \"expr\": \"height * 0.97\"\n    },\n    \"x\": {\n     \"expr\": \"width / 2 + min(width, height * 2) * 0.385\"\n    },\n    \"text\": \"120%\"\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "all_pct"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 0,
-            "y": 12,
+            "y": 10,
             "width": 2,
             "height": 3
           }
         },
         {
           "widget": {
-            "name": "counter_08",
+            "name": "viz_07",
             "queries": [
               {
                 "name": "main_query",
@@ -1219,41 +1429,41 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "casa_pct",
-                  "displayName": "CASA Target (%)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#4472c4"
-                  }
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "CASA Target (%)"
+                "title": {
+                  "value": "CASA Target (%)",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.32\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.45\"\n    },\n    \"theta\": {\n     \"expr\": \"-PI / 2\"\n    },\n    \"theta2\": {\n     \"expr\": \"PI / 2\"\n    },\n    \"color\": \"#e5e7eb\",\n    \"y\": {\n     \"expr\": \"height * 0.9\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.32\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.45\"\n    },\n    \"theta\": {\n     \"expr\": \"-PI / 2\"\n    },\n    \"theta2\": {\n     \"expr\": \"-PI / 2 + PI * clamp(isValid(datum.casa_pct) ? datum.casa_pct : 0, 0, 120) / 120\"\n    },\n    \"color\": \"#4472c4\",\n    \"y\": {\n     \"expr\": \"height * 0.9\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 26,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\",\n    \"y\": {\n     \"expr\": \"height * 0.78\"\n    }\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.casa_pct) ? format(datum.casa_pct, '.1f') + '%' : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"y\": {\n     \"expr\": \"height * 0.97\"\n    },\n    \"x\": {\n     \"expr\": \"width / 2 - min(width, height * 2) * 0.385\"\n    },\n    \"text\": \"0%\"\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"y\": {\n     \"expr\": \"height * 0.97\"\n    },\n    \"x\": {\n     \"expr\": \"width / 2 + min(width, height * 2) * 0.385\"\n    },\n    \"text\": \"120%\"\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "casa_pct"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 2,
-            "y": 12,
+            "y": 10,
             "width": 2,
             "height": 3
           }
         },
         {
           "widget": {
-            "name": "counter_09",
+            "name": "viz_08",
             "queries": [
               {
                 "name": "main_query",
@@ -1270,41 +1480,41 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "tda_pct",
-                  "displayName": "TDA/ISA Target (%)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#bf9000"
-                  }
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "TDA/ISA Target (%)"
+                "title": {
+                  "value": "TDA/ISA Target (%)",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.32\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.45\"\n    },\n    \"theta\": {\n     \"expr\": \"-PI / 2\"\n    },\n    \"theta2\": {\n     \"expr\": \"PI / 2\"\n    },\n    \"color\": \"#e5e7eb\",\n    \"y\": {\n     \"expr\": \"height * 0.9\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.32\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height * 2) * 0.45\"\n    },\n    \"theta\": {\n     \"expr\": \"-PI / 2\"\n    },\n    \"theta2\": {\n     \"expr\": \"-PI / 2 + PI * clamp(isValid(datum.tda_pct) ? datum.tda_pct : 0, 0, 120) / 120\"\n    },\n    \"color\": \"#bf9000\",\n    \"y\": {\n     \"expr\": \"height * 0.9\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 26,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#bf9000\",\n    \"y\": {\n     \"expr\": \"height * 0.78\"\n    }\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.tda_pct) ? format(datum.tda_pct, '.1f') + '%' : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"y\": {\n     \"expr\": \"height * 0.97\"\n    },\n    \"x\": {\n     \"expr\": \"width / 2 - min(width, height * 2) * 0.385\"\n    },\n    \"text\": \"0%\"\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"y\": {\n     \"expr\": \"height * 0.97\"\n    },\n    \"x\": {\n     \"expr\": \"width / 2 + min(width, height * 2) * 0.385\"\n    },\n    \"text\": \"120%\"\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "tda_pct"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 4,
-            "y": 12,
+            "y": 10,
             "width": 2,
             "height": 3
           }
         },
         {
           "widget": {
-            "name": "text_10",
+            "name": "text_09",
             "multilineTextboxSpec": {
               "lines": [
                 "### Balance Trend"
@@ -1313,14 +1523,14 @@
           },
           "position": {
             "x": 0,
-            "y": 15,
+            "y": 13,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "bar_11",
+            "name": "bar_10",
             "queries": [
               {
                 "name": "main_query",
@@ -1372,14 +1582,14 @@
           },
           "position": {
             "x": 0,
-            "y": 16,
+            "y": 14,
             "width": 6,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_12",
+            "name": "viz_11",
             "queries": [
               {
                 "name": "main_query",
@@ -1387,96 +1597,64 @@
                   "datasetName": "dep_monthly",
                   "fields": [
                     {
+                      "name": "ending_balance",
+                      "expression": "`ending_balance`"
+                    },
+                    {
                       "name": "month",
                       "expression": "`month`"
                     },
                     {
                       "name": "series",
                       "expression": "`series`"
-                    },
-                    {
-                      "name": "sum(ending_balance)",
-                      "expression": "SUM(`ending_balance`)"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "Month"
-                },
-                "y": {
-                  "fieldName": "sum(ending_balance)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "Ending Balance (K USD)"
-                },
-                "color": {
-                  "fieldName": "series",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "1-CASA last year",
-                        "color": "#b4c7e7"
-                      },
-                      {
-                        "value": "1-CASA this year",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "2-TD last year",
-                        "color": "#e2c66b"
-                      },
-                      {
-                        "value": "2-TD this year",
-                        "color": "#bf9000"
-                      },
-                      {
-                        "value": "3-ISA last year",
-                        "color": "#8fa9d9"
-                      },
-                      {
-                        "value": "3-ISA this year",
-                        "color": "#2f5597"
-                      }
-                    ]
-                  },
-                  "displayName": "Series",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Monthly Ending Balance - Year Comparison"
+                "title": {
+                  "value": "Monthly Ending Balance - Year Comparison",
+                  "fields": []
+                }
               },
-              "mark": {
-                "layout": "group"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"calculate\": \"split(datum.series, ' ')[0]\",\n   \"as\": \"_class\"\n  },\n  {\n   \"calculate\": \"indexof(datum.series, 'this year') >= 0 ? 'This year' : 'Last year'\",\n   \"as\": \"_year\"\n  }\n ],\n \"mark\": {\n  \"type\": \"bar\",\n  \"tooltip\": true\n },\n \"encoding\": {\n  \"x\": {\n   \"field\": \"month\",\n   \"type\": \"ordinal\",\n   \"sort\": [\n    \"Jan\",\n    \"Feb\",\n    \"Mar\",\n    \"Apr\",\n    \"May\",\n    \"Jun\",\n    \"Jul\",\n    \"Aug\",\n    \"Sep\",\n    \"Oct\",\n    \"Nov\",\n    \"Dec\"\n   ],\n   \"title\": null,\n   \"axis\": {\n    \"labelAngle\": 0\n   }\n  },\n  \"xOffset\": {\n   \"field\": \"_year\",\n   \"type\": \"ordinal\",\n   \"sort\": \"ascending\"\n  },\n  \"y\": {\n   \"field\": \"ending_balance\",\n   \"type\": \"quantitative\",\n   \"aggregate\": \"sum\",\n   \"stack\": \"zero\",\n   \"title\": \"Ending Balance (K USD)\"\n  },\n  \"color\": {\n   \"field\": \"_class\",\n   \"type\": \"nominal\",\n   \"title\": null,\n   \"scale\": {\n    \"domain\": [\n     \"1-CASA\",\n     \"2-TD\",\n     \"3-ISA\"\n    ],\n    \"range\": [\n     \"#4472c4\",\n     \"#bf9000\",\n     \"#2f5597\"\n    ]\n   }\n  },\n  \"opacity\": {\n   \"field\": \"_year\",\n   \"type\": \"ordinal\",\n   \"title\": \"Year\",\n   \"scale\": {\n    \"range\": [\n     0.45,\n     1.0\n    ]\n   }\n  }\n },\n \"config\": {\n  \"legend\": {\n   \"orient\": \"bottom\"\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "ending_balance"
+                  },
+                  {
+                    "fieldName": "month"
+                  },
+                  {
+                    "fieldName": "series"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 0,
-            "y": 23,
+            "y": 21,
             "width": 6,
             "height": 8
           }
         },
         {
           "widget": {
-            "name": "text_13",
+            "name": "text_12",
             "multilineTextboxSpec": {
               "lines": [
                 "### Deposit Mix"
@@ -1485,14 +1663,14 @@
           },
           "position": {
             "x": 0,
-            "y": 31,
+            "y": 29,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "pie_14",
+            "name": "pie_13",
             "queries": [
               {
                 "name": "main_query",
@@ -1579,14 +1757,14 @@
           },
           "position": {
             "x": 0,
-            "y": 32,
+            "y": 30,
             "width": 2,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "combo_15",
+            "name": "viz_14",
             "queries": [
               {
                 "name": "main_query",
@@ -1594,92 +1772,64 @@
                   "datasetName": "dep_term",
                   "fields": [
                     {
+                      "name": "avg_interest",
+                      "expression": "`avg_interest`"
+                    },
+                    {
+                      "name": "balance",
+                      "expression": "`balance`"
+                    },
+                    {
                       "name": "tenor",
                       "expression": "`tenor`"
-                    },
-                    {
-                      "name": "sum(balance)",
-                      "expression": "SUM(`balance`)"
-                    },
-                    {
-                      "name": "sum(avg_interest)",
-                      "expression": "SUM(`avg_interest`)"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
               "version": 1,
-              "widgetType": "combo",
-              "encodings": {
-                "x": {
-                  "fieldName": "tenor",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "tenor"
-                },
-                "y": {
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "primary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(balance)",
-                        "displayName": "Balance (K USD)"
-                      }
-                    ]
-                  },
-                  "secondary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(avg_interest)",
-                        "displayName": "Avg Interest (%)"
-                      }
-                    ]
-                  }
-                },
-                "color": {
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Balance (K USD)",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "Avg Interest (%)",
-                        "color": "#bf9000"
-                      }
-                    ]
-                  },
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Deposit by Term and IR (in Month)"
+                "title": {
+                  "value": "Deposit by Term and IR (in Month)",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"encoding\": {\n  \"x\": {\n   \"field\": \"tenor\",\n   \"type\": \"ordinal\",\n   \"title\": null,\n   \"sort\": null,\n   \"axis\": {\n    \"labelAngle\": 0\n   }\n  }\n },\n \"layer\": [\n  {\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"bar\",\n      \"color\": \"#4472c4\",\n      \"cornerRadiusEnd\": 2,\n      \"width\": {\n       \"band\": 0.6\n      },\n      \"tooltip\": true\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"balance\",\n       \"type\": \"quantitative\",\n       \"title\": \"Balance (K USD)\",\n       \"axis\": {\n        \"titleColor\": \"#4472c4\"\n       }\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"baseline\": \"top\",\n      \"dy\": 4,\n      \"fontSize\": 10,\n      \"color\": \"white\",\n      \"fontWeight\": \"bold\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"balance\",\n       \"type\": \"quantitative\"\n      },\n      \"text\": {\n       \"field\": \"balance\",\n       \"format\": \",.0f\"\n      }\n     }\n    }\n   ]\n  },\n  {\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"line\",\n      \"color\": \"#bf9000\",\n      \"strokeWidth\": 2.5,\n      \"point\": {\n       \"filled\": true,\n       \"size\": 50,\n       \"color\": \"#bf9000\"\n      },\n      \"tooltip\": true\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"avg_interest\",\n       \"type\": \"quantitative\",\n       \"title\": \"Avg Interest (%)\",\n       \"scale\": {\n        \"zero\": false,\n        \"padding\": 30\n       },\n       \"axis\": {\n        \"orient\": \"right\",\n        \"titleColor\": \"#bf9000\"\n       }\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"dy\": -12,\n      \"fontSize\": 10,\n      \"fontWeight\": \"bold\",\n      \"color\": \"#bf9000\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"avg_interest\",\n       \"type\": \"quantitative\",\n       \"scale\": {\n        \"zero\": false,\n        \"padding\": 30\n       },\n       \"axis\": {\n        \"orient\": \"right\"\n       }\n      },\n      \"text\": {\n       \"field\": \"avg_interest\",\n       \"format\": \".2f\"\n      }\n     }\n    }\n   ]\n  }\n ],\n \"resolve\": {\n  \"scale\": {\n   \"y\": \"independent\"\n  }\n },\n \"config\": {\n  \"legend\": {\n   \"orient\": \"bottom\"\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "avg_interest"
+                  },
+                  {
+                    "fieldName": "balance"
+                  },
+                  {
+                    "fieldName": "tenor"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 2,
-            "y": 32,
+            "y": 30,
             "width": 4,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "text_16",
+            "name": "text_15",
             "multilineTextboxSpec": {
               "lines": [
                 "### Customer & Product Insights"
@@ -1688,14 +1838,14 @@
           },
           "position": {
             "x": 0,
-            "y": 39,
+            "y": 37,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "pie_17",
+            "name": "pie_16",
             "queries": [
               {
                 "name": "main_query",
@@ -1762,14 +1912,14 @@
           },
           "position": {
             "x": 0,
-            "y": 40,
+            "y": 38,
             "width": 2,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_18",
+            "name": "bar_17",
             "queries": [
               {
                 "name": "main_query",
@@ -1824,14 +1974,14 @@
           },
           "position": {
             "x": 2,
-            "y": 40,
+            "y": 38,
             "width": 4,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "table_19",
+            "name": "table_18",
             "queries": [
               {
                 "name": "main_query",
@@ -1906,14 +2056,14 @@
           },
           "position": {
             "x": 0,
-            "y": 47,
+            "y": 45,
             "width": 6,
             "height": 9
           }
         },
         {
           "widget": {
-            "name": "text_20",
+            "name": "text_19",
             "multilineTextboxSpec": {
               "lines": [
                 "# Retail Deposit Performance\nUnit: USD 1,000"
@@ -1929,7 +2079,7 @@
         },
         {
           "widget": {
-            "name": "filter_21",
+            "name": "filter_20",
             "queries": [
               {
                 "name": "param_dep_tickers_report_date",
@@ -2141,7 +2291,7 @@
         },
         {
           "widget": {
-            "name": "filter_22",
+            "name": "filter_21",
             "queries": [
               {
                 "name": "options",
@@ -2371,7 +2521,7 @@
         },
         {
           "widget": {
-            "name": "filter_23",
+            "name": "filter_22",
             "queries": [
               {
                 "name": "options",
@@ -2601,7 +2751,7 @@
         },
         {
           "widget": {
-            "name": "filter_24",
+            "name": "filter_23",
             "queries": [
               {
                 "name": "options",
@@ -2678,7 +2828,7 @@
         },
         {
           "widget": {
-            "name": "filter_25",
+            "name": "filter_24",
             "queries": [
               {
                 "name": "options",
@@ -2738,7 +2888,7 @@
         },
         {
           "widget": {
-            "name": "filter_26",
+            "name": "filter_25",
             "queries": [
               {
                 "name": "options",

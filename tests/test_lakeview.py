@@ -1,6 +1,7 @@
 """Dashboard AI/BI: cấu trúc JSON hợp lệ, không chồng ô, mọi dataset chạy được trên Spark
 và mọi cột widget dùng đều có trong kết quả dataset."""
 
+import json
 import re
 
 import pytest
@@ -172,15 +173,19 @@ def test_section_order_matches_original():
                        key=lambda i: (i["position"]["y"], i["position"]["x"]))
         def title(w):   # Custom Viz lưu tiêu đề dạng {"value": ..., "fields": []}
             t = w["spec"]["frame"]["title"]
-            return t["value"] if isinstance(t, dict) else t
+            t = t["value"] if isinstance(t, dict) else t
+            if not t and "jsonSpec" in w["spec"]:   # thẻ KPI không tiêu đề: lấy mã KPI
+                m = re.search(r"datum\.kpi == '(\w+)'", w["spec"]["jsonSpec"]["spec"])
+                t = f"kpi:{m.group(1)}" if m else t
+            return t
 
         return [title(i["widget"]) for i in items
                 if "spec" in i["widget"] and not i["widget"]["spec"]["widgetType"]
                 .startswith("filter")]
 
     card = titles("card_business.lvdash.json")
-    assert card[:5] == ["New Acquisition", "Customer Base", "Using Customer",
-                        "Sales Volume (K USD)", "Balance (K USD)"]
+    assert card[:5] == ["kpi:new_acquisition", "kpi:customer_base", "kpi:using_customer",
+                        "kpi:sales_volume", "kpi:balance"]
     # Delinquency đưa lên ngay dưới Overview (theo yêu cầu)
     order = ["DPD 1+ (%)", "DPD 10+ (%)", "DPD 30+ (%)", "NPL (%)", "New Acquisition",
              "In & Out", "Customer Base & Using Mem", "Balance (K USD)",
@@ -188,10 +193,7 @@ def test_section_order_matches_original():
              "By Channels"]
     assert [t for t in card[5:] if t in order] == order
     ovd = titles("loan_overdue.lvdash.json")
-    assert ovd == ["FX (VND/USD)", "Overdue Ratio", "Overdue Balance (USD)",
-                   "Ending Balance (USD)", "Overdue Ratio vs Last Day / Month / Year",
-                   "Overdue Balance (USD) vs Last Day / Month / Year",
-                   "Ending Balance (USD) vs Last Day / Month / Year",
+    assert ovd == ["FX (VND/USD)", "kpi:overdue_ratio", "kpi:overdue_usd", "kpi:ending_usd",
                    "Overdue Trend (Last 5 Days)", "Overdue Trend (Monthly)",
                    "Overdue Amount by Debt Groups", "Overdue Amount by Product Groups",
                    "Overdue Ratio by Product Groups", "Top 5 Branches by Overdue Ratio",
@@ -199,11 +201,12 @@ def test_section_order_matches_original():
     # 1 trang (2 tab của bản gốc gộp lại theo yêu cầu)
     assert len(DASHES["retail_deposit.lvdash.json"]["pages"]) == 1
     assert titles("retail_deposit.lvdash.json") == [
-        "Ending Balance", "Monthly Avg Balance", "Retail Customers", "", "All Products Target (%)",
-        "CASA Target (%)", "TDA/ISA Target (%)", "Ending Balance - Last 30 Days",
-        "Monthly Ending Balance - Year Comparison", "Regional Deposit Distribution",
-        "Deposit by Term and IR (in Month)", "CASA Customer Distribution",
-        "Edu-Save New open Account_ Accumulate by Month", "Balance by Product (K USD)"]
+        "kpi:ending_balance", "kpi:monthly_avg_balance", "kpi:retail_customers",
+        "All Products Target (%)", "CASA Target (%)", "TDA/ISA Target (%)",
+        "Ending Balance - Last 30 Days", "Monthly Ending Balance - Year Comparison",
+        "Regional Deposit Distribution", "Deposit by Term and IR (in Month)",
+        "CASA Customer Distribution", "Edu-Save New open Account_ Accumulate by Month",
+        "Balance by Product (K USD)"]
 
 
 def test_bundle_files_up_to_date():
@@ -238,6 +241,10 @@ def test_one_palette_across_dashboards():
             colors |= set(spec.get("mark", {}).get("colors", []))
             if "style" in enc.get("value", {}):
                 colors.add(enc["value"]["style"]["color"])
+            if "jsonSpec" in spec:        # Custom Viz: màu series trong spec Vega-Lite
+                vl = json.loads(spec["jsonSpec"]["spec"])
+                for rng in re.findall(r'"range": \[([^\]]*)\]', json.dumps(vl)):
+                    colors |= set(re.findall(r'"(#[0-9a-fA-F]{6})"', rng))
         assert colors <= allowed, (name, colors - allowed)
     body = DASHES["card_business.lvdash.json"]
     maps = {}
@@ -245,9 +252,8 @@ def test_one_palette_across_dashboards():
         spec = i["widget"].get("spec", {})
         for m in spec.get("encodings", {}).get("color", {}).get("scale", {}).get("mappings", []):
             maps[(spec["frame"]["title"], m["value"])] = m["color"]
-    assert maps[("New Acquisition", "Smart Credit")] == core.S1
     assert maps[("Balance (K USD)", "Revolving")] == core.S2
-    assert maps[("By Sectors", "Purchasing")] == CARD_COLORS["sector"]["Purchasing"] == core.S1
+    assert CARD_COLORS["sector"]["Purchasing"] == core.S1
 
 
 def test_filters_bound_on_every_page():

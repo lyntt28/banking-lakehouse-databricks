@@ -635,16 +635,68 @@
         },
         {
           "widget": {
-            "name": "counter_03",
+            "name": "viz_03",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ovd_kpi",
+                  "datasetName": "ovd_kpi_cards",
                   "fields": [
                     {
-                      "name": "overdue_ratio",
-                      "expression": "`overdue_ratio`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -652,28 +704,67 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "overdue_ratio",
-                  "displayName": "Overdue Ratio",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#2f5597"
-                  }
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Overdue Ratio"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'overdue_ratio'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 4,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"title\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 32,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#2f5597\",\n    \"x\": 4,\n    \"y\": 26\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.02\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.35\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 104\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 120\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -681,21 +772,73 @@
             "x": 0,
             "y": 2,
             "width": 2,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_04",
+            "name": "viz_04",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ovd_kpi",
+                  "datasetName": "ovd_kpi_cards",
                   "fields": [
                     {
-                      "name": "overdue_usd",
-                      "expression": "`overdue_usd`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -703,27 +846,67 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "overdue_usd",
-                  "displayName": "Overdue Balance (USD)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#4472c4"
-                  }
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Overdue Balance (USD)"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'overdue_usd'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 4,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"title\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 32,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\",\n    \"x\": 4,\n    \"y\": 26\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.02\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.35\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 104\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 120\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -731,21 +914,73 @@
             "x": 2,
             "y": 2,
             "width": 2,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_05",
+            "name": "viz_05",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ovd_kpi",
+                  "datasetName": "ovd_kpi_cards",
                   "fields": [
                     {
-                      "name": "ending_usd",
-                      "expression": "`ending_usd`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -753,27 +988,67 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "ending_usd",
-                  "displayName": "Ending Balance (USD)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#bf9000"
-                  }
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Ending Balance (USD)"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'ending_usd'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 4,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"title\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 32,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#bf9000\",\n    \"x\": 4,\n    \"y\": 26\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.02\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.35\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 12,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 80\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 104\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 4,\n    \"y\": 120\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"config\": {\n  \"view\": {\n   \"stroke\": null\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -781,162 +1056,12 @@
             "x": 4,
             "y": 2,
             "width": 2,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "table_06",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "ovd_compare",
-                  "fields": [
-                    {
-                      "name": "cmp",
-                      "expression": "`cmp`"
-                    },
-                    {
-                      "name": "ratio_txt",
-                      "expression": "`ratio_txt`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "cmp",
-                    "displayName": "Compare"
-                  },
-                  {
-                    "fieldName": "ratio_txt",
-                    "displayName": "Change"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Overdue Ratio vs Last Day / Month / Year"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 5,
-            "width": 2,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "table_07",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "ovd_compare",
-                  "fields": [
-                    {
-                      "name": "cmp",
-                      "expression": "`cmp`"
-                    },
-                    {
-                      "name": "overdue_txt",
-                      "expression": "`overdue_txt`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "cmp",
-                    "displayName": "Compare"
-                  },
-                  {
-                    "fieldName": "overdue_txt",
-                    "displayName": "Change"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Overdue Balance (USD) vs Last Day / Month / Year"
-              }
-            }
-          },
-          "position": {
-            "x": 2,
-            "y": 5,
-            "width": 2,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "table_08",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "ovd_compare",
-                  "fields": [
-                    {
-                      "name": "cmp",
-                      "expression": "`cmp`"
-                    },
-                    {
-                      "name": "ending_txt",
-                      "expression": "`ending_txt`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "cmp",
-                    "displayName": "Compare"
-                  },
-                  {
-                    "fieldName": "ending_txt",
-                    "displayName": "Change"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Ending Balance (USD) vs Last Day / Month / Year"
-              }
-            }
-          },
-          "position": {
-            "x": 4,
-            "y": 5,
-            "width": 2,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "viz_09",
+            "name": "viz_06",
             "queries": [
               {
                 "name": "main_query",
@@ -994,14 +1119,14 @@
           },
           "position": {
             "x": 0,
-            "y": 8,
+            "y": 6,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "viz_10",
+            "name": "viz_07",
             "queries": [
               {
                 "name": "main_query",
@@ -1059,14 +1184,14 @@
           },
           "position": {
             "x": 3,
-            "y": 8,
+            "y": 6,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_11",
+            "name": "bar_08",
             "queries": [
               {
                 "name": "main_query",
@@ -1155,14 +1280,14 @@
           },
           "position": {
             "x": 0,
-            "y": 15,
+            "y": 13,
             "width": 6,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "pie_12",
+            "name": "pie_09",
             "queries": [
               {
                 "name": "main_query",
@@ -1215,14 +1340,14 @@
           },
           "position": {
             "x": 0,
-            "y": 22,
+            "y": 20,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_13",
+            "name": "bar_10",
             "queries": [
               {
                 "name": "main_query",
@@ -1280,14 +1405,14 @@
           },
           "position": {
             "x": 3,
-            "y": 22,
+            "y": 20,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_14",
+            "name": "bar_11",
             "queries": [
               {
                 "name": "main_query",
@@ -1345,14 +1470,14 @@
           },
           "position": {
             "x": 0,
-            "y": 29,
+            "y": 27,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_15",
+            "name": "bar_12",
             "queries": [
               {
                 "name": "main_query",
@@ -1410,14 +1535,14 @@
           },
           "position": {
             "x": 3,
-            "y": 29,
+            "y": 27,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "filter_16",
+            "name": "filter_13",
             "queries": [
               {
                 "name": "param_ovd_kpi_report_date",
@@ -1595,7 +1720,7 @@
         },
         {
           "widget": {
-            "name": "filter_17",
+            "name": "filter_14",
             "queries": [
               {
                 "name": "options",
