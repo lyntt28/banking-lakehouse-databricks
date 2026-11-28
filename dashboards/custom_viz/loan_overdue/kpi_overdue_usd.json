@@ -36,7 +36,7 @@
         "baseline": "top",
         "fontSize": 32,
         "fontWeight": "bold",
-        "color": "#191919",
+        "color": "#1f2937",
         "x": 4,
         "y": 26
       },
@@ -69,11 +69,11 @@
           "condition": [
             {
               "test": "isValid(datum.cmp1) && datum.cmp1 > 0",
-              "value": "#dc2626"
+              "value": "#c62828"
             },
             {
               "test": "isValid(datum.cmp1) && datum.cmp1 < 0",
-              "value": "#16a34a"
+              "value": "#2e7d32"
             }
           ],
           "value": "#9e9e9e"
@@ -101,11 +101,11 @@
           "condition": [
             {
               "test": "isValid(datum.cmp2) && datum.cmp2 > 0",
-              "value": "#dc2626"
+              "value": "#c62828"
             },
             {
               "test": "isValid(datum.cmp2) && datum.cmp2 < 0",
-              "value": "#16a34a"
+              "value": "#2e7d32"
             }
           ],
           "value": "#9e9e9e"
@@ -133,11 +133,11 @@
           "condition": [
             {
               "test": "isValid(datum.cmp3) && datum.cmp3 > 0",
-              "value": "#dc2626"
+              "value": "#c62828"
             },
             {
               "test": "isValid(datum.cmp3) && datum.cmp3 < 0",
-              "value": "#16a34a"
+              "value": "#2e7d32"
             }
           ],
           "value": "#9e9e9e"

@@ -16,7 +16,7 @@ Mọi spec không có "data": dữ liệu do dashboard truyền từ dataset."""
 from __future__ import annotations
 
 SCHEMA = "https://vega.github.io/schema/vega-lite/v5.json"
-GREEN, RED, GREY = "#16a34a", "#dc2626", "#9e9e9e"
+GREEN, RED, GREY = "#2e7d32", "#c62828", "#9e9e9e"   # = core.GOOD / BAD / NEUTRAL
 
 
 def _base(**kw) -> dict:

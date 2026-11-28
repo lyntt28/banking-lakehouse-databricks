@@ -23,7 +23,7 @@
         {
           "mark": {
             "type": "bar",
-            "color": "#257de0",
+            "color": "#1e88e5",
             "cornerRadiusEnd": 2,
             "width": {
               "band": 0.6
@@ -36,7 +36,7 @@
               "type": "quantitative",
               "title": "Overdue Amount (1000 USD)",
               "axis": {
-                "titleColor": "#257de0"
+                "titleColor": "#1e88e5"
               }
             }
           }
@@ -68,12 +68,12 @@
         {
           "mark": {
             "type": "line",
-            "color": "#f47230",
+            "color": "#fb8c00",
             "strokeWidth": 2.5,
             "point": {
               "filled": true,
               "size": 50,
-              "color": "#f47230"
+              "color": "#fb8c00"
             },
             "tooltip": true
           },
@@ -88,7 +88,7 @@
               },
               "axis": {
                 "orient": "right",
-                "titleColor": "#f47230"
+                "titleColor": "#fb8c00"
               }
             }
           }
@@ -99,7 +99,7 @@
             "dy": -12,
             "fontSize": 10,
             "fontWeight": "bold",
-            "color": "#f47230"
+            "color": "#fb8c00"
           },
           "encoding": {
             "y": {
