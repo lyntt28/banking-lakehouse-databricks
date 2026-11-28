@@ -51,7 +51,10 @@ from common.parallel import run_branches
 class GoldConfig:
     catalog: str
     as_of_date: str = ""
-    parallel: bool = True   # publish 3 nhánh loan / card / deposit song song (False = tuần tự)
+    # publish 3 nhánh loan / card / deposit song song. MẶC ĐỊNH TẮT: trên Spark local (metastore
+    # nhúng) ghi Delta đồng thời đọc ra bảng schema rỗng (integration test); bật sau khi đã
+    # kiểm chứng trên Databricks / Unity Catalog.
+    parallel: bool = False
 
     def t(self, schema: str, table: str) -> str:
         return fq(self.catalog, schema, table)
