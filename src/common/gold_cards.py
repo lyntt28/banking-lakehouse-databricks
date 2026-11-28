@@ -123,9 +123,10 @@ def _month_rows(daily: DataFrame, using: DataFrame | None) -> DataFrame:
     d = daily.withColumn("year_month", F.date_format("as_of_date", "yyyy-MM"))
     snap = d.groupBy("year_month").agg(F.max("as_of_date").alias("snapshot_date"),
                                        F.countDistinct("as_of_date").alias("days_with_data"))
-    stock = d.join(snap, (d.year_month == snap.year_month)
-                   & (d.as_of_date == snap.snapshot_date)) \
-        .groupBy(d.year_month, *DIMS).agg(*[F.sum(c).alias(c) for c in STOCK])
+    last = snap.select(F.col("year_month").alias("_ym"), F.col("snapshot_date").alias("_sd"))
+    stock = d.join(last, (F.col("year_month") == F.col("_ym"))
+                   & (F.col("as_of_date") == F.col("_sd"))) \
+        .groupBy("year_month", *DIMS).agg(*[F.sum(c).alias(c) for c in STOCK])
     flow = d.groupBy("year_month", *DIMS).agg(*[F.sum(c).alias(c) for c in FLOW])
     m = flow.join(stock, ["year_month", *DIMS], "full").join(snap, "year_month")
     if using is not None:

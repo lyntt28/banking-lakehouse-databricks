@@ -174,5 +174,6 @@ def test_risk_compare_in_pp(spark, views):
 def test_balance_chart_grouped_not_stacked():
     body = build_all("")["card_business.lvdash.json"]
     spec = next(i["widget"]["spec"] for p in body["pages"] for i in p["layout"]
-                if i["widget"].get("spec", {}).get("frame", {}).get("title") == "Balance (K USD)")
+                if i["widget"].get("spec", {}).get("frame", {}).get("title") == "Balance (K USD)"
+                and i["widget"]["spec"]["widgetType"] == "bar")
     assert spec["mark"]["layout"] == "group", json.dumps(spec)[:200]
