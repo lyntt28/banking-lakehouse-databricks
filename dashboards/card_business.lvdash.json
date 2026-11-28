@@ -1095,7 +1095,7 @@
                     }
                   },
                   "style": {
-                    "color": "#191919"
+                    "color": "#1a1a1a"
                   }
                 },
                 "target": {
@@ -1153,7 +1153,7 @@
                     }
                   },
                   "style": {
-                    "color": "#191919"
+                    "color": "#1a1a1a"
                   }
                 },
                 "target": {
@@ -1211,7 +1211,7 @@
                     }
                   },
                   "style": {
-                    "color": "#191919"
+                    "color": "#1a1a1a"
                   }
                 },
                 "target": {
@@ -1269,7 +1269,7 @@
                     }
                   },
                   "style": {
-                    "color": "#191919"
+                    "color": "#1a1a1a"
                   }
                 },
                 "target": {
@@ -1327,7 +1327,7 @@
                     }
                   },
                   "style": {
-                    "color": "#191919"
+                    "color": "#1a1a1a"
                   }
                 },
                 "target": {
@@ -1418,7 +1418,7 @@
                     "suffix": "%"
                   },
                   "style": {
-                    "color": "#191919"
+                    "color": "#1a1a1a"
                   }
                 },
                 "target": {
@@ -1477,7 +1477,7 @@
                     "suffix": "%"
                   },
                   "style": {
-                    "color": "#191919"
+                    "color": "#1a1a1a"
                   }
                 },
                 "target": {
@@ -1536,7 +1536,7 @@
                     "suffix": "%"
                   },
                   "style": {
-                    "color": "#191919"
+                    "color": "#1a1a1a"
                   }
                 },
                 "target": {
@@ -1595,7 +1595,7 @@
                     "suffix": "%"
                   },
                   "style": {
-                    "color": "#191919"
+                    "color": "#1a1a1a"
                   }
                 },
                 "target": {
@@ -1683,11 +1683,11 @@
                     "mappings": [
                       {
                         "value": "Smart Credit",
-                        "color": "#257de0"
+                        "color": "#17a2b8"
                       },
                       {
                         "value": "Branches",
-                        "color": "#f47230"
+                        "color": "#eb9a14"
                       }
                     ]
                   },
@@ -1764,7 +1764,7 @@
                     "mappings": [
                       {
                         "value": "New Issuance",
-                        "color": "#257de0"
+                        "color": "#17a2b8"
                       },
                       {
                         "value": "Termination",
@@ -1861,11 +1861,11 @@
                     "mappings": [
                       {
                         "value": "Customer Base",
-                        "color": "#257de0"
+                        "color": "#17a2b8"
                       },
                       {
                         "value": "Using Mem",
-                        "color": "#f47230"
+                        "color": "#eb9a14"
                       }
                     ]
                   },
@@ -1939,11 +1939,11 @@
                     "mappings": [
                       {
                         "value": "Balance",
-                        "color": "#257de0"
+                        "color": "#17a2b8"
                       },
                       {
                         "value": "Revolving",
-                        "color": "#f47230"
+                        "color": "#eb9a14"
                       }
                     ]
                   },
@@ -2013,7 +2013,7 @@
               },
               "mark": {
                 "colors": [
-                  "#257de0"
+                  "#17a2b8"
                 ]
               }
             }
@@ -2072,7 +2072,7 @@
               },
               "mark": {
                 "colors": [
-                  "#f47230"
+                  "#eb9a14"
                 ]
               }
             }
@@ -2140,19 +2140,19 @@
                     "mappings": [
                       {
                         "value": "Purchasing",
-                        "color": "#257de0"
+                        "color": "#17a2b8"
                       },
                       {
                         "value": "Installment",
-                        "color": "#f47230"
+                        "color": "#eb9a14"
                       },
                       {
                         "value": "Cash Advance",
-                        "color": "#00b894"
+                        "color": "#1e5bc6"
                       },
                       {
                         "value": "Flexi",
-                        "color": "#f2a600"
+                        "color": "#7cb342"
                       }
                     ]
                   },
@@ -2215,11 +2215,11 @@
                     "mappings": [
                       {
                         "value": "Domestic",
-                        "color": "#257de0"
+                        "color": "#17a2b8"
                       },
                       {
                         "value": "X-Border",
-                        "color": "#f47230"
+                        "color": "#eb9a14"
                       }
                     ]
                   },
@@ -2282,11 +2282,11 @@
                     "mappings": [
                       {
                         "value": "POS (Offline)",
-                        "color": "#257de0"
+                        "color": "#17a2b8"
                       },
                       {
                         "value": "Online",
-                        "color": "#f47230"
+                        "color": "#eb9a14"
                       }
                     ]
                   },
