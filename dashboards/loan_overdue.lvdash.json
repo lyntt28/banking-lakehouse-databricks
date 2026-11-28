@@ -565,7 +565,7 @@
   "pages": [
     {
       "name": "overdue",
-      "displayName": "Retail Loan Overdue Tracking",
+      "displayName": "Card Overdue Tracking",
       "layout": [
         {
           "widget": {

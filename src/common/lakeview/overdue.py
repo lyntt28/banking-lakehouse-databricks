@@ -183,7 +183,7 @@ def _with_kpi_cards(sql: dict[str, str]) -> dict[str, str]:
 
 
 def overdue_dashboard(catalog: str) -> dict:
-    d = Dash("overdue", "Retail Loan Overdue Tracking")
+    d = Dash("overdue", "Card Overdue Tracking")
     d.param("report_date", "Report date", "DATE", "now/d")
     d.param("branch", "Branch", "STRING", "all")
     sql = _with_kpi_cards(overdue_sql(catalog))

@@ -12,7 +12,7 @@ resources:
       embed_credentials: false
 
     loan_overdue:
-      display_name: Retail Loan Overdue Tracking
+      display_name: Card Overdue Tracking
       file_path: ../dashboards/loan_overdue.lvdash.json
       warehouse_id: ${var.warehouse_id}
       dataset_catalog: ${var.catalog}
