@@ -190,17 +190,14 @@ def test_section_order_matches_original():
                    "Overdue Amount by Debt Groups", "Overdue Amount by Product Groups",
                    "Overdue Ratio by Product Groups", "Top 5 Branches by Overdue Ratio",
                    "Top 5 Branches - Overdue Amount"]
-    # 2 trang như bản HTML gốc (Overview & Performance / Customer & Product Insights)
-    assert [p["displayName"] for p in DASHES["retail_deposit.lvdash.json"]["pages"]] == [
-        "Overview & Performance", "Customer & Product Insights"]
+    # 1 trang (2 tab của bản gốc gộp lại theo yêu cầu)
+    assert len(DASHES["retail_deposit.lvdash.json"]["pages"]) == 1
     assert titles("retail_deposit.lvdash.json") == [
         "Ending Balance", "Monthly Avg Balance", "Retail Customers", "", "All Products Target (%)",
         "CASA Target (%)", "TDA/ISA Target (%)", "Ending Balance - Last 30 Days",
         "Monthly Ending Balance - Year Comparison", "Regional Deposit Distribution",
-        "Deposit by Term and IR (in Month)"]
-    assert titles("retail_deposit.lvdash.json", 1) == [
-        "CASA Customer Distribution", "Edu-Save New open Account_ Accumulate by Month",
-        "Balance by Product (K USD)"]
+        "Deposit by Term and IR (in Month)", "CASA Customer Distribution",
+        "Edu-Save New open Account_ Accumulate by Month", "Balance by Product (K USD)"]
 
 
 def test_bundle_files_up_to_date():

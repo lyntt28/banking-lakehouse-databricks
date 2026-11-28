@@ -238,8 +238,8 @@ def deposit_dashboard(catalog: str) -> dict:
     c = DEP_COLORS
 
     def header_and_filters(page_filters: tuple[str, ...]) -> None:
-        """Header + bộ lọc của trang. Gọi SAU khi đặt widget: bộ lọc chỉ gắn dataset có trên
-        trang hiện tại (Dash.param_filter khi có nhiều trang)."""
+        """Header + bộ lọc. Mỗi bộ lọc tự gắn vào đúng các dataset có tham số đó (Product chỉ
+        Daily / Regional; Currency + Nationality chỉ Balance by Product)."""
         d.text("# Retail Deposit Performance\nUnit: USD 1,000", 0, 0, 3, 2)
         d.param_filter("report_date", "Report date", "filter-date-picker", 3, 0)
         for i, n in enumerate(page_filters):
@@ -247,8 +247,7 @@ def deposit_dashboard(catalog: str) -> dict:
             d.param_filter(n, n.capitalize(), "filter-single-select", x, y,
                            options_ds=opt[n], options_col=n)
 
-    # ---- Trang 1: Overview & Performance (như tab 1 của bản HTML gốc)
-    d.page("overview", "Overview & Performance")
+    # 1 trang: Overview & Performance rồi Customer & Product Insights (2 tab của bản gốc gộp lại)
     Y = 2   # chừa 1 hàng cho bộ lọc
     d.text("### Overview", 0, 2, 3)
     for i, (col, title, key, fmt) in enumerate([
@@ -281,21 +280,17 @@ def deposit_dashboard(catalog: str) -> dict:
     d.combo(ds["dep_term"], "Deposit by Term and IR (in Month)", 2, 30 + Y, 4, 7, cat="tenor",
             bar="balance", line="avg_interest", bar_title="Balance (K USD)",
             line_title="Avg Interest (%)", bar_color=c["term_bar"], line_color=c["term_line"])
-    header_and_filters(("region", "branch", "product"))
-
-    # ---- Trang 2: Customer & Product Insights (tab 2 của bản gốc)
-    d.page("insights", "Customer & Product Insights")
-    d.text("### Customer & Product Insights", 0, 2, 3)
-    d.chart("pie", ds["dep_casa_customer"], "CASA Customer Distribution", 0, 3 + Y, 2, 7,
+    d.text("### Customer & Product Insights", 0, 37 + Y)
+    d.chart("pie", ds["dep_casa_customer"], "CASA Customer Distribution", 0, 38 + Y, 2, 7,
             cat="segment", val="customers", colors=c["casa"], cat_title="Segment",
             val_title="Customers")
     d.chart("bar", ds["dep_edusave"], "Edu-Save New open Account_ Accumulate by Month",
-            2, 3 + Y, 4, 7, cat="month", val="cumulative_accounts",
+            2, 38 + Y, 4, 7, cat="month", val="cumulative_accounts",
             single_color=c["edusave"], cat_title="Month", val_title="Accounts")
     d.table(ds["dep_by_product"], "Balance by Product (K USD)", [
         ("product", "Balance by Product", "text"), ("ending_balance", "Ending Balance", "num"),
         ("portion", "Portion (%)", "num"), ("diff_last_day", "+/- Last Day", "num"),
         ("diff_last_month", "+/- Last Month", "num"),
-        ("diff_last_year", "+/- Last Year", "num")], 0, 10 + Y, 6, 9)
-    header_and_filters(("region", "branch", "currency", "nationality"))
+        ("diff_last_year", "+/- Last Year", "num")], 0, 45 + Y, 6, 9)
+    header_and_filters(("region", "branch", "product", "currency", "nationality"))
     return d.to_json()

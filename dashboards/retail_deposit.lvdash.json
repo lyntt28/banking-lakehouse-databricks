@@ -898,8 +898,8 @@
   ],
   "pages": [
     {
-      "name": "overview",
-      "displayName": "Overview & Performance",
+      "name": "retail_deposit",
+      "displayName": "Retail Deposit Performance",
       "layout": [
         {
           "widget": {
@@ -1673,6 +1673,237 @@
             "name": "text_16",
             "multilineTextboxSpec": {
               "lines": [
+                "### Customer & Product Insights"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 39,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "pie_17",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dep_casa_customer",
+                  "fields": [
+                    {
+                      "name": "segment",
+                      "expression": "`segment`"
+                    },
+                    {
+                      "name": "sum(customers)",
+                      "expression": "SUM(`customers`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "sum(customers)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Customers"
+                },
+                "color": {
+                  "fieldName": "segment",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "Non-CASA",
+                        "color": "#223A5E"
+                      },
+                      {
+                        "value": "Active",
+                        "color": "#009688"
+                      },
+                      {
+                        "value": "Dormant",
+                        "color": "#b0b0b0"
+                      }
+                    ]
+                  },
+                  "displayName": "Segment"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "CASA Customer Distribution"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 40,
+            "width": 2,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_18",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dep_edusave",
+                  "fields": [
+                    {
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "sum(cumulative_accounts)",
+                      "expression": "SUM(`cumulative_accounts`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Month"
+                },
+                "y": {
+                  "fieldName": "sum(cumulative_accounts)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Accounts"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Edu-Save New open Account_ Accumulate by Month"
+              },
+              "mark": {
+                "colors": [
+                  "#223A5E"
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 40,
+            "width": 4,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "table_19",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dep_by_product",
+                  "fields": [
+                    {
+                      "name": "product",
+                      "expression": "`product`"
+                    },
+                    {
+                      "name": "ending_balance",
+                      "expression": "`ending_balance`"
+                    },
+                    {
+                      "name": "portion",
+                      "expression": "`portion`"
+                    },
+                    {
+                      "name": "diff_last_day",
+                      "expression": "`diff_last_day`"
+                    },
+                    {
+                      "name": "diff_last_month",
+                      "expression": "`diff_last_month`"
+                    },
+                    {
+                      "name": "diff_last_year",
+                      "expression": "`diff_last_year`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "product",
+                    "displayName": "Balance by Product"
+                  },
+                  {
+                    "fieldName": "ending_balance",
+                    "displayName": "Ending Balance"
+                  },
+                  {
+                    "fieldName": "portion",
+                    "displayName": "Portion (%)"
+                  },
+                  {
+                    "fieldName": "diff_last_day",
+                    "displayName": "+/- Last Day"
+                  },
+                  {
+                    "fieldName": "diff_last_month",
+                    "displayName": "+/- Last Month"
+                  },
+                  {
+                    "fieldName": "diff_last_year",
+                    "displayName": "+/- Last Year"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Balance by Product (K USD)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 47,
+            "width": 6,
+            "height": 9
+          }
+        },
+        {
+          "widget": {
+            "name": "text_20",
+            "multilineTextboxSpec": {
+              "lines": [
                 "# Retail Deposit Performance\nUnit: USD 1,000"
               ]
             }
@@ -1686,7 +1917,7 @@
         },
         {
           "widget": {
-            "name": "filter_17",
+            "name": "filter_21",
             "queries": [
               {
                 "name": "param_dep_tickers_report_date",
@@ -1778,6 +2009,58 @@
                   ],
                   "disaggregated": false
                 }
+              },
+              {
+                "name": "param_dep_casa_customer_report_date",
+                "query": {
+                  "datasetName": "dep_casa_customer",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_edusave_report_date",
+                "query": {
+                  "datasetName": "dep_edusave",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_by_product_report_date",
+                "query": {
+                  "datasetName": "dep_by_product",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_kpi_cards_report_date",
+                "query": {
+                  "datasetName": "dep_kpi_cards",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
               }
             ],
             "spec": {
@@ -1812,6 +2095,22 @@
                   {
                     "parameterName": "report_date",
                     "queryName": "param_dep_term_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_dep_casa_customer_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_dep_edusave_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_dep_by_product_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_dep_kpi_cards_report_date"
                   }
                 ]
               },
@@ -1830,7 +2129,7 @@
         },
         {
           "widget": {
-            "name": "filter_18",
+            "name": "filter_22",
             "queries": [
               {
                 "name": "options",
@@ -1935,6 +2234,58 @@
                   ],
                   "disaggregated": false
                 }
+              },
+              {
+                "name": "param_dep_casa_customer_region",
+                "query": {
+                  "datasetName": "dep_casa_customer",
+                  "parameters": [
+                    {
+                      "name": "region",
+                      "keyword": "region"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_edusave_region",
+                "query": {
+                  "datasetName": "dep_edusave",
+                  "parameters": [
+                    {
+                      "name": "region",
+                      "keyword": "region"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_by_product_region",
+                "query": {
+                  "datasetName": "dep_by_product",
+                  "parameters": [
+                    {
+                      "name": "region",
+                      "keyword": "region"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_kpi_cards_region",
+                "query": {
+                  "datasetName": "dep_kpi_cards",
+                  "parameters": [
+                    {
+                      "name": "region",
+                      "keyword": "region"
+                    }
+                  ],
+                  "disaggregated": false
+                }
               }
             ],
             "spec": {
@@ -1974,6 +2325,22 @@
                   {
                     "parameterName": "region",
                     "queryName": "param_dep_term_region"
+                  },
+                  {
+                    "parameterName": "region",
+                    "queryName": "param_dep_casa_customer_region"
+                  },
+                  {
+                    "parameterName": "region",
+                    "queryName": "param_dep_edusave_region"
+                  },
+                  {
+                    "parameterName": "region",
+                    "queryName": "param_dep_by_product_region"
+                  },
+                  {
+                    "parameterName": "region",
+                    "queryName": "param_dep_kpi_cards_region"
                   }
                 ]
               },
@@ -1992,7 +2359,7 @@
         },
         {
           "widget": {
-            "name": "filter_19",
+            "name": "filter_23",
             "queries": [
               {
                 "name": "options",
@@ -2097,6 +2464,58 @@
                   ],
                   "disaggregated": false
                 }
+              },
+              {
+                "name": "param_dep_casa_customer_branch",
+                "query": {
+                  "datasetName": "dep_casa_customer",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_edusave_branch",
+                "query": {
+                  "datasetName": "dep_edusave",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_by_product_branch",
+                "query": {
+                  "datasetName": "dep_by_product",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_dep_kpi_cards_branch",
+                "query": {
+                  "datasetName": "dep_kpi_cards",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
               }
             ],
             "spec": {
@@ -2136,6 +2555,22 @@
                   {
                     "parameterName": "branch",
                     "queryName": "param_dep_term_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_casa_customer_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_edusave_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_by_product_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_dep_kpi_cards_branch"
                   }
                 ]
               },
@@ -2154,7 +2589,7 @@
         },
         {
           "widget": {
-            "name": "filter_20",
+            "name": "filter_24",
             "queries": [
               {
                 "name": "options",
@@ -2228,528 +2663,10 @@
             "width": 1,
             "height": 2
           }
-        }
-      ],
-      "pageType": "PAGE_TYPE_CANVAS"
-    },
-    {
-      "name": "insights",
-      "displayName": "Customer & Product Insights",
-      "layout": [
-        {
-          "widget": {
-            "name": "text_21",
-            "multilineTextboxSpec": {
-              "lines": [
-                "### Customer & Product Insights"
-              ]
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 2,
-            "width": 3,
-            "height": 1
-          }
         },
         {
           "widget": {
-            "name": "pie_22",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "dep_casa_customer",
-                  "fields": [
-                    {
-                      "name": "segment",
-                      "expression": "`segment`"
-                    },
-                    {
-                      "name": "sum(customers)",
-                      "expression": "SUM(`customers`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 3,
-              "widgetType": "pie",
-              "encodings": {
-                "angle": {
-                  "fieldName": "sum(customers)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "Customers"
-                },
-                "color": {
-                  "fieldName": "segment",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Non-CASA",
-                        "color": "#223A5E"
-                      },
-                      {
-                        "value": "Active",
-                        "color": "#009688"
-                      },
-                      {
-                        "value": "Dormant",
-                        "color": "#b0b0b0"
-                      }
-                    ]
-                  },
-                  "displayName": "Segment"
-                },
-                "label": {
-                  "show": true
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "CASA Customer Distribution"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 5,
-            "width": 2,
-            "height": 7
-          }
-        },
-        {
-          "widget": {
-            "name": "bar_23",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "dep_edusave",
-                  "fields": [
-                    {
-                      "name": "month",
-                      "expression": "`month`"
-                    },
-                    {
-                      "name": "sum(cumulative_accounts)",
-                      "expression": "SUM(`cumulative_accounts`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "Month"
-                },
-                "y": {
-                  "fieldName": "sum(cumulative_accounts)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "Accounts"
-                },
-                "label": {
-                  "show": true
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Edu-Save New open Account_ Accumulate by Month"
-              },
-              "mark": {
-                "colors": [
-                  "#223A5E"
-                ]
-              }
-            }
-          },
-          "position": {
-            "x": 2,
-            "y": 5,
-            "width": 4,
-            "height": 7
-          }
-        },
-        {
-          "widget": {
-            "name": "table_24",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "dep_by_product",
-                  "fields": [
-                    {
-                      "name": "product",
-                      "expression": "`product`"
-                    },
-                    {
-                      "name": "ending_balance",
-                      "expression": "`ending_balance`"
-                    },
-                    {
-                      "name": "portion",
-                      "expression": "`portion`"
-                    },
-                    {
-                      "name": "diff_last_day",
-                      "expression": "`diff_last_day`"
-                    },
-                    {
-                      "name": "diff_last_month",
-                      "expression": "`diff_last_month`"
-                    },
-                    {
-                      "name": "diff_last_year",
-                      "expression": "`diff_last_year`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "product",
-                    "displayName": "Balance by Product"
-                  },
-                  {
-                    "fieldName": "ending_balance",
-                    "displayName": "Ending Balance"
-                  },
-                  {
-                    "fieldName": "portion",
-                    "displayName": "Portion (%)"
-                  },
-                  {
-                    "fieldName": "diff_last_day",
-                    "displayName": "+/- Last Day"
-                  },
-                  {
-                    "fieldName": "diff_last_month",
-                    "displayName": "+/- Last Month"
-                  },
-                  {
-                    "fieldName": "diff_last_year",
-                    "displayName": "+/- Last Year"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Balance by Product (K USD)"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 12,
-            "width": 6,
-            "height": 9
-          }
-        },
-        {
-          "widget": {
-            "name": "text_25",
-            "multilineTextboxSpec": {
-              "lines": [
-                "# Retail Deposit Performance\nUnit: USD 1,000"
-              ]
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 0,
-            "width": 3,
-            "height": 2
-          }
-        },
-        {
-          "widget": {
-            "name": "filter_26",
-            "queries": [
-              {
-                "name": "param_dep_casa_customer_report_date",
-                "query": {
-                  "datasetName": "dep_casa_customer",
-                  "parameters": [
-                    {
-                      "name": "report_date",
-                      "keyword": "report_date"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_edusave_report_date",
-                "query": {
-                  "datasetName": "dep_edusave",
-                  "parameters": [
-                    {
-                      "name": "report_date",
-                      "keyword": "report_date"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_by_product_report_date",
-                "query": {
-                  "datasetName": "dep_by_product",
-                  "parameters": [
-                    {
-                      "name": "report_date",
-                      "keyword": "report_date"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "filter-date-picker",
-              "encodings": {
-                "fields": [
-                  {
-                    "parameterName": "report_date",
-                    "queryName": "param_dep_casa_customer_report_date"
-                  },
-                  {
-                    "parameterName": "report_date",
-                    "queryName": "param_dep_edusave_report_date"
-                  },
-                  {
-                    "parameterName": "report_date",
-                    "queryName": "param_dep_by_product_report_date"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Report date"
-              }
-            }
-          },
-          "position": {
-            "x": 3,
-            "y": 0,
-            "width": 1,
-            "height": 2
-          }
-        },
-        {
-          "widget": {
-            "name": "filter_27",
-            "queries": [
-              {
-                "name": "options",
-                "query": {
-                  "datasetName": "dep_region_options",
-                  "fields": [
-                    {
-                      "name": "region",
-                      "expression": "`region`"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_casa_customer_region",
-                "query": {
-                  "datasetName": "dep_casa_customer",
-                  "parameters": [
-                    {
-                      "name": "region",
-                      "keyword": "region"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_edusave_region",
-                "query": {
-                  "datasetName": "dep_edusave",
-                  "parameters": [
-                    {
-                      "name": "region",
-                      "keyword": "region"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_by_product_region",
-                "query": {
-                  "datasetName": "dep_by_product",
-                  "parameters": [
-                    {
-                      "name": "region",
-                      "keyword": "region"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "filter-single-select",
-              "encodings": {
-                "fields": [
-                  {
-                    "fieldName": "region",
-                    "displayName": "Region",
-                    "queryName": "options"
-                  },
-                  {
-                    "parameterName": "region",
-                    "queryName": "param_dep_casa_customer_region"
-                  },
-                  {
-                    "parameterName": "region",
-                    "queryName": "param_dep_edusave_region"
-                  },
-                  {
-                    "parameterName": "region",
-                    "queryName": "param_dep_by_product_region"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Region"
-              }
-            }
-          },
-          "position": {
-            "x": 4,
-            "y": 0,
-            "width": 1,
-            "height": 2
-          }
-        },
-        {
-          "widget": {
-            "name": "filter_28",
-            "queries": [
-              {
-                "name": "options",
-                "query": {
-                  "datasetName": "dep_branch_options",
-                  "fields": [
-                    {
-                      "name": "branch",
-                      "expression": "`branch`"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_casa_customer_branch",
-                "query": {
-                  "datasetName": "dep_casa_customer",
-                  "parameters": [
-                    {
-                      "name": "branch",
-                      "keyword": "branch"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_edusave_branch",
-                "query": {
-                  "datasetName": "dep_edusave",
-                  "parameters": [
-                    {
-                      "name": "branch",
-                      "keyword": "branch"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              },
-              {
-                "name": "param_dep_by_product_branch",
-                "query": {
-                  "datasetName": "dep_by_product",
-                  "parameters": [
-                    {
-                      "name": "branch",
-                      "keyword": "branch"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "filter-single-select",
-              "encodings": {
-                "fields": [
-                  {
-                    "fieldName": "branch",
-                    "displayName": "Branch",
-                    "queryName": "options"
-                  },
-                  {
-                    "parameterName": "branch",
-                    "queryName": "param_dep_casa_customer_branch"
-                  },
-                  {
-                    "parameterName": "branch",
-                    "queryName": "param_dep_edusave_branch"
-                  },
-                  {
-                    "parameterName": "branch",
-                    "queryName": "param_dep_by_product_branch"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Branch"
-              }
-            }
-          },
-          "position": {
-            "x": 5,
-            "y": 0,
-            "width": 1,
-            "height": 2
-          }
-        },
-        {
-          "widget": {
-            "name": "filter_29",
+            "name": "filter_25",
             "queries": [
               {
                 "name": "options",
@@ -2801,7 +2718,7 @@
             }
           },
           "position": {
-            "x": 3,
+            "x": 4,
             "y": 2,
             "width": 1,
             "height": 2
@@ -2809,7 +2726,7 @@
         },
         {
           "widget": {
-            "name": "filter_30",
+            "name": "filter_26",
             "queries": [
               {
                 "name": "options",
@@ -2861,7 +2778,7 @@
             }
           },
           "position": {
-            "x": 4,
+            "x": 5,
             "y": 2,
             "width": 1,
             "height": 2
