@@ -249,9 +249,33 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
 
         put(card_daily, "card_mart_kpi_daily")
         put(gc.build_mart_card_spend_mix(ctx_day, day_s), "card_mart_spend_mix")
-        put(gc.build_mart_card_kpi_monthly(cand("card_mart_kpi_daily"),
-                                           spark.table(S("ref_targets")))
-            .withColumn("as_of_date", day), "card_mart_kpi_monthly")
+        # tháng: chỉ tính lại tháng của ngày báo cáo (MTD từ mart ngày + giao dịch MTD cho số
+        # thẻ dùng distinct); tháng trước chép từ mart tháng của ngày publish trước
+        month_start = F.trunc(day, "month")
+        card_hist = cand("card_mart_kpi_daily")
+        month_daily = card_hist.filter((F.col("as_of_date") >= month_start)
+                                       & (F.col("as_of_date") <= day))
+        txns_mtd = spark.table(S("card_transactions_hist")).filter(
+            (F.col("_as_of_date") >= month_start) & (F.col("_as_of_date") <= day))
+        prev_card_m, card_bootstrap = None, {}
+        if spark.catalog.tableExists(G("card_mart_kpi_monthly")):
+            pm = cand("card_mart_kpi_monthly").filter(F.col("as_of_date") < day)
+            if "flow_complete" in pm.columns:      # bảng cũ (trước nâng cấp) -> dựng lại
+                last = pm.agg(F.max("as_of_date")).first()[0]
+                if last is not None:
+                    prev_card_m = pm.filter(F.col("as_of_date") == F.lit(last))
+        if prev_card_m is None:   # lần đầu / sau nâng cấp: dựng từ lịch sử (từ tháng 1 năm trước)
+            start = F.lit(f"{int(day_s[:4]) - 1}-01-01").cast("date")
+            card_bootstrap = dict(
+                history_daily=card_hist.filter((F.col("as_of_date") >= start)
+                                               & (F.col("as_of_date") < month_start)),
+                history_using=gc.using_members_by_month(
+                    spark.table(S("card_transactions_hist")).filter(
+                        (F.col("_as_of_date") >= start) & (F.col("_as_of_date") < month_start)),
+                    spark.table(S("card_master"))))
+        put(gc.build_mart_card_kpi_monthly(
+            month_daily, day_s, using_mtd=gc.using_members_by_month(txns_mtd, cards_day),
+            previous=prev_card_m, **card_bootstrap), "card_mart_kpi_monthly")
         put(card_overdue, "card_mart_overdue_daily")
 
         fx_day = spark.table(S("ref_fx_rates")).filter(F.col("rate_date") == day)

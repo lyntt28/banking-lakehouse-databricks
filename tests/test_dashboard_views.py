@@ -30,8 +30,9 @@ def marts(spark, results):
         "loan_mart_npl_daily": g.build_mart_npl_daily(overdue),
         "card_mart_kpi_daily": card_daily,
         "card_mart_spend_mix": gc.build_mart_card_spend_mix(r["card_transactions_hist"], AS_OF),
-        "card_mart_kpi_monthly": gc.build_mart_card_kpi_monthly(card_daily, r["ref_targets"])
-        .withColumn("as_of_date", F.lit(AS_OF).cast("date")),
+        "card_mart_kpi_monthly": gc.build_mart_card_kpi_monthly(
+            card_daily, AS_OF, using_mtd=gc.using_members_by_month(
+                r["card_transactions_hist"], r["card_master"])),
         "dep_mart_trend": trend,
         "dep_mart_monthly": gd.build_mart_deposit_monthly(trend, AS_OF),
         "dep_mart_by_tenor": gd.build_mart_deposit_by_tenor(r["core_accounts"], dim_product,

@@ -217,8 +217,10 @@ def cleanup_superseded(spark, catalog: str, table: str, day_s: str, batch_id: st
 # ---------------------------------------------------------------- reporting calendar (Overdue)
 OVERDUE_CALENDAR = "overdue_report_calendar"
 DEPOSIT_CALENDAR = "deposit_report_calendar"
+CARD_CALENDAR = "card_report_calendar"
 # view lịch báo cáo -> bảng Gold quyết định "ngày đã publish" của dashboard đó
-CALENDARS = {OVERDUE_CALENDAR: "card_mart_overdue_daily", DEPOSIT_CALENDAR: "dep_mart_trend"}
+CALENDARS = {OVERDUE_CALENDAR: "card_mart_overdue_daily", DEPOSIT_CALENDAR: "dep_mart_trend",
+             CARD_CALENDAR: "card_mart_kpi_daily"}
 
 
 def published_dates_sql(catalog: str, table: str) -> str:

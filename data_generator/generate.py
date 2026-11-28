@@ -56,6 +56,20 @@ class Sizes:
     card_txns_per_day: int = 50_000
 
 
+def card_targets(cards: list[dict], sizes: "Sizes", nb: int) -> dict[str, float]:
+    """Chỉ tiêu tháng / chi nhánh cho 5 KPI thẻ, tách theo loại KH theo tỷ trọng thẻ."""
+    out = {}
+    n = max(1, len(cards))
+    for t in ("CN", "TC"):
+        share = sum(1 for c in cards if c["cust_type"] == t) / n
+        out[f"CARD_NEW_ACQ_{t}"] = len(cards) * 0.0015 * 30 / nb * share
+        out[f"CARD_CUSTOMER_BASE_{t}"] = len(cards) * 1.02 / nb * share
+        out[f"CARD_USING_{t}"] = len(cards) * 0.5 / nb * share
+        out[f"CARD_SALES_VOLUME_{t}"] = sizes.card_txns_per_day * 2.5e6 * 30 / nb * share
+        out[f"CARD_BALANCE_{t}"] = len(cards) * 8e6 / nb * share
+    return out
+
+
 def months_since_prev_january(start: date) -> int:
     """Số mốc cuối tháng từ tháng 1 năm trước tới tháng liền trước `start` (đủ so sánh năm
     trước / năm nay cho Monthly Ending Balance của Retail Deposit)."""
@@ -125,9 +139,7 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
             add("targets", write_csv(path("targets", "targets.csv"), ref.TARGET_HEADER,
                                      [r for y in sorted({x.year for x in dates})
                                       for r in ref.target_rows(seed, y, {
-                                          "CARD_NEW_ACQ": len(cards) * 0.0015 * 30 / nb,
-                                          "CARD_SALES_VOLUME": sizes.card_txns_per_day
-                                          * 2.5e6 * 30 / nb,
+                                          **card_targets(cards, sizes, nb),
                                           # tăng trưởng năm ~8% số dư / chi nhánh
                                           "DEPOSIT_GROWTH_ALL": 0.08 * dep_vnd / nb,
                                           "DEPOSIT_GROWTH_CASA": 0.08 * dep_sum(

@@ -24,57 +24,65 @@ PUB = "(SELECT max(as_of_date) FROM {catalog}.ops.published_batches)"
 # ============================================================ 1. CARD BUSINESS
 _CARD_MONTH = f"""
 WITH m AS (
-  SELECT year_month, max(last_date) AS last_date,
-         sum(new_members) AS new_acquisition, sum(eop_members) AS customer_base,
-         sum(using_members) AS using_customers, sum(spend_amt) AS sales_volume,
+  SELECT year_month, max(snapshot_date) AS last_date,
+         CASE WHEN bool_and(flow_complete) THEN sum(new_members) END AS new_acquisition,
+         sum(eop_members) AS customer_base,
+         CASE WHEN bool_and(flow_complete) THEN sum(using_members) END AS using_customers,
+         CASE WHEN bool_and(flow_complete) THEN sum(spend_amt) END AS sales_volume,
          sum(balance) AS balance, sum(revolving_balance) AS revolving_balance,
-         sum(closed_members) AS closed_members,
-         sum(target_new_month) AS target_new_month, sum(target_sales_month) AS target_sales_month,
-         sum(target_new_year) AS target_new_year, sum(target_sales_year) AS target_sales_year,
-         sum(new_members_ytd) AS new_ytd, sum(spend_amt_ytd) AS sales_ytd
+         CASE WHEN bool_and(flow_complete) THEN sum(closed_members) END AS closed_members,
+         CASE WHEN bool_and(ytd_complete) THEN sum(new_members_ytd) END AS new_ytd,
+         CASE WHEN bool_and(ytd_complete) THEN sum(spend_amt_ytd) END AS sales_ytd
   FROM {G}.card_mart_kpi_monthly WHERE as_of_date = {PUB} GROUP BY year_month)
 """
 
 _v("card", 1, "v_card_kpi_cards",
-   "5 KPI cards: New Acquisition, Customer Base, Using Customer, Sales Volume, Balance "
-   "+ MoM, YoY, % month / year target",
+   "5 KPI cards (MTD flow, report-date stock) + vs last month, vs last year-end, "
+   "% month / year target (all customer types)",
    _CARD_MONTH + """
-, x AS (
-  SELECT m.*,
-    lag(new_acquisition) OVER (ORDER BY year_month) AS new_prev_m,
-    lag(customer_base) OVER (ORDER BY year_month) AS base_prev_m,
-    lag(using_customers) OVER (ORDER BY year_month) AS using_prev_m,
-    lag(sales_volume) OVER (ORDER BY year_month) AS sales_prev_m,
-    lag(balance) OVER (ORDER BY year_month) AS balance_prev_m
-  FROM m)
+, t AS (
+  SELECT substr(metric_code, 1, length(metric_code) - 3) AS code, period_type,
+         sum(target_value) AS target
+  FROM {catalog}.silver.ref_targets
+  WHERE left(metric_code, 5) = 'CARD_'
+    AND ((period_type = 'MONTH' AND period = date_format(""" + PUB + """, 'yyyy-MM'))
+      OR (period_type = 'YEAR' AND period = CAST(year(""" + PUB + """) AS STRING)))
+  GROUP BY 1, 2),
+tt AS (SELECT
+  max(CASE WHEN code = 'CARD_NEW_ACQ' AND period_type = 'MONTH' THEN target END) AS new_tm,
+  max(CASE WHEN code = 'CARD_NEW_ACQ' AND period_type = 'YEAR' THEN target END) AS new_ty,
+  max(CASE WHEN code = 'CARD_SALES_VOLUME' AND period_type = 'MONTH' THEN target END) AS sal_tm,
+  max(CASE WHEN code = 'CARD_SALES_VOLUME' AND period_type = 'YEAR' THEN target END) AS sal_ty
+  FROM t),
+x AS (SELECT * FROM m WHERE year_month = date_format(""" + PUB + """, 'yyyy-MM')),
+lm AS (SELECT * FROM m
+       WHERE year_month = date_format(add_months(""" + PUB + """, -1), 'yyyy-MM')),
+ye AS (SELECT * FROM m
+       WHERE year_month = concat(CAST(year(""" + PUB + """) - 1 AS STRING), '-12'))
 SELECT x.year_month, x.last_date,
   x.new_acquisition, x.customer_base, x.using_customers, x.sales_volume, x.balance,
-  (x.new_acquisition - x.new_prev_m) / nullif(x.new_prev_m, 0) * 100 AS new_mom_pct,
-  (x.customer_base - x.base_prev_m) / nullif(x.base_prev_m, 0) * 100 AS base_mom_pct,
-  (x.using_customers - x.using_prev_m) / nullif(x.using_prev_m, 0) * 100 AS using_mom_pct,
-  (x.sales_volume - x.sales_prev_m) / nullif(x.sales_prev_m, 0) * 100 AS sales_mom_pct,
-  (x.balance - x.balance_prev_m) / nullif(x.balance_prev_m, 0) * 100 AS balance_mom_pct,
-  (x.new_acquisition - y.new_acquisition) / nullif(y.new_acquisition, 0) * 100 AS new_yoy_pct,
-  (x.customer_base - y.customer_base) / nullif(y.customer_base, 0) * 100 AS base_yoy_pct,
-  (x.using_customers - y.using_customers) / nullif(y.using_customers, 0) * 100 AS using_yoy_pct,
-  (x.sales_volume - y.sales_volume) / nullif(y.sales_volume, 0) * 100 AS sales_yoy_pct,
-  (x.balance - y.balance) / nullif(y.balance, 0) * 100 AS balance_yoy_pct,
-  x.new_acquisition / nullif(x.target_new_month, 0) * 100 AS new_vs_month_target_pct,
-  x.new_ytd / nullif(x.target_new_year, 0) * 100 AS new_vs_year_target_pct,
-  x.sales_volume / nullif(x.target_sales_month, 0) * 100 AS sales_vs_month_target_pct,
-  x.sales_ytd / nullif(x.target_sales_year, 0) * 100 AS sales_vs_year_target_pct
-FROM x LEFT JOIN m y
-  ON y.year_month = date_format(add_months(to_date(concat(x.year_month, '-01')), -12), 'yyyy-MM')
-WHERE x.year_month = (SELECT max(year_month) FROM m)
+  (x.new_acquisition - lm.new_acquisition) / nullif(lm.new_acquisition, 0) * 100 AS new_mom_pct,
+  (x.customer_base - lm.customer_base) / nullif(lm.customer_base, 0) * 100 AS base_mom_pct,
+  (x.sales_volume - lm.sales_volume) / nullif(lm.sales_volume, 0) * 100 AS sales_mom_pct,
+  (x.balance - lm.balance) / nullif(lm.balance, 0) * 100 AS balance_mom_pct,
+  (x.customer_base - ye.customer_base) / nullif(ye.customer_base, 0) * 100
+      AS base_vs_year_end_pct,
+  (x.balance - ye.balance) / nullif(ye.balance, 0) * 100 AS balance_vs_year_end_pct,
+  x.new_acquisition / nullif(tt.new_tm, 0) * 100 AS new_vs_month_target_pct,
+  x.new_ytd / nullif(tt.new_ty, 0) * 100 AS new_vs_year_target_pct,
+  x.sales_volume / nullif(tt.sal_tm, 0) * 100 AS sales_vs_month_target_pct,
+  x.sales_ytd / nullif(tt.sal_ty, 0) * 100 AS sales_vs_year_target_pct
+FROM x LEFT JOIN lm ON true LEFT JOIN ye ON true CROSS JOIN tt
 """)
 
 _v("card", 2, "v_card_new_by_channel_7m",
    "Stacked bar + total line, 7 months: new cards by channel (Smart Credit / Branches)",
    f"""
-SELECT date_format(as_of_date, 'yyyy-MM') AS year_month, acquisition_channel,
-       sum(new_members) AS new_cards
-FROM {G}.card_mart_kpi_daily
-WHERE as_of_date > add_months({PUB}, -7) AND as_of_date <= {PUB}
+SELECT year_month, acquisition_channel,
+       CASE WHEN bool_and(flow_complete) THEN sum(new_members) END AS new_cards
+FROM {G}.card_mart_kpi_monthly
+WHERE as_of_date = {PUB}
+  AND year_month > date_format(add_months({PUB}, -7), 'yyyy-MM')
 GROUP BY 1, 2
 """)
 
@@ -90,7 +98,7 @@ _v("card", 4, "v_card_sales_performance_7m",
    "Sales Volume, Spend per customer (ticket size)",
    _CARD_MONTH + """
 SELECT year_month, customer_base, using_customers, balance, revolving_balance, sales_volume,
-       sales_volume / nullif(using_customers, 0) AS spend_per_customer FROM m
+       sales_volume / nullif(customer_base, 0) AS spend_per_member FROM m
 WHERE year_month > date_format(add_months(to_date(concat((SELECT max(year_month) FROM m),
   '-01')), -7), 'yyyy-MM')
 """)

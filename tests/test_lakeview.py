@@ -24,6 +24,8 @@ def tables(spark, results):
     dim_customer = g.build_dim_customer(cust)
     dim_product = g.build_dim_product(r["ref_products"])
     fact_loan = g.build_fact_loan_daily(r["loan_snapshots"], dim_customer)
+    card_daily = gc.build_mart_card_kpi_daily(
+        r["card_master"], r["card_transactions_hist"], r["card_statements_hist"], AS_OF)
     trend = gd.build_mart_deposit_trend(
         r["core_accounts"], dim_product, r["ref_fx_rates"], r["ref_branches"], AS_OF,
         customers=dim_customer)
@@ -33,8 +35,10 @@ def tables(spark, results):
         "gold_loan_mart_overdue_daily": g.build_mart_loan_overdue_daily(fact_loan, dim_product),
         "gold_card_mart_overdue_daily": gc.build_mart_card_overdue_daily(
             r["card_overdue_source"]),
-        "gold_card_mart_kpi_daily": gc.build_mart_card_kpi_daily(
-            r["card_master"], r["card_transactions_hist"], r["card_statements_hist"], AS_OF),
+        "gold_card_mart_kpi_daily": card_daily,
+        "gold_card_mart_kpi_monthly": gc.build_mart_card_kpi_monthly(
+            card_daily, AS_OF, using_mtd=gc.using_members_by_month(
+                r["card_transactions_hist"], r["card_master"])),
         "gold_dep_mart_trend": trend,
         "gold_dep_mart_monthly": gd.build_mart_deposit_monthly(trend, AS_OF),
         "gold_dep_mart_by_tenor": gd.build_mart_deposit_by_tenor(
@@ -81,6 +85,9 @@ def tables(spark, results):
     spark.sql(sv.report_calendar_body(
         "SELECT DISTINCT as_of_date FROM gold_dep_mart_trend")) \
         .createOrReplaceTempView("gold_deposit_report_calendar")
+    spark.sql(sv.report_calendar_body(
+        "SELECT DISTINCT as_of_date FROM gold_card_mart_kpi_daily")) \
+        .createOrReplaceTempView("gold_card_report_calendar")
     return m
 
 
@@ -173,7 +180,7 @@ def test_section_order_matches_original():
     assert card[:5] == ["New Acquisition", "Customer Base", "Using Customer",
                         "Sales Volume (K USD)", "Balance (K USD)"]
     order = ["New Acquisition", "In & Out", "Customer Base & Using Mem", "Balance (K USD)",
-             "Sales Volume (K USD)", "Spend per cus (USD)", "By Sectors", "By Locations",
+             "Sales Volume (K USD)", "Spend per Member (USD)", "By Sectors", "By Locations",
              "By Channels", "DPD 1+ (%)", "DPD 10+ (%)", "DPD 30+ (%)", "NPL (%)"]
     assert [t for t in card[6:] if t in order] == order
     ovd = titles("loan_overdue.lvdash.json")

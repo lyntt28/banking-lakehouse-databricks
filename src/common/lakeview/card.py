@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from common.lakeview.core import USD_RATE, Dash, _arrow_pct, _q, _report_day
+from common.lakeview.core import Dash, _q
 
 # ============================================================ 1. CARD BUSINESS
 CARD_COLORS = {   # từ dashboard Chart.js gốc (đã xóa khỏi repo)
@@ -18,191 +18,192 @@ CARD_COLORS = {   # từ dashboard Chart.js gốc (đã xóa khỏi repo)
 }
 
 
+KPI_CODES = [("new_acquisition", "NEW_ACQ", "flow"), ("customer_base", "CUSTOMER_BASE", "stock"),
+             ("using_customer", "USING", "month"), ("sales_volume", "SALES_VOLUME", "flow"),
+             ("balance", "BALANCE", "stock")]
+
+
+def card_sql(catalog: str) -> dict[str, str]:
+    """SQL dataset Card. Ngày báo cáo = ngày publish gần nhất <= :report_date (lịch
+    `gold_serving.card_report_calendar`), đọc `card_mart_kpi_monthly` tại ĐÚNG ngày đó (mart
+    đã chốt tồn / MTD / YTD / thẻ dùng distinct theo ngày này -> chọn giữa tháng vẫn có tháng
+    hiện tại, không đọc tương lai). Luỹ kế thiếu ngày -> NULL (N/A), không hiện 0.
+
+    So sánh: vs Last Month = tháng trước (cuối tháng); vs Last Year-end = tháng 12 năm trước
+    (như API gốc, KHÔNG phải YoY cùng kỳ). Tỷ lệ rủi ro so sánh bằng điểm % (pp).
+    Chỉ tiêu: cùng loại KH với số thực hiện (mã CARD_<KPI>_CN / _TC)."""
+    G, S = _q(catalog, "gold_serving"), _q(catalog, "silver")
+    CAL, M, D = (f"{G}.card_report_calendar", f"{G}.card_mart_kpi_monthly",
+                 f"{G}.card_mart_kpi_daily")
+    ct = "CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END"
+    cust = f"(:customer_type = 'all' OR f.cust_type = {ct})"
+    cur = f"""
+WITH cur AS (
+  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,
+         date_format(c.report_date, 'yyyy-MM') AS cm,
+         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,
+         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,
+         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM {S}.ref_fx_rates x
+          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd
+  FROM {CAL} c
+  WHERE c.report_date = (SELECT max(report_date) FROM {CAL} WHERE report_date <= :report_date))"""
+
+    def flow(c: str, flag: str = "flow_complete") -> str:
+        return f"CASE WHEN bool_and(f.{flag}) THEN sum(f.{c}) END"
+
+    month = cur + f"""
+, m AS (
+  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,
+         {flow("new_members")} AS new_m, {flow("closed_members")} AS closed_m,
+         {flow("using_members")} AS usg, {flow("spend_amt")} AS spend,
+         {flow("new_members_ytd", "ytd_complete")} AS new_ytd,
+         {flow("spend_amt_ytd", "ytd_complete")} AS spend_ytd,
+         {flow("purchase_amt")} AS purchase, {flow("installment_amt")} AS installment,
+         {flow("cash_advance_amt")} AS cash, {flow("flexi_amt")} AS flexi,
+         {flow("domestic_amt")} AS domestic, {flow("xborder_amt")} AS xborder,
+         {flow("pos_amt")} AS pos, {flow("online_amt")} AS online,
+         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,
+         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,
+         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl
+  FROM {M} f JOIN cur ON f.as_of_date = cur.d
+  WHERE {cust}
+  GROUP BY f.year_month),
+six AS (SELECT m.* FROM m CROSS JOIN cur
+        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))"""
+    k = "/ cur.usd / 1000"
+    tg_cols = ",\n".join(
+        f"  sum(CASE WHEN t.code = '{code}' AND t.period_type = 'MONTH' THEN t.target_value END)"
+        f" AS {col}_tm,\n"
+        f"  sum(CASE WHEN t.code = '{code}' AND t.period_type = 'YEAR' THEN t.target_value END)"
+        f" AS {col}_ty" for col, code, _ in KPI_CODES)
+    mix_rows = {
+        "sector": [("Purchasing", "purchase"), ("Installment", "installment"),
+                   ("Cash Advance", "cash"), ("Flexi", "flexi")],
+        "location": [("Domestic", "domestic"), ("X-Border", "xborder")],
+        "channel": [("POS (Offline)", "pos"), ("Online", "online")]}
+    out = {
+        "card_kpi": month + f"""
+SELECT cur.d AS report_date, m.new_m AS new_acquisition, m.eop AS customer_base,
+       m.usg AS using_customer, m.spend {k} AS sales_volume_k_usd, m.bal {k} AS balance_k_usd,
+       m.dpd1 / nullif(m.bal, 0) * 100 AS dpd_1p, m.dpd10 / nullif(m.bal, 0) * 100 AS dpd_10p,
+       m.dpd30 / nullif(m.bal, 0) * 100 AS dpd_30p, m.npl / nullif(m.bal, 0) * 100 AS npl
+FROM cur LEFT JOIN m ON m.year_month = cur.cm""",
+        # % thay đổi tương đối (số) + % hoàn thành chỉ tiêu; thiếu dữ liệu -> NULL
+        "card_kpi_compare": month + f"""
+, t AS (SELECT substr(f.metric_code, 1, length(f.metric_code) - 3) AS code, f.period_type,
+               f.target_value
+        FROM {S}.ref_targets f CROSS JOIN cur
+        WHERE left(f.metric_code, 5) = 'CARD_'
+          AND (:customer_type = 'all' OR right(f.metric_code, 2) = {ct})
+          AND ((f.period_type = 'MONTH' AND f.period = cur.cm)
+               OR (f.period_type = 'YEAR' AND f.period = CAST(year(cur.d) AS STRING)))),
+tg AS (SELECT
+{tg_cols}
+  FROM t),
+c AS (SELECT * FROM m CROSS JOIN cur WHERE m.year_month = cur.cm),
+p AS (SELECT m.*, 1 AS line FROM m CROSS JOIN cur WHERE m.year_month = cur.lm
+      UNION ALL SELECT m.*, 2 FROM m CROSS JOIN cur WHERE m.year_month = cur.ye)
+SELECT l.line, concat(CASE l.line WHEN 1 THEN 'vs Last Month (' ELSE 'vs Last Year-end (' END,
+                      l.ym, ')') AS compare,
+       round((c.new_m - p.new_m) / nullif(p.new_m, 0) * 100, 1) AS new_acquisition,
+       round((c.eop - p.eop) / nullif(p.eop, 0) * 100, 1) AS customer_base,
+       round((c.usg - p.usg) / nullif(p.usg, 0) * 100, 1) AS using_customer,
+       round((c.spend - p.spend) / nullif(p.spend, 0) * 100, 1) AS sales_volume,
+       round((c.bal - p.bal) / nullif(p.bal, 0) * 100, 1) AS balance
+FROM (SELECT 1 AS line, lm AS ym FROM cur UNION ALL SELECT 2, ye FROM cur) l
+CROSS JOIN cur LEFT JOIN c ON true LEFT JOIN p ON p.line = l.line
+UNION ALL
+SELECT 3, '% of Month Target',
+       round(c.new_m / nullif(tg.new_acquisition_tm, 0) * 100, 1),
+       round(c.eop / nullif(tg.customer_base_tm, 0) * 100, 1),
+       round(c.usg / nullif(tg.using_customer_tm, 0) * 100, 1),
+       round(c.spend / nullif(tg.sales_volume_tm, 0) * 100, 1),
+       round(c.bal / nullif(tg.balance_tm, 0) * 100, 1)
+FROM tg LEFT JOIN c ON true
+UNION ALL
+-- năm: luỹ kế (flow) YTD / chỉ tiêu năm; tồn: hiện tại / chỉ tiêu cuối năm; using: không có
+SELECT 4, '% of Year Target',
+       round(c.new_ytd / nullif(tg.new_acquisition_ty, 0) * 100, 1),
+       round(c.eop / nullif(tg.customer_base_ty, 0) * 100, 1), CAST(NULL AS DOUBLE),
+       round(c.spend_ytd / nullif(tg.sales_volume_ty, 0) * 100, 1),
+       round(c.bal / nullif(tg.balance_ty, 0) * 100, 1)
+FROM tg LEFT JOIN c ON true
+ORDER BY 1""",
+        "card_new_acq": cur + f"""
+SELECT f.year_month AS month,
+       CASE f.acquisition_channel WHEN 'SMART_CREDIT' THEN 'Smart Credit' ELSE 'Branches' END
+           AS channel,
+       {flow("new_members")} AS cards
+FROM {M} f JOIN cur ON f.as_of_date = cur.d
+WHERE {cust} AND f.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM')
+GROUP BY 1, 2""",
+        "card_in_out": month + """
+SELECT year_month AS month, 'New Issuance' AS series, new_m AS cards FROM six
+UNION ALL SELECT year_month, 'Termination', closed_m FROM six""",
+        "card_base_using": month + """
+SELECT year_month AS month, 'Customer Base' AS series, eop AS members FROM six
+UNION ALL SELECT year_month, 'Using Mem', usg FROM six""",
+        # 2 cột riêng (Revolving là 1 phần của Balance -> KHÔNG xếp chồng)
+        "card_balance": month + f"""
+SELECT six.year_month AS month, 'Balance' AS series, six.bal {k} AS k_usd
+FROM six CROSS JOIN cur
+UNION ALL SELECT six.year_month, 'Revolving', six.rev {k} FROM six CROSS JOIN cur""",
+        "card_volume": month + f"""
+SELECT six.year_month AS month, six.spend {k} AS k_usd FROM six CROSS JOIN cur""",
+        # chi tiêu / thẻ hiện hữu (EOP), như API gốc
+        "card_ticket": month + """
+SELECT six.year_month AS month, six.spend / cur.usd / nullif(six.eop, 0) AS spend_per_member
+FROM six CROSS JOIN cur""",
+        # điểm % so với ngày trước / cuối tháng trước, trên mart ngày (đúng 3 ngày)
+        "card_risk_compare": cur + f"""
+, rt AS (SELECT f.as_of_date, sum(f.dpd_1p_balance) / nullif(sum(f.balance), 0) * 100 AS r1,
+                sum(f.dpd_10p_balance) / nullif(sum(f.balance), 0) * 100 AS r10,
+                sum(f.dpd_30p_balance) / nullif(sum(f.balance), 0) * 100 AS r30,
+                sum(f.npl_90p_balance) / nullif(sum(f.balance), 0) * 100 AS rn
+         FROM {D} f
+         WHERE f.as_of_date IN (SELECT d FROM cur UNION ALL SELECT previous_date FROM cur
+                                UNION ALL SELECT previous_month_date FROM cur) AND {cust}
+         GROUP BY f.as_of_date),
+l AS (SELECT 1 AS line, 'vs Last Day' AS cmp, previous_date AS dd FROM cur
+      UNION ALL SELECT 2, 'vs Last Month', previous_month_date FROM cur)
+SELECT l.line, concat(l.cmp, ' (', coalesce(date_format(l.dd, 'yyyy-MM-dd'), 'N/A'), ') pp')
+           AS compare,
+       round(c.r1 - p.r1, 2) AS dpd_1p, round(c.r10 - p.r10, 2) AS dpd_10p,
+       round(c.r30 - p.r30, 2) AS dpd_30p, round(c.rn - p.rn, 2) AS npl
+FROM l CROSS JOIN cur LEFT JOIN rt c ON c.as_of_date = cur.d LEFT JOIN rt p ON p.as_of_date = l.dd
+ORDER BY l.line""",
+        "card_customer_types": """
+SELECT explode(array('consumer', 'corporate', 'all')) AS customer_type""",
+    }
+    for donut, rows in mix_rows.items():
+        out[f"card_mix_{donut}"] = month + "\n" + "\nUNION ALL ".join(
+            f"SELECT '{label}' AS slice, m.{col} AS amount FROM m CROSS JOIN cur "
+            f"WHERE m.year_month = cur.cm" for label, col in rows)
+    return out
+
+
 def card_dashboard(catalog: str) -> dict:
-    G = _q(catalog, "gold_serving")   # view batch đang dùng (common.serving)
     d = Dash("card_business", "Card Business Dashboard")
     d.param("report_date", "Report date", "DATE", "now/d")
     d.param("customer_type", "Customer type", "STRING", "consumer")
-    usd = USD_RATE.format(silver=_q(catalog, "silver"))
-    base = f"""
-WITH p AS (SELECT {_report_day(f'{G}.card_mart_kpi_daily')} AS d, {usd} AS usd),
-f AS (
-  SELECT k.* FROM {G}.card_mart_kpi_daily k
-  WHERE :customer_type = 'all'
-     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),
-day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,
-               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,
-               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,
-               sum(installment_amt) installment, sum(cash_advance_amt) cash,
-               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,
-               sum(pos_amt) pos, sum(online_amt) online,
-               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,
-               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl
-        FROM f GROUP BY as_of_date),
-mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,
-               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend
-        FROM day GROUP BY 1),
-m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev
-       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p
-       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))
-"""
-    ds_kpi = d.dataset("card_kpi", "Overview KPI", base + """
-, cur AS (
-  SELECT
-    (SELECT sum(new_m) FROM day, p WHERE date_trunc('MM', as_of_date) = date_trunc('MM', p.d)
-       AND as_of_date <= p.d) AS new_acquisition,
-    x.eop AS customer_base, x.usg AS using_customer,
-    (SELECT sum(spend) FROM day, p WHERE date_trunc('MM', as_of_date) = date_trunc('MM', p.d)
-       AND as_of_date <= p.d) / p.usd / 1000 AS sales_volume_k_usd,
-    x.bal / p.usd / 1000 AS balance_k_usd,
-    x.dpd1 / nullif(x.bal, 0) * 100 AS dpd_1p, x.dpd10 / nullif(x.bal, 0) * 100 AS dpd_10p,
-    x.dpd30 / nullif(x.bal, 0) * 100 AS dpd_30p, x.npl / nullif(x.bal, 0) * 100 AS npl
-  FROM day x CROSS JOIN p WHERE x.as_of_date = p.d)
-SELECT * FROM cur
-""", ["report_date", "customer_type"])
-
-    ds_cmp = d.dataset("card_kpi_compare", "Overview KPI vs last month / year / target", base + f"""
-, pick AS (
-  SELECT 'cur' AS k, p.d AS dd FROM p
-  UNION ALL SELECT 'lm', (SELECT max(as_of_date) FROM day, p
-                          WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p
-  UNION ALL SELECT 'ly', (SELECT max(as_of_date) FROM day, p
-                          WHERE as_of_date <= add_months(p.d, -12)) FROM p),
-v AS (
-  SELECT pk.k,
-    (SELECT sum(new_m) FROM day WHERE date_trunc('MM', as_of_date) = date_trunc('MM', pk.dd)
-       AND as_of_date <= pk.dd) AS new_acq,
-    x.eop, x.usg,
-    (SELECT sum(spend) FROM day WHERE date_trunc('MM', as_of_date) = date_trunc('MM', pk.dd)
-       AND as_of_date <= pk.dd) AS spend,
-    x.bal
-  FROM pick pk LEFT JOIN day x ON x.as_of_date = pk.dd),
-t AS (
-  SELECT metric_code, period_type, sum(target_value) AS target
-  FROM {_q(catalog, "silver")}.ref_targets, p
-  WHERE (period_type = 'MONTH' AND period = date_format(p.d, 'yyyy-MM'))
-     OR (period_type = 'YEAR' AND period = CAST(year(p.d) AS STRING))
-  GROUP BY 1, 2),
-ytd AS (SELECT sum(new_m) AS new_ytd, sum(spend) AS spend_ytd FROM day, p
-        WHERE year(as_of_date) = year(p.d) AND as_of_date <= p.d),
-k AS (
-  SELECT 1 AS ord, 'New Acquisition' AS kpi, c.new_acq AS cur, lm.new_acq AS lm,
-         ly.new_acq AS ly, 'CARD_NEW_ACQ' AS code, ytd.new_ytd AS ytd_val
-  FROM v c, v lm, v ly, ytd WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'
-  UNION ALL SELECT 2, 'Customer Base', c.eop, lm.eop, ly.eop, NULL, NULL
-  FROM v c, v lm, v ly WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'
-  UNION ALL SELECT 3, 'Using Customer', c.usg, lm.usg, ly.usg, NULL, NULL
-  FROM v c, v lm, v ly WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'
-  UNION ALL SELECT 4, 'Sales Volume (K USD)', c.spend, lm.spend, ly.spend,
-         'CARD_SALES_VOLUME', ytd.spend_ytd
-  FROM v c, v lm, v ly, ytd WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'
-  UNION ALL SELECT 5, 'Balance (K USD)', c.bal, lm.bal, ly.bal, NULL, NULL
-  FROM v c, v lm, v ly WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly')
-, r AS (
-  SELECT k.ord,
-    (k.cur - k.lm) / nullif(k.lm, 0) * 100 AS mom,
-    (k.cur - k.ly) / nullif(k.ly, 0) * 100 AS yoy,
-    k.cur / nullif(tm.target, 0) * 100 AS tgt_m,
-    k.ytd_val / nullif(ty.target, 0) * 100 AS tgt_y
-  FROM k
-  LEFT JOIN t tm ON tm.metric_code = k.code AND tm.period_type = 'MONTH'
-  LEFT JOIN t ty ON ty.metric_code = k.code AND ty.period_type = 'YEAR'),
-cmp_rows AS (
-  SELECT x.line, x.compare, r.ord, x.val FROM r
-  LATERAL VIEW inline(array(
-    named_struct('line', 1, 'compare', 'vs Last Month', 'val', {{mom}}),
-    named_struct('line', 2, 'compare', 'vs Last Year', 'val', {{yoy}}),
-    named_struct('line', 3, 'compare', '% of Month Target', 'val',
-                 CASE WHEN tgt_m IS NULL THEN '-' ELSE concat(format_number(tgt_m, 0), '%') END),
-    named_struct('line', 4, 'compare', '% of Year Target', 'val',
-                 CASE WHEN tgt_y IS NULL THEN '-' ELSE concat(format_number(tgt_y, 0), '%') END)
-  )) x)
-SELECT compare,
-  max(CASE WHEN ord = 1 THEN val END) AS new_acquisition,
-  max(CASE WHEN ord = 2 THEN val END) AS customer_base,
-  max(CASE WHEN ord = 3 THEN val END) AS using_customer,
-  max(CASE WHEN ord = 4 THEN val END) AS sales_volume,
-  max(CASE WHEN ord = 5 THEN val END) AS balance
-FROM cmp_rows GROUP BY line, compare ORDER BY line
-""".format(mom=_arrow_pct("mom"), yoy=_arrow_pct("yoy")), ["report_date", "customer_type"])
-
-    ds_new = d.dataset("card_new_acq", "New Acquisition by channel", f"""
-WITH p AS (SELECT {_report_day(f'{G}.card_mart_kpi_daily')} AS d)
-SELECT date_format(k.as_of_date, 'yyyyMM') AS month,
-       CASE k.acquisition_channel WHEN 'SMART_CREDIT' THEN 'Smart Credit'
-            ELSE 'Branches' END AS channel,
-       sum(k.new_members) AS cards
-FROM {G}.card_mart_kpi_daily k CROSS JOIN p
-WHERE k.as_of_date <= p.d
-  AND date_format(k.as_of_date, 'yyyyMM') > date_format(add_months(p.d, -7), 'yyyyMM')
-  AND (:customer_type = 'all'
-       OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)
-GROUP BY 1, 2
-""", ["report_date", "customer_type"])
-    ds_inout = d.dataset("card_in_out", "In & Out", base + """
-SELECT ym AS month, 'New Issuance' AS series, new_m AS cards FROM m7
-UNION ALL SELECT ym, 'Termination', closed_m FROM m7
-""", ["report_date", "customer_type"])
-    ds_base = d.dataset("card_base_using", "Customer Base & Using Mem", base + """
-SELECT ym AS month, 'Customer Base' AS series, eop AS members FROM m7
-UNION ALL SELECT ym, 'Using Mem', usg FROM m7
-""", ["report_date", "customer_type"])
-    ds_bal = d.dataset("card_balance", "Balance (K USD)", base + """
-SELECT m7.ym AS month, 'Balance' AS series, m7.bal / p.usd / 1000 AS k_usd FROM m7, p
-UNION ALL SELECT m7.ym, 'Revolving', m7.rev / p.usd / 1000 FROM m7, p
-""", ["report_date", "customer_type"])
-    ds_vol = d.dataset("card_volume", "Sales Volume (K USD)", base + """
-SELECT m7.ym AS month, m7.spend / p.usd / 1000 AS k_usd FROM m7, p
-""", ["report_date", "customer_type"])
-    ds_spend = d.dataset("card_ticket", "Spend per cus (USD)", base + """
-SELECT m7.ym AS month, m7.spend / p.usd / nullif(m7.usg, 0) AS ticket_size FROM m7, p
-""", ["report_date", "customer_type"])
-    # 3 donut cần 3 dataset con (widget không tự lọc theo cột)
-    mix = {}
-    for donut in ("sector", "location", "channel"):
-        mix[donut] = d.dataset(f"card_mix_{donut}", f"Spend by {donut}", base + f"""
-, x AS (SELECT day.* FROM day, p WHERE day.as_of_date = p.d),
-all_mix AS (
-  SELECT 'sector' AS donut, 'Purchasing' AS slice, purchase AS amount FROM x
-  UNION ALL SELECT 'sector', 'Installment', installment FROM x
-  UNION ALL SELECT 'sector', 'Cash Advance', cash FROM x
-  UNION ALL SELECT 'sector', 'Flexi', flexi FROM x
-  UNION ALL SELECT 'location', 'Domestic', domestic FROM x
-  UNION ALL SELECT 'location', 'X-Border', xborder FROM x
-  UNION ALL SELECT 'channel', 'POS (Offline)', pos FROM x
-  UNION ALL SELECT 'channel', 'Online', online FROM x)
-SELECT slice, amount FROM all_mix WHERE donut = '{donut}'
-""", ["report_date", "customer_type"])
-    ds_risk = d.dataset("card_risk_compare", "Delinquency vs last day / month", base + """
-, pk AS (SELECT p.d AS cur,
-                (SELECT max(as_of_date) FROM day, p WHERE as_of_date < p.d) AS d1,
-                (SELECT max(as_of_date) FROM day, p
-                 WHERE as_of_date <= last_day(add_months(p.d, -1))) AS m1 FROM p),
-rt AS (SELECT as_of_date, dpd1 / nullif(bal, 0) * 100 AS r1, dpd10 / nullif(bal, 0) * 100 AS r10,
-              dpd30 / nullif(bal, 0) * 100 AS r30, npl / nullif(bal, 0) * 100 AS rn FROM day),
-v AS (SELECT c.r1 - d.r1 AS d_r1, c.r10 - d.r10 AS d_r10, c.r30 - d.r30 AS d_r30,
-             c.rn - d.rn AS d_rn, c.r1 - m.r1 AS m_r1, c.r10 - m.r10 AS m_r10,
-             c.r30 - m.r30 AS m_r30, c.rn - m.rn AS m_rn
-      FROM pk JOIN rt c ON c.as_of_date = pk.cur
-      LEFT JOIN rt d ON d.as_of_date = pk.d1 LEFT JOIN rt m ON m.as_of_date = pk.m1)
-SELECT 1 AS line, 'vs Last Day' AS compare, {d1} AS dpd_1p, {d10} AS dpd_10p,
-       {d30} AS dpd_30p, {dn} AS npl FROM v
-UNION ALL
-SELECT 2, 'vs Last Month', {m1}, {m10}, {m30}, {mn} FROM v
-ORDER BY line
-""".format(d1=_arrow_pct("d_r1", " pp"), d10=_arrow_pct("d_r10", " pp"),
-           d30=_arrow_pct("d_r30", " pp"), dn=_arrow_pct("d_rn", " pp"),
-           m1=_arrow_pct("m_r1", " pp"), m10=_arrow_pct("m_r10", " pp"),
-           m30=_arrow_pct("m_r30", " pp"), mn=_arrow_pct("m_rn", " pp")),
-        ["report_date", "customer_type"])
-    ds_ct = d.dataset("card_customer_types", "Customer type options", """
-SELECT explode(array('consumer', 'corporate', 'all')) AS customer_type
-""", [])
+    sql = card_sql(catalog)
+    rc = ["report_date", "customer_type"]
+    titles = {"card_kpi": "Overview KPI",
+              "card_kpi_compare": "Overview KPI vs last month / year-end / target",
+              "card_new_acq": "New Acquisition by channel", "card_in_out": "In & Out",
+              "card_base_using": "Customer Base & Using Mem", "card_balance": "Balance (K USD)",
+              "card_volume": "Sales Volume (K USD)", "card_ticket": "Spend per Member (USD)",
+              "card_mix_sector": "Spend by sector", "card_mix_location": "Spend by location",
+              "card_mix_channel": "Spend by channel",
+              "card_risk_compare": "Delinquency vs last day / month (pp)"}
+    ds = {n: d.dataset(n, t, sql[n], rc) for n, t in titles.items()}
+    ds_ct = d.dataset("card_customer_types", "Customer type options",
+                      sql["card_customer_types"], [])
 
     c = CARD_COLORS
     # Bố cục theo card_dashboard_final.html: header + bộ lọc, Overview (5 thẻ KPI + dòng so
     # sánh ngay dưới), New Issuance vs. Termination, Sales Performance (2x2), Spending
-    # Distribution (3 donut), Delinquency (4 chỉ số + thay đổi). Lưới Lakeview = 6 cột.
+    # Distribution (3 donut, MTD), Delinquency (4 chỉ số + thay đổi pp). Lưới = 6 cột.
     d.text("# CARD BUSINESS DASHBOARD\n**Performance & Growth**", 0, 0, 4, 2)
     d.text("### 🟧 Overview", 0, 2)
     for i, (col, title, fmt) in enumerate([
@@ -211,52 +212,54 @@ SELECT explode(array('consumer', 'corporate', 'all')) AS customer_type
             ("using_customer", "Using Customer", "int"),
             ("sales_volume_k_usd", "Sales Volume (K USD)", "int"),
             ("balance_k_usd", "Balance (K USD)", "int")]):
-        d.counter(ds_kpi, col, title, i, 3, color=c["kpi"][i], fmt=fmt)
-    d.text("**Report scope**\n\nMoM / YoY và % chỉ tiêu ở bảng bên dưới; "
-           "lọc Consumer / Corporate / Total ở góc phải.", 5, 3, 1, 3)
-    d.table(ds_cmp, "", [
-        ("compare", "", "text"), ("new_acquisition", "New Acquisition", "text"),
-        ("customer_base", "Customer Base", "text"), ("using_customer", "Using Customer", "text"),
-        ("sales_volume", "Sales Volume", "text"), ("balance", "Balance", "text")], 0, 6, 6, 3)
+        d.counter(ds["card_kpi"], col, title, i, 3, color=c["kpi"][i], fmt=fmt)
+    d.text("**Report scope**\n\nNew / Using / Sales = MTD; Base / Balance = tại ngày báo cáo. "
+           "Using = số thẻ có giao dịch (card-level).", 5, 3, 1, 3)
+    d.table(ds["card_kpi_compare"], "", [
+        ("compare", "", "text"), ("new_acquisition", "New Acquisition (%)", "num"),
+        ("customer_base", "Customer Base (%)", "num"),
+        ("using_customer", "Using Customer (%)", "num"),
+        ("sales_volume", "Sales Volume (%)", "num"), ("balance", "Balance (%)", "num")],
+        0, 6, 6, 3)
 
     y = 9
     d.text("### 🟧 New Issuance vs. Termination", 0, y)
-    d.chart("bar", ds_new, "New Acquisition", 0, y + 1, 3, 7, cat="month", series="channel",
-            val="cards", layout="stack",
+    d.chart("bar", ds["card_new_acq"], "New Acquisition", 0, y + 1, 3, 7, cat="month",
+            series="channel", val="cards", layout="stack",
             colors={"Smart Credit": c["smart_credit"], "Branches": c["branches"]})
-    d.chart("bar", ds_inout, "In & Out", 3, y + 1, 3, 7, cat="month", series="series",
+    d.chart("bar", ds["card_in_out"], "In & Out", 3, y + 1, 3, 7, cat="month", series="series",
             val="cards", layout="group",
             colors={"New Issuance": c["new_issuance"], "Termination": c["termination"]})
 
     y = 17
     d.text("### 🟧 Sales Performance", 0, y)
-    d.chart("bar", ds_base, "Customer Base & Using Mem", 0, y + 1, 3, 7, cat="month",
-            series="series", val="members", layout="group", labels=False,
+    d.chart("bar", ds["card_base_using"], "Customer Base & Using Mem", 0, y + 1, 3, 7,
+            cat="month", series="series", val="members", layout="group", labels=False,
             colors={"Customer Base": c["base"], "Using Mem": c["using"]})
-    d.chart("bar", ds_bal, "Balance (K USD)", 3, y + 1, 3, 7, cat="month", series="series",
-            val="k_usd", layout="stack", labels=False,
+    d.chart("bar", ds["card_balance"], "Balance (K USD)", 3, y + 1, 3, 7, cat="month",
+            series="series", val="k_usd", layout="group", labels=False,
             colors={"Balance": c["balance"], "Revolving": c["revolving"]})
-    d.chart("bar", ds_vol, "Sales Volume (K USD)", 0, y + 8, 3, 7, cat="month", val="k_usd",
-            single_color=c["volume"], labels=False)
-    d.chart("line", ds_spend, "Spend per cus (USD)", 3, y + 8, 3, 7, cat="month",
-            val="ticket_size", single_color=c["ticket"], labels=False)
+    d.chart("bar", ds["card_volume"], "Sales Volume (K USD)", 0, y + 8, 3, 7, cat="month",
+            val="k_usd", single_color=c["volume"], labels=False)
+    d.chart("line", ds["card_ticket"], "Spend per Member (USD)", 3, y + 8, 3, 7, cat="month",
+            val="spend_per_member", single_color=c["ticket"], labels=False)
 
     y = 33
-    d.text("### 🟧 Spending Distribution", 0, y)
+    d.text("### 🟧 Spending Distribution (MTD)", 0, y)
     for i, (donut, title) in enumerate([("sector", "By Sectors"), ("location", "By Locations"),
                                         ("channel", "By Channels")]):
-        d.chart("pie", mix[donut], title, 2 * i, y + 1, 2, 6, cat="slice", val="amount",
-                colors=c[donut])
+        d.chart("pie", ds[f"card_mix_{donut}"], title, 2 * i, y + 1, 2, 6, cat="slice",
+                val="amount", colors=c[donut])
 
     y = 40
     d.text("### 🟧 Delinquency", 0, y)
     for i, (col, title) in enumerate([("dpd_1p", "DPD 1+ (%)"), ("dpd_10p", "DPD 10+ (%)"),
                                       ("dpd_30p", "DPD 30+ (%)"), ("npl", "NPL (%)")]):
-        d.counter(ds_kpi, col, title, 1 + i, y + 1, color=c["risk"], fmt="pct")
-    d.table(ds_risk, "", [
-        ("compare", "", "text"), ("dpd_1p", "DPD 1+", "text"), ("dpd_10p", "DPD 10+", "text"),
-        ("dpd_30p", "DPD 30+", "text"), ("npl", "NPL", "text")], 1, y + 4, 4, 2)
-    # ---- bộ lọc (đặt sau khi có đủ dataset)
+        d.counter(ds["card_kpi"], col, title, 1 + i, y + 1, color=c["risk"], fmt="pct")
+    d.table(ds["card_risk_compare"], "", [
+        ("compare", "", "text"), ("dpd_1p", "DPD 1+ (pp)", "num"),
+        ("dpd_10p", "DPD 10+ (pp)", "num"), ("dpd_30p", "DPD 30+ (pp)", "num"),
+        ("npl", "NPL (pp)", "num")], 1, y + 4, 4, 2)
     d.param_filter("report_date", "Report date", "filter-date-picker", 4, 0)
     d.param_filter("customer_type", "Customer type", "filter-single-select", 5, 0,
                    options_ds=ds_ct, options_col="customer_type")

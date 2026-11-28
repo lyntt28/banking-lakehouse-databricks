@@ -8,21 +8,11 @@ Common filters: report date, region, branch, product, customer type (consumer/co
 Common comparisons: vs last day (D-1), last month-end (M-1), last year-end/same day (Y-1),
 % of month target, % of year target.
 
-## 1. Card Business Dashboard (Performance & Growth)
+## 1. Card Business Dashboard (CARD)
 
-| Section | Visual | Metric | Gold source |
-|---|---|---|---|
-| Overview | 5 KPI cards with MoM, YoY, % month/year target | New Acquisition, Customer Base (EOP members), Using Customer, Sales Volume (K USD), Balance (K USD) | `card_mart_kpi_monthly` + `card_targets` |
-| New Issuance vs Termination | stacked bar + total line, 7 months | New cards by channel (Smart Credit / Branches) | `card_mart_kpi_monthly` (by acquisition_channel) |
-| | clustered bar, 7 months | In (new) vs Out (closed) | same |
-| Sales Performance | bar, 7 months | Customer Base vs Using Members | same |
-| | bar, 7 months | Balance vs Revolving balance | same |
-| | bar, 7 months | Sales Volume | same |
-| | line, 7 months | Spend per customer (ticket size) | same |
-| Spending Distribution | 3 donuts | By sector (Purchasing / Installment / Cash advance / Flexi), by location (Domestic / X-Border), by channel (POS / Online) | `card_mart_spend_mix` |
-| Delinquency | 4 KPI | DPD 1+, 10+, 30+, NPL 90+ ratio (balance-based) | `card_mart_kpi_monthly` |
-
-Reconciliation: same metric codes as `card_kpi` source files → `ops.dq_results`.
+Marts `card_mart_kpi_daily`, `card_mart_kpi_monthly`, `card_mart_spend_mix` via `gold_serving` +
+`gold_serving.card_report_calendar`. Definitions, targets, migration:
+[card_dashboard.md](card_dashboard.md).
 
 ## 2. Overdue Dashboard (credit card overdue tracking)
 
