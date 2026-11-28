@@ -61,7 +61,8 @@ PUBLISHED_TABLES = ["dim_date", "dim_branch", "dim_product", "dim_customer", "lo
                     "dep_mart_daily", "cust_mart_360", "card_mart_kpi_daily",
                     "card_mart_spend_mix", "card_mart_kpi_monthly", "dep_mart_trend",
                     "dep_mart_by_tenor", "dep_mart_casa_customer", "dep_mart_new_accounts",
-                    "card_mart_overdue_daily", "dep_mart_monthly"]
+                    "card_mart_overdue_daily", "dep_mart_monthly", "dim_card",
+                    "fact_deposit_daily", "fact_card_daily", "fact_card_transaction"]
 
 
 class GateFailed(RuntimeError):
@@ -169,12 +170,23 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
                             "loan_mart_overdue_daily")
         # snapshot TK đúng ngày: TK bị cách ly hôm nay vẫn còn dòng cũ trong silver
         acc_day = spark.table(S("core_accounts")).filter(F.col("_as_of_date") == day)
-        dep_daily = stage(g.build_mart_deposit_daily(acc_day, day_s), "dep_mart_daily")
+        fx_day = spark.table(S("ref_fx_rates")).filter(F.col("rate_date") == day)
+        # star schema: fact trước (grain chi tiết + khoá dim), mart tổng hợp đọc từ fact
+        fact_dep = stage(g.build_fact_deposit_daily(acc_day, fx_day, dim_customer, day_s),
+                         "fact_deposit_daily")
+        dep_daily = stage(g.build_mart_deposit_daily(fact_dep, day_s), "dep_mart_daily")
         cards_day = spark.table(S("card_master")).filter(F.col("_as_of_date") == day)
         ctx_day = spark.table(S("card_transactions_hist")).filter(F.col("_as_of_date") == day)
         stm_day = spark.table(S("card_statements_hist")).filter(F.col("stnd_dt") == day)
-        card_daily = stage(gc.build_mart_card_kpi_daily(cards_day, ctx_day, stm_day, day_s),
-                           "card_mart_kpi_daily")
+        fact_card = stage(g.build_fact_card_daily(cards_day, stm_day, dim_customer, day_s),
+                          "fact_card_daily")
+        fact_ctx = stage(g.build_fact_card_transaction(ctx_day, cards_day, dim_customer),
+                         "fact_card_transaction")
+        card_daily = stage(gc.build_mart_card_kpi_daily(
+            fact_card, fact_ctx.drop("branchnbr", "customer_id", "customer_sk"),
+            fact_card.filter(F.col("outstanding_balance").isNotNull())
+            .select("card_no", "outstanding_balance", "revolving_balance", "dpd"), day_s),
+            "card_mart_kpi_daily")
         ovd_src = spark.table(S("card_overdue_source")).filter(F.col("report_dt") == day)
         card_overdue = stage(gc.build_mart_card_overdue_daily(ovd_src), "card_mart_overdue_daily")
         s.rows_in = loans_day.count()
@@ -248,15 +260,19 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
                                       cand("core_fact_transaction"), day_s), "cust_mart_360")
 
         put(card_daily, "card_mart_kpi_daily")
-        put(gc.build_mart_card_spend_mix(ctx_day, day_s), "card_mart_spend_mix")
+        put(g.build_dim_card(spark.table(S("card_master"))), "dim_card")
+        put(fact_dep, "fact_deposit_daily")
+        put(fact_card, "fact_card_daily")
+        put(fact_ctx, "fact_card_transaction", g.GOLD_KEYS["fact_card_transaction"])
+        put(gc.build_mart_card_spend_mix(fact_ctx, day_s), "card_mart_spend_mix")
         # tháng: chỉ tính lại tháng của ngày báo cáo (MTD từ mart ngày + giao dịch MTD cho số
         # thẻ dùng distinct); tháng trước chép từ mart tháng của ngày publish trước
         month_start = F.trunc(day, "month")
         card_hist = cand("card_mart_kpi_daily")
         month_daily = card_hist.filter((F.col("as_of_date") >= month_start)
                                        & (F.col("as_of_date") <= day))
-        txns_mtd = spark.table(S("card_transactions_hist")).filter(
-            (F.col("_as_of_date") >= month_start) & (F.col("_as_of_date") <= day))
+        txns_mtd = cand("fact_card_transaction").filter(
+            (F.col("txn_date") >= month_start) & (F.col("txn_date") <= day))
         prev_card_m, card_bootstrap = None, {}
         if spark.catalog.tableExists(G("card_mart_kpi_monthly")):
             pm = cand("card_mart_kpi_monthly").filter(F.col("as_of_date") < day)
@@ -274,16 +290,16 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
                         (F.col("_as_of_date") >= start) & (F.col("_as_of_date") < month_start)),
                     spark.table(S("card_master"))))
         put(gc.build_mart_card_kpi_monthly(
-            month_daily, day_s, using_mtd=gc.using_members_by_month(txns_mtd, cards_day),
+            month_daily, day_s,
+            using_mtd=gc.using_members_by_month(txns_mtd, cards_day, date_col="txn_date"),
             previous=prev_card_m, **card_bootstrap), "card_mart_kpi_monthly")
         put(card_overdue, "card_mart_overdue_daily")
 
-        fx_day = spark.table(S("ref_fx_rates")).filter(F.col("rate_date") == day)
         trend_hist = (cand("dep_mart_trend") if spark.catalog.tableExists(G("dep_mart_trend"))
                       else None)
         branches = spark.table(S("ref_branches"))
         cust_day = gd.customers_as_of(dim_customer_g, day_s)   # KH hiệu lực tại ngày báo cáo
-        dep_trend = stage(gd.build_mart_deposit_trend(acc_day, dim_product, fx_day, branches,
+        dep_trend = stage(gd.build_mart_deposit_trend(fact_dep, dim_product, fx_day, branches,
                                                       day_s, history=trend_hist,
                                                       customers=cust_day), "dep_mart_trend")
         put(dep_trend, "dep_mart_trend")
@@ -298,9 +314,9 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         put(gd.build_mart_deposit_monthly(
             dep_trend, day_s, previous=prev_monthly,
             trend_history=trend_hist if prev_monthly is None else None), "dep_mart_monthly")
-        put(gd.build_mart_deposit_by_tenor(acc_day, dim_product, fx_day, day_s, branches),
+        put(gd.build_mart_deposit_by_tenor(fact_dep, dim_product, fx_day, day_s, branches),
             "dep_mart_by_tenor")
-        put(gd.build_mart_casa_customer(acc_day, dim_product, cust_day, day_s, branches),
+        put(gd.build_mart_casa_customer(fact_dep, dim_product, cust_day, day_s, branches),
             "dep_mart_casa_customer")
         put(gd.build_mart_deposit_new_accounts(spark.table(S("core_accounts")), day_s, branches)
             .withColumn("as_of_date", day), "dep_mart_new_accounts")

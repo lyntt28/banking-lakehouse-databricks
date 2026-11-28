@@ -47,7 +47,8 @@ TABLE_KIND = {
     "card_mart_spend_mix": "daily", "card_mart_kpi_monthly": "daily", "dep_mart_trend": "daily",
     "dep_mart_by_tenor": "daily", "dep_mart_casa_customer": "daily",
     "dep_mart_new_accounts": "daily", "card_mart_overdue_daily": "daily",
-    "dep_mart_monthly": "daily",
+    "dep_mart_monthly": "daily", "dim_card": "snapshot", "fact_deposit_daily": "daily",
+    "fact_card_daily": "daily", "fact_card_transaction": "append",
 }
 
 
