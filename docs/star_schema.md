@@ -47,6 +47,10 @@ grain, keys and definitions. Code: `src/common/gold.py` (dims, facts), `gold_dep
 | `card_mart_overdue_daily` | as_of_date × product × mng_br × sal_br × del_grp | aggregate fact | date_key, mng_br / sal_br → dim_branch | port/ovd accounts and balances |
 
 `customer_sk` is resolved **as of the fact date** (the customer version effective that day).
+It is NULL only when the customer is not in `dim_customer` — a customer record quarantined in
+Silver (attribute error) whose id is still a valid account / card owner. Tests check that NULL
+never comes from a wrong join. (A Kimball "unknown member" row with key -1 is a possible
+follow-up; not added to avoid changing existing dim_customer consumers.)
 
 ## Rules
 - Marts read facts only; facts read Silver. Facts keep Silver column names so mart logic is

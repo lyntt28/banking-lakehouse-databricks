@@ -44,8 +44,11 @@ def test_grain_unique(star, fact):
                                   "fact_card_transaction"])
 def test_foreign_keys_resolve(star, fact):
     f = star[fact]
-    # mọi dòng có KH thì có customer_sk của phiên bản hiệu lực
-    assert f.filter("customer_id IS NOT NULL AND customer_sk IS NULL").count() == 0
+    # customer_sk NULL chỉ khi KH KHÔNG có trong dim_customer (KH bị quarantine ở Silver vì lỗi
+    # thuộc tính nhưng vẫn là khoá FK hợp lệ của TK / thẻ) - không được NULL vì join sai
+    miss = f.filter("customer_id IS NOT NULL AND customer_sk IS NULL").select("customer_id")
+    known = star["dim_customer"].select("customer_id")
+    assert miss.join(known, "customer_id").count() == 0
     sk = star["dim_customer"].select("customer_sk")
     assert f.filter("customer_sk IS NOT NULL").join(sk, "customer_sk", "left_anti").count() == 0
     br = star["dim_branch"].select("branchnbr")
