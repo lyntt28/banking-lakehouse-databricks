@@ -47,6 +47,10 @@ def marts(spark, results):
         .select(F.col("d").cast("date").alias("as_of_date")),
     }
     for name, df in m.items():
+        # chốt dữ liệu (cắt lineage): trên Databricks mart là bảng thật; ở test DataFrame lười
+        # bị nhân lên mỗi lần CTE tham chiếu -> plan khổng lồ, hết heap
+        df = df.localCheckpoint()
+        m[name] = df
         df.createOrReplaceTempView(name)
     return m
 

@@ -77,16 +77,20 @@ def tables(spark, results):
         f"SELECT DATE'{AS_OF}' AS as_of_date, 'r1' AS run_id, "
         "current_timestamp() AS published_at, '{}' AS checks")
     for name, df in m.items():
+        # chốt dữ liệu (cắt lineage): trên Databricks mart là bảng thật; ở test DataFrame lười
+        # bị nhân lên mỗi lần CTE tham chiếu -> plan khổng lồ, hết heap
+        df = df.localCheckpoint()
+        m[name] = df
         df.createOrReplaceTempView(name)
     # lịch báo cáo Overdue: test không có batch -> mọi ngày của mart là ngày đã publish
     spark.sql(sv.report_calendar_body(
-        "SELECT DISTINCT as_of_date FROM gold_card_mart_overdue_daily")) \
+        "SELECT DISTINCT as_of_date FROM gold_card_mart_overdue_daily")).localCheckpoint() \
         .createOrReplaceTempView("gold_overdue_report_calendar")
     spark.sql(sv.report_calendar_body(
-        "SELECT DISTINCT as_of_date FROM gold_dep_mart_trend")) \
+        "SELECT DISTINCT as_of_date FROM gold_dep_mart_trend")).localCheckpoint() \
         .createOrReplaceTempView("gold_deposit_report_calendar")
     spark.sql(sv.report_calendar_body(
-        "SELECT DISTINCT as_of_date FROM gold_card_mart_kpi_daily")) \
+        "SELECT DISTINCT as_of_date FROM gold_card_mart_kpi_daily")).localCheckpoint() \
         .createOrReplaceTempView("gold_card_report_calendar")
     return m
 
