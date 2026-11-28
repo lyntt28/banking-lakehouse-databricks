@@ -1,0 +1,112 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "ordinal",
+      "title": null,
+      "axis": {
+        "labelAngle": 0
+      }
+    }
+  },
+  "layer": [
+    {
+      "mark": {
+        "type": "bar",
+        "width": {
+          "band": 0.7
+        },
+        "tooltip": true
+      },
+      "encoding": {
+        "y": {
+          "field": "cards",
+          "type": "quantitative",
+          "aggregate": "sum",
+          "title": null,
+          "stack": "zero"
+        },
+        "color": {
+          "field": "channel",
+          "type": "nominal",
+          "title": null,
+          "scale": {
+            "domain": [
+              "Smart Credit",
+              "Branches"
+            ],
+            "range": [
+              "#4472C4",
+              "#B4C7E7"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "transform": [
+        {
+          "aggregate": [
+            {
+              "op": "sum",
+              "field": "cards",
+              "as": "_total"
+            }
+          ],
+          "groupby": [
+            "month"
+          ]
+        }
+      ],
+      "layer": [
+        {
+          "mark": {
+            "type": "line",
+            "strokeDash": [
+              6,
+              4
+            ],
+            "strokeWidth": 2,
+            "color": "#7f7f7f"
+          },
+          "encoding": {
+            "y": {
+              "field": "_total",
+              "type": "quantitative"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "dy": -8,
+            "fontSize": 10,
+            "color": "#444"
+          },
+          "encoding": {
+            "y": {
+              "field": "_total",
+              "type": "quantitative"
+            },
+            "text": {
+              "field": "_total",
+              "format": ",.0f"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "config": {
+    "legend": {
+      "orient": "bottom"
+    }
+  }
+}

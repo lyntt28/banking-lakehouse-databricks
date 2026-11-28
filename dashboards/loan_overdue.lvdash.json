@@ -453,6 +453,105 @@
       ]
     },
     {
+      "name": "ovd_kpi_cards",
+      "displayName": "KPI cards (Custom Viz)",
+      "queryLines": [
+        "SELECT stack(3,\n",
+        "  CAST('overdue_ratio' AS STRING), CAST('Overdue Ratio' AS STRING), CAST(k.overdue_ratio AS DOUBLE), CAST('.2f' AS STRING), CAST(c.ratio_pp_D1 AS DOUBLE), CAST('vs Last Day' AS STRING), CAST(c.ratio_pp_M1 AS DOUBLE), CAST('vs Last Month' AS STRING), CAST(c.ratio_pp_Y1 AS DOUBLE), CAST('vs Last Year' AS STRING), CAST(' pp' AS STRING), CAST('.2f' AS STRING), CAST(concat('Report date ', date_format(k.actual_date, 'yyyy-MM-dd')) AS STRING), CAST(concat('FX ', format_number(k.fx_vnd_usd, 0), ' VND/USD') AS STRING),\n",
+        "  CAST('overdue_usd' AS STRING), CAST('Overdue Balance (USD)' AS STRING), CAST(k.overdue_usd AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.overdue_usd_D1 AS DOUBLE), CAST('vs Last Day' AS STRING), CAST(c.overdue_usd_M1 AS DOUBLE), CAST('vs Last Month' AS STRING), CAST(c.overdue_usd_Y1 AS DOUBLE), CAST('vs Last Year' AS STRING), CAST('' AS STRING), CAST(',.0f' AS STRING), CAST(concat('Report date ', date_format(k.actual_date, 'yyyy-MM-dd')) AS STRING), CAST(concat('FX ', format_number(k.fx_vnd_usd, 0), ' VND/USD') AS STRING),\n",
+        "  CAST('ending_usd' AS STRING), CAST('Ending Balance (USD)' AS STRING), CAST(k.ending_usd AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.ending_usd_D1 AS DOUBLE), CAST('vs Last Day' AS STRING), CAST(c.ending_usd_M1 AS DOUBLE), CAST('vs Last Month' AS STRING), CAST(c.ending_usd_Y1 AS DOUBLE), CAST('vs Last Year' AS STRING), CAST('' AS STRING), CAST(',.0f' AS STRING), CAST(concat('Report date ', date_format(k.actual_date, 'yyyy-MM-dd')) AS STRING), CAST(concat('FX ', format_number(k.fx_vnd_usd, 0), ' VND/USD') AS STRING)\n",
+        ") AS (kpi, title, value, value_fmt, cmp1, cmp1_label, cmp2, cmp2_label, cmp3, cmp3_label, cmp_unit, cmp_fmt, note1, note2)\n",
+        "FROM (WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", per AS (\n",
+        "  SELECT stack(4, 0, 'CURRENT', 'Current', report_date,\n",
+        "                  1, 'D1', 'vs Last Day', previous_date,\n",
+        "                  2, 'M1', 'vs Last Month', previous_month_date,\n",
+        "                  3, 'Y1', 'vs Last Year', previous_year_date) AS (ord, period, cmp, d)\n",
+        "  FROM cur),\n",
+        "v AS (\n",
+        "SELECT f.as_of_date, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN (SELECT DISTINCT d FROM per WHERE d IS NOT NULL) x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date),\n",
+        "k AS (\n",
+        "  SELECT per.ord, per.period, per.cmp, per.d AS actual_date, v.port AS port_bal, v.ovd AS ovd_bal,\n",
+        "         v.ovd / nullif(v.port, 0) * 100 AS overdue_ratio,\n",
+        "         v.ovd / cur.usd AS overdue_usd, v.port / cur.usd AS ending_balance_usd, cur.usd\n",
+        "  FROM per CROSS JOIN cur LEFT JOIN v ON v.as_of_date = per.d)\n",
+        "SELECT actual_date, usd AS fx_vnd_usd, overdue_ratio, overdue_usd,\n",
+        "       ending_balance_usd AS ending_usd\n",
+        "FROM k WHERE period = 'CURRENT') k CROSS JOIN (SELECT max(CASE WHEN period = 'D1' THEN ratio_pp END) AS ratio_pp_D1, max(CASE WHEN period = 'M1' THEN ratio_pp END) AS ratio_pp_M1, max(CASE WHEN period = 'Y1' THEN ratio_pp END) AS ratio_pp_Y1, max(CASE WHEN period = 'D1' THEN overdue_usd END) AS overdue_usd_D1, max(CASE WHEN period = 'M1' THEN overdue_usd END) AS overdue_usd_M1, max(CASE WHEN period = 'Y1' THEN overdue_usd END) AS overdue_usd_Y1, max(CASE WHEN period = 'D1' THEN ending_usd END) AS ending_usd_D1, max(CASE WHEN period = 'M1' THEN ending_usd END) AS ending_usd_M1, max(CASE WHEN period = 'Y1' THEN ending_usd END) AS ending_usd_Y1 FROM (\n",
+        "WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", per AS (\n",
+        "  SELECT stack(4, 0, 'CURRENT', 'Current', report_date,\n",
+        "                  1, 'D1', 'vs Last Day', previous_date,\n",
+        "                  2, 'M1', 'vs Last Month', previous_month_date,\n",
+        "                  3, 'Y1', 'vs Last Year', previous_year_date) AS (ord, period, cmp, d)\n",
+        "  FROM cur),\n",
+        "v AS (\n",
+        "SELECT f.as_of_date, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN (SELECT DISTINCT d FROM per WHERE d IS NOT NULL) x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date),\n",
+        "k AS (\n",
+        "  SELECT per.ord, per.period, per.cmp, per.d AS actual_date, v.port AS port_bal, v.ovd AS ovd_bal,\n",
+        "         v.ovd / nullif(v.port, 0) * 100 AS overdue_ratio,\n",
+        "         v.ovd / cur.usd AS overdue_usd, v.port / cur.usd AS ending_balance_usd, cur.usd\n",
+        "  FROM per CROSS JOIN cur LEFT JOIN v ON v.as_of_date = per.d)\n",
+        ", c AS (SELECT * FROM k WHERE period = 'CURRENT')\n",
+        "SELECT k.ord, k.period, k.actual_date,\n",
+        "       concat(k.cmp, ' (', coalesce(date_format(k.actual_date, 'yyyy-MM-dd'), 'N/A'), ')') AS cmp,\n",
+        "       round(c.overdue_ratio - k.overdue_ratio, 2) AS ratio_pp,\n",
+        "       round(c.overdue_usd - k.overdue_usd, 0) AS overdue_usd,\n",
+        "       round(c.ending_balance_usd - k.ending_balance_usd, 0) AS ending_usd,\n",
+        "       CASE WHEN round(c.overdue_ratio - k.overdue_ratio, 2) IS NULL THEN 'N/A' ELSE concat(CASE WHEN round(c.overdue_ratio - k.overdue_ratio, 2) > 0 THEN '▲ ' WHEN round(c.overdue_ratio - k.overdue_ratio, 2) < 0 THEN '▼ ' ELSE '▪ ' END, format_number(abs(round(c.overdue_ratio - k.overdue_ratio, 2)), 2), ' pp') END AS ratio_txt,\n",
+        "       CASE WHEN round(c.overdue_usd - k.overdue_usd, 0) IS NULL THEN 'N/A' ELSE concat(CASE WHEN round(c.overdue_usd - k.overdue_usd, 0) > 0 THEN '▲ ' WHEN round(c.overdue_usd - k.overdue_usd, 0) < 0 THEN '▼ ' ELSE '▪ ' END, format_number(abs(round(c.overdue_usd - k.overdue_usd, 0)), 0), '') END AS overdue_txt,\n",
+        "       CASE WHEN round(c.ending_balance_usd - k.ending_balance_usd, 0) IS NULL THEN 'N/A' ELSE concat(CASE WHEN round(c.ending_balance_usd - k.ending_balance_usd, 0) > 0 THEN '▲ ' WHEN round(c.ending_balance_usd - k.ending_balance_usd, 0) < 0 THEN '▼ ' ELSE '▪ ' END, format_number(abs(round(c.ending_balance_usd - k.ending_balance_usd, 0)), 0), '') END AS ending_txt\n",
+        "FROM k CROSS JOIN c WHERE k.period <> 'CURRENT'\n",
+        "ORDER BY k.ord)) c\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "ovd_branch_options",
       "displayName": "Branch options",
       "queryLines": [
@@ -1467,6 +1566,19 @@
                   ],
                   "disaggregated": false
                 }
+              },
+              {
+                "name": "param_ovd_kpi_cards_report_date",
+                "query": {
+                  "datasetName": "ovd_kpi_cards",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
               }
             ],
             "spec": {
@@ -1505,6 +1617,10 @@
                   {
                     "parameterName": "report_date",
                     "queryName": "param_ovd_branch_top5_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_ovd_kpi_cards_report_date"
                   }
                 ]
               },
@@ -1641,6 +1757,19 @@
                   ],
                   "disaggregated": false
                 }
+              },
+              {
+                "name": "param_ovd_kpi_cards_branch",
+                "query": {
+                  "datasetName": "ovd_kpi_cards",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
               }
             ],
             "spec": {
@@ -1684,6 +1813,10 @@
                   {
                     "parameterName": "branch",
                     "queryName": "param_ovd_branch_top5_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_ovd_kpi_cards_branch"
                   }
                 ]
               },

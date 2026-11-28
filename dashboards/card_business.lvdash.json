@@ -837,6 +837,158 @@
       ]
     },
     {
+      "name": "card_kpi_cards",
+      "displayName": "KPI cards (Custom Viz)",
+      "queryLines": [
+        "SELECT stack(5,\n",
+        "  CAST('new_acquisition' AS STRING), CAST('New Acquisition' AS STRING), CAST(k.new_acquisition AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.new_acquisition_1 AS DOUBLE), CAST('MoM' AS STRING), CAST(c.new_acquisition_2 AS DOUBLE), CAST('vs YE' AS STRING), CAST(NULL AS DOUBLE), CAST(NULL AS STRING), CAST('%' AS STRING), CAST(',.1f' AS STRING), CAST(coalesce(concat(format_number(c.new_acquisition_3, 0), '% of Month Target'), 'Month Target: N/A') AS STRING), CAST(coalesce(concat(format_number(c.new_acquisition_4, 0), '% of Year Target'), 'Year Target: N/A') AS STRING),\n",
+        "  CAST('customer_base' AS STRING), CAST('Customer Base' AS STRING), CAST(k.customer_base AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.customer_base_1 AS DOUBLE), CAST('MoM' AS STRING), CAST(c.customer_base_2 AS DOUBLE), CAST('vs YE' AS STRING), CAST(NULL AS DOUBLE), CAST(NULL AS STRING), CAST('%' AS STRING), CAST(',.1f' AS STRING), CAST(coalesce(concat(format_number(c.customer_base_3, 0), '% of Month Target'), 'Month Target: N/A') AS STRING), CAST(coalesce(concat(format_number(c.customer_base_4, 0), '% of Year Target'), 'Year Target: N/A') AS STRING),\n",
+        "  CAST('using_customer' AS STRING), CAST('Using Customer' AS STRING), CAST(k.using_customer AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.using_customer_1 AS DOUBLE), CAST('MoM' AS STRING), CAST(c.using_customer_2 AS DOUBLE), CAST('vs YE' AS STRING), CAST(NULL AS DOUBLE), CAST(NULL AS STRING), CAST('%' AS STRING), CAST(',.1f' AS STRING), CAST(coalesce(concat(format_number(c.using_customer_3, 0), '% of Month Target'), 'Month Target: N/A') AS STRING), CAST(coalesce(concat(format_number(c.using_customer_4, 0), '% of Year Target'), 'Year Target: N/A') AS STRING),\n",
+        "  CAST('sales_volume' AS STRING), CAST('Sales Volume (K USD)' AS STRING), CAST(k.sales_volume_k_usd AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.sales_volume_1 AS DOUBLE), CAST('MoM' AS STRING), CAST(c.sales_volume_2 AS DOUBLE), CAST('vs YE' AS STRING), CAST(NULL AS DOUBLE), CAST(NULL AS STRING), CAST('%' AS STRING), CAST(',.1f' AS STRING), CAST(coalesce(concat(format_number(c.sales_volume_3, 0), '% of Month Target'), 'Month Target: N/A') AS STRING), CAST(coalesce(concat(format_number(c.sales_volume_4, 0), '% of Year Target'), 'Year Target: N/A') AS STRING),\n",
+        "  CAST('balance' AS STRING), CAST('Balance (K USD)' AS STRING), CAST(k.balance_k_usd AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.balance_1 AS DOUBLE), CAST('MoM' AS STRING), CAST(c.balance_2 AS DOUBLE), CAST('vs YE' AS STRING), CAST(NULL AS DOUBLE), CAST(NULL AS STRING), CAST('%' AS STRING), CAST(',.1f' AS STRING), CAST(coalesce(concat(format_number(c.balance_3, 0), '% of Month Target'), 'Month Target: N/A') AS STRING), CAST(coalesce(concat(format_number(c.balance_4, 0), '% of Year Target'), 'Year Target: N/A') AS STRING)\n",
+        ") AS (kpi, title, value, value_fmt, cmp1, cmp1_label, cmp2, cmp2_label, cmp3, cmp3_label, cmp_unit, cmp_fmt, note1, note2)\n",
+        "FROM (WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        "SELECT cur.d AS report_date, m.new_m AS new_acquisition, m.eop AS customer_base,\n",
+        "       m.usg AS using_customer, m.spend / cur.usd / 1000 AS sales_volume_k_usd, m.bal / cur.usd / 1000 AS balance_k_usd,\n",
+        "       m.dpd1 / nullif(m.bal, 0) * 100 AS dpd_1p, m.dpd10 / nullif(m.bal, 0) * 100 AS dpd_10p,\n",
+        "       m.dpd30 / nullif(m.bal, 0) * 100 AS dpd_30p, m.npl / nullif(m.bal, 0) * 100 AS npl\n",
+        "FROM cur LEFT JOIN m ON m.year_month = cur.cm) k CROSS JOIN (SELECT max(CASE WHEN line = 1 THEN new_acquisition END) AS new_acquisition_1, max(CASE WHEN line = 2 THEN new_acquisition END) AS new_acquisition_2, max(CASE WHEN line = 3 THEN new_acquisition END) AS new_acquisition_3, max(CASE WHEN line = 4 THEN new_acquisition END) AS new_acquisition_4, max(CASE WHEN line = 1 THEN customer_base END) AS customer_base_1, max(CASE WHEN line = 2 THEN customer_base END) AS customer_base_2, max(CASE WHEN line = 3 THEN customer_base END) AS customer_base_3, max(CASE WHEN line = 4 THEN customer_base END) AS customer_base_4, max(CASE WHEN line = 1 THEN using_customer END) AS using_customer_1, max(CASE WHEN line = 2 THEN using_customer END) AS using_customer_2, max(CASE WHEN line = 3 THEN using_customer END) AS using_customer_3, max(CASE WHEN line = 4 THEN using_customer END) AS using_customer_4, max(CASE WHEN line = 1 THEN sales_volume END) AS sales_volume_1, max(CASE WHEN line = 2 THEN sales_volume END) AS sales_volume_2, max(CASE WHEN line = 3 THEN sales_volume END) AS sales_volume_3, max(CASE WHEN line = 4 THEN sales_volume END) AS sales_volume_4, max(CASE WHEN line = 1 THEN balance END) AS balance_1, max(CASE WHEN line = 2 THEN balance END) AS balance_2, max(CASE WHEN line = 3 THEN balance END) AS balance_3, max(CASE WHEN line = 4 THEN balance END) AS balance_4 FROM (\n",
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        ", t AS (SELECT substr(f.metric_code, 1, length(f.metric_code) - 3) AS code, f.period_type,\n",
+        "               f.target_value\n",
+        "        FROM silver.ref_targets f CROSS JOIN cur\n",
+        "        WHERE left(f.metric_code, 5) = 'CARD_'\n",
+        "          AND (:customer_type = 'all' OR right(f.metric_code, 2) = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "          AND ((f.period_type = 'MONTH' AND f.period = cur.cm)\n",
+        "               OR (f.period_type = 'YEAR' AND f.period = CAST(year(cur.d) AS STRING)))),\n",
+        "tg AS (SELECT\n",
+        "  sum(CASE WHEN t.code = 'CARD_NEW_ACQ' AND t.period_type = 'MONTH' THEN t.target_value END) AS new_acquisition_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_NEW_ACQ' AND t.period_type = 'YEAR' THEN t.target_value END) AS new_acquisition_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_CUSTOMER_BASE' AND t.period_type = 'MONTH' THEN t.target_value END) AS customer_base_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_CUSTOMER_BASE' AND t.period_type = 'YEAR' THEN t.target_value END) AS customer_base_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_USING' AND t.period_type = 'MONTH' THEN t.target_value END) AS using_customer_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_USING' AND t.period_type = 'YEAR' THEN t.target_value END) AS using_customer_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_SALES_VOLUME' AND t.period_type = 'MONTH' THEN t.target_value END) AS sales_volume_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_SALES_VOLUME' AND t.period_type = 'YEAR' THEN t.target_value END) AS sales_volume_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_BALANCE' AND t.period_type = 'MONTH' THEN t.target_value END) AS balance_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_BALANCE' AND t.period_type = 'YEAR' THEN t.target_value END) AS balance_ty\n",
+        "  FROM t),\n",
+        "c AS (SELECT * FROM m CROSS JOIN cur WHERE m.year_month = cur.cm),\n",
+        "p AS (SELECT m.*, 1 AS line FROM m CROSS JOIN cur WHERE m.year_month = cur.lm\n",
+        "      UNION ALL SELECT m.*, 2 FROM m CROSS JOIN cur WHERE m.year_month = cur.ye)\n",
+        "SELECT l.line, concat(CASE l.line WHEN 1 THEN 'vs Last Month (' ELSE 'vs Last Year-end (' END,\n",
+        "                      l.ym, ')') AS compare,\n",
+        "       round((c.new_m - p.new_m) / nullif(p.new_m, 0) * 100, 1) AS new_acquisition,\n",
+        "       round((c.eop - p.eop) / nullif(p.eop, 0) * 100, 1) AS customer_base,\n",
+        "       round((c.usg - p.usg) / nullif(p.usg, 0) * 100, 1) AS using_customer,\n",
+        "       round((c.spend - p.spend) / nullif(p.spend, 0) * 100, 1) AS sales_volume,\n",
+        "       round((c.bal - p.bal) / nullif(p.bal, 0) * 100, 1) AS balance\n",
+        "FROM (SELECT 1 AS line, lm AS ym FROM cur UNION ALL SELECT 2, ye FROM cur) l\n",
+        "CROSS JOIN cur LEFT JOIN c ON true LEFT JOIN p ON p.line = l.line\n",
+        "UNION ALL\n",
+        "SELECT 3, '% of Month Target',\n",
+        "       round(c.new_m / nullif(tg.new_acquisition_tm, 0) * 100, 1),\n",
+        "       round(c.eop / nullif(tg.customer_base_tm, 0) * 100, 1),\n",
+        "       round(c.usg / nullif(tg.using_customer_tm, 0) * 100, 1),\n",
+        "       round(c.spend / nullif(tg.sales_volume_tm, 0) * 100, 1),\n",
+        "       round(c.bal / nullif(tg.balance_tm, 0) * 100, 1)\n",
+        "FROM tg LEFT JOIN c ON true\n",
+        "UNION ALL\n",
+        "-- năm: luỹ kế (flow) YTD / chỉ tiêu năm; tồn: hiện tại / chỉ tiêu cuối năm; using: không có\n",
+        "SELECT 4, '% of Year Target',\n",
+        "       round(c.new_ytd / nullif(tg.new_acquisition_ty, 0) * 100, 1),\n",
+        "       round(c.eop / nullif(tg.customer_base_ty, 0) * 100, 1), CAST(NULL AS DOUBLE),\n",
+        "       round(c.spend_ytd / nullif(tg.sales_volume_ty, 0) * 100, 1),\n",
+        "       round(c.bal / nullif(tg.balance_ty, 0) * 100, 1)\n",
+        "FROM tg LEFT JOIN c ON true\n",
+        "ORDER BY 1)) c\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "card_customer_types",
       "displayName": "Customer type options",
       "queryLines": [
@@ -2376,6 +2528,19 @@
                   ],
                   "disaggregated": false
                 }
+              },
+              {
+                "name": "param_card_kpi_cards_report_date",
+                "query": {
+                  "datasetName": "card_kpi_cards",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
               }
             ],
             "spec": {
@@ -2430,6 +2595,10 @@
                   {
                     "parameterName": "report_date",
                     "queryName": "param_card_risk_compare_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_kpi_cards_report_date"
                   }
                 ]
               },
@@ -2618,6 +2787,19 @@
                   ],
                   "disaggregated": false
                 }
+              },
+              {
+                "name": "param_card_kpi_cards_customer_type",
+                "query": {
+                  "datasetName": "card_kpi_cards",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
               }
             ],
             "spec": {
@@ -2677,6 +2859,10 @@
                   {
                     "parameterName": "customer_type",
                     "queryName": "param_card_risk_compare_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_kpi_cards_customer_type"
                   }
                 ]
               },

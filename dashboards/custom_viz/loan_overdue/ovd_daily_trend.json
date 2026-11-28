@@ -1,0 +1,135 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "encoding": {
+    "x": {
+      "field": "day",
+      "type": "ordinal",
+      "title": null,
+      "sort": null,
+      "axis": {
+        "labelAngle": 0
+      }
+    }
+  },
+  "layer": [
+    {
+      "layer": [
+        {
+          "mark": {
+            "type": "bar",
+            "color": "#3498DB",
+            "cornerRadiusEnd": 2,
+            "width": {
+              "band": 0.6
+            },
+            "tooltip": true
+          },
+          "encoding": {
+            "y": {
+              "field": "overdue_k_usd",
+              "type": "quantitative",
+              "title": "Overdue Amount (1000 USD)",
+              "axis": {
+                "titleColor": "#3498DB"
+              }
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "baseline": "top",
+            "dy": 4,
+            "fontSize": 10,
+            "color": "white",
+            "fontWeight": "bold"
+          },
+          "encoding": {
+            "y": {
+              "field": "overdue_k_usd",
+              "type": "quantitative"
+            },
+            "text": {
+              "field": "overdue_k_usd",
+              "format": ",.0f"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "layer": [
+        {
+          "mark": {
+            "type": "line",
+            "color": "#E67E22",
+            "strokeWidth": 2.5,
+            "point": {
+              "filled": true,
+              "size": 50,
+              "color": "#E67E22"
+            },
+            "tooltip": true
+          },
+          "encoding": {
+            "y": {
+              "field": "overdue_ratio",
+              "type": "quantitative",
+              "title": "Overdue Ratio (%)",
+              "scale": {
+                "zero": false,
+                "padding": 30
+              },
+              "axis": {
+                "orient": "right",
+                "titleColor": "#E67E22"
+              }
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "dy": -12,
+            "fontSize": 10,
+            "fontWeight": "bold",
+            "color": "#E67E22"
+          },
+          "encoding": {
+            "y": {
+              "field": "overdue_ratio",
+              "type": "quantitative",
+              "scale": {
+                "zero": false,
+                "padding": 30
+              },
+              "axis": {
+                "orient": "right"
+              }
+            },
+            "text": {
+              "field": "overdue_ratio",
+              "format": ".2f"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "resolve": {
+    "scale": {
+      "y": "independent"
+    }
+  },
+  "config": {
+    "legend": {
+      "orient": "bottom"
+    }
+  }
+}

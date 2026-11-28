@@ -192,13 +192,17 @@ def test_section_order_matches_original():
                    "Overdue Amount by Debt Groups", "Overdue Amount by Product Groups",
                    "Overdue Ratio by Product Groups", "Top 5 Branches by Overdue Ratio",
                    "Top 5 Branches - Overdue Amount"]
-    assert len(DASHES["retail_deposit.lvdash.json"]["pages"]) == 1
+    # 2 trang như bản HTML gốc (Overview & Performance / Customer & Product Insights)
+    assert [p["displayName"] for p in DASHES["retail_deposit.lvdash.json"]["pages"]] == [
+        "Overview & Performance", "Customer & Product Insights"]
     assert titles("retail_deposit.lvdash.json") == [
         "Ending Balance", "Monthly Avg Balance", "Retail Customers", "", "All Products Target (%)",
         "CASA Target (%)", "TDA/ISA Target (%)", "Ending Balance - Last 30 Days",
         "Monthly Ending Balance - Year Comparison", "Regional Deposit Distribution",
-        "Deposit by Term and IR (in Month)", "CASA Customer Distribution",
-        "Edu-Save New open Account_ Accumulate by Month", "Balance by Product (K USD)"]
+        "Deposit by Term and IR (in Month)"]
+    assert titles("retail_deposit.lvdash.json", 1) == [
+        "CASA Customer Distribution", "Edu-Save New open Account_ Accumulate by Month",
+        "Balance by Product (K USD)"]
 
 
 def test_bundle_files_up_to_date():
@@ -227,3 +231,46 @@ def test_card_colors_from_original_palette():
     assert maps[("In & Out", "New Issuance")] == "#2F5597"
     assert maps[("Balance (K USD)", "Revolving")] == "#BF9000"
     assert maps[("By Sectors", "Purchasing")] == CARD_COLORS["sector"]["Purchasing"] == "#2F5597"
+
+
+def test_filters_bound_on_every_page():
+    """Nhiều trang: mỗi bộ lọc phải gắn với dataset của chính trang đó."""
+    for name, body in DASHES.items():
+        for pg in body["pages"]:
+            on_page = {q["query"]["datasetName"] for i in pg["layout"]
+                       for q in i["widget"].get("queries", []) if q["name"] == "main_query"}
+            for i in pg["layout"]:
+                spec = i["widget"].get("spec", {})
+                if spec.get("widgetType", "").startswith("filter"):
+                    bound = {q["query"]["datasetName"] for q in i["widget"]["queries"]
+                             if q["name"].startswith("param_")}
+                    assert bound and bound <= on_page, (name, pg["name"], spec["frame"])
+
+
+def test_custom_viz_fields_exist_in_datasets(spark, tables):
+    """Spec Vega-Lite chỉ đọc cột có thật trong dataset tương ứng; thẻ KPI có đủ dòng."""
+    from common.lakeview.custom_viz import catalog
+
+    files = {"card_business": "card_business.lvdash.json",
+             "retail_deposit": "retail_deposit.lvdash.json",
+             "loan_overdue": "loan_overdue.lvdash.json"}
+    for w in catalog():
+        ds = next(d for d in DASHES[files[w.dashboard]]["datasets"] if d["name"] == w.dataset)
+        cols = set(spark.sql(_local_sql(ds, PARAMS[0])).columns)
+        assert set(w.fields) <= cols, (w.name, set(w.fields) - cols)
+    for name, n in (("card_kpi_cards", 5), ("dep_kpi_cards", 3), ("ovd_kpi_cards", 3)):
+        ds = next(d for b in DASHES.values() for d in b["datasets"] if d["name"] == name)
+        rows = spark.sql(_local_sql(ds, PARAMS[0])).collect()
+        assert len(rows) == n and all(r.title for r in rows), name
+
+
+def test_custom_viz_specs_up_to_date(tmp_path):
+    """dashboards/custom_viz phải khớp generator (PYTHONPATH=src python -m common.lakeview)."""
+    from pathlib import Path
+
+    from common.lakeview.custom_viz import write_specs
+
+    root = Path(__file__).resolve().parents[1] / "dashboards" / "custom_viz"
+    for p in write_specs(tmp_path):
+        rel = p.relative_to(tmp_path)
+        assert (root / rel).read_text(encoding="utf-8") == p.read_text(encoding="utf-8"), rel

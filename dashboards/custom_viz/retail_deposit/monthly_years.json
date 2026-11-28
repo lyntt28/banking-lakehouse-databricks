@@ -1,0 +1,92 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "transform": [
+    {
+      "calculate": "split(datum.series, ' ')[0]",
+      "as": "_class"
+    },
+    {
+      "calculate": "indexof(datum.series, 'this year') >= 0 ? 'This year' : 'Last year'",
+      "as": "_year"
+    }
+  ],
+  "mark": {
+    "type": "bar",
+    "tooltip": true
+  },
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "ordinal",
+      "sort": [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec"
+      ],
+      "title": null,
+      "axis": {
+        "labelAngle": 0
+      }
+    },
+    "xOffset": {
+      "field": "_year",
+      "type": "ordinal",
+      "sort": "ascending"
+    },
+    "y": {
+      "field": "ending_balance",
+      "type": "quantitative",
+      "aggregate": "sum",
+      "stack": "zero",
+      "title": "Ending Balance (K USD)"
+    },
+    "color": {
+      "field": "_class",
+      "type": "nominal",
+      "title": null,
+      "scale": {
+        "domain": [
+          "1-CASA",
+          "2-TD",
+          "3-ISA"
+        ],
+        "range": [
+          "#F4A300",
+          "#009688",
+          "#223A5E"
+        ]
+      }
+    },
+    "opacity": {
+      "field": "_year",
+      "type": "ordinal",
+      "title": "Year",
+      "scale": {
+        "range": [
+          0.45,
+          1.0
+        ]
+      }
+    }
+  },
+  "config": {
+    "legend": {
+      "orient": "bottom"
+    }
+  }
+}

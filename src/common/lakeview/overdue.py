@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from common.lakeview.core import USD_RATE, Dash, _q
+from common.lakeview.core import USD_RATE, Dash, _q, kpi_cards_sql, lit
 
 # ============================================================ 2. OVERDUE (RAMC)
 # Nguồn: gold.card_mart_overdue_daily (file credit_card_overdue_YYYYMMDD.txt), logic theo
@@ -152,11 +152,30 @@ WHERE as_of_date = (SELECT max(report_date) FROM {CAL}) AND mng_br IS NOT NULL""
     }
 
 
+def _with_kpi_cards(sql: dict[str, str]) -> dict[str, str]:
+    """Thẻ KPI (Custom Viz): giá trị từ ovd_kpi + chênh lệch D-1 / M-1 / Y-1 từ ovd_compare."""
+    cols = [("overdue_ratio", "ratio_pp", "Overdue Ratio", ".2f", " pp", ".2f"),
+            ("overdue_usd", "overdue_usd", "Overdue Balance (USD)", ",.0f", "", ",.0f"),
+            ("ending_usd", "ending_usd", "Ending Balance (USD)", ",.0f", "", ",.0f")]
+    piv = ", ".join(f"max(CASE WHEN period = '{p}' THEN {d} END) AS {d}_{p}"
+                    for _, d, *_ in cols for p in ("D1", "M1", "Y1"))
+    sql["ovd_kpi_cards"] = kpi_cards_sql(
+        {"k": sql["ovd_kpi"], "c": f"SELECT {piv} FROM ({sql['ovd_compare']})"},
+        [{"kpi": lit(v), "title": lit(t), "value": f"k.{v}", "value_fmt": lit(vf),
+          "cmp1": f"c.{d}_D1", "cmp1_label": lit("vs Last Day"), "cmp2": f"c.{d}_M1",
+          "cmp2_label": lit("vs Last Month"), "cmp3": f"c.{d}_Y1",
+          "cmp3_label": lit("vs Last Year"), "cmp_unit": lit(u), "cmp_fmt": lit(cf),
+          "note1": "concat('Report date ', date_format(k.actual_date, 'yyyy-MM-dd'))",
+          "note2": "concat('FX ', format_number(k.fx_vnd_usd, 0), ' VND/USD')"}
+         for v, d, t, vf, u, cf in cols])
+    return sql
+
+
 def overdue_dashboard(catalog: str) -> dict:
     d = Dash("overdue", "Retail Loan Overdue Tracking")
     d.param("report_date", "Report date", "DATE", "now/d")
     d.param("branch", "Branch", "STRING", "all")
-    sql = overdue_sql(catalog)
+    sql = _with_kpi_cards(overdue_sql(catalog))
     rb = ["report_date", "branch"]
     titles = {"ovd_kpi": "KPI (current) + FX", "ovd_compare": "KPI vs Last Day / Month / Year",
               "ovd_daily_trend": "Overdue Trend (Last 5 Days)",
@@ -164,7 +183,8 @@ def overdue_dashboard(catalog: str) -> dict:
               "ovd_debt_groups": "Overdue Amount by Debt Groups",
               "ovd_product": "Overdue by Product Groups",
               "ovd_product_top5": "Overdue Ratio by Product Groups - Top5",
-              "ovd_branch_top5": "Overdue by Branch - Top5"}
+              "ovd_branch_top5": "Overdue by Branch - Top5",
+              "ovd_kpi_cards": "KPI cards (Custom Viz)"}
     ds = {n: d.dataset(n, t, sql[n], rb) for n, t in titles.items()}
     ds_br = d.dataset("ovd_branch_options", "Branch options", sql["ovd_branch_options"], [])
 

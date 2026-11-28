@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from common.lakeview.core import Dash, _q
+from common.lakeview.core import Dash, _q, kpi_cards_sql, lit
 
 # ============================================================ 1. CARD BUSINESS
 CARD_COLORS = {   # từ dashboard Chart.js gốc (đã xóa khỏi repo)
@@ -182,6 +182,24 @@ SELECT explode(array('consumer', 'corporate', 'all')) AS customer_type""",
         out[f"card_mix_{donut}"] = month + f"""
 SELECT stack({len(rows)}, {pairs}) AS (slice, amount)
 FROM m CROSS JOIN cur WHERE m.year_month = cur.cm"""
+    piv = ", ".join(f"max(CASE WHEN line = {ln} THEN {col} END) AS {col}_{ln}"
+                    for col, _, _ in KPI_CODES for ln in (1, 2, 3, 4))
+    value_col = {"sales_volume": "sales_volume_k_usd", "balance": "balance_k_usd"}
+
+    def note(col: str, ln: int, what: str) -> str:
+        return (f"coalesce(concat(format_number(c.{col}_{ln}, 0), '% of {what}'), "
+                f"'{what}: N/A')")
+
+    out["card_kpi_cards"] = kpi_cards_sql(
+        {"k": out["card_kpi"], "c": f"SELECT {piv} FROM ({out['card_kpi_compare']})"},
+        [{"kpi": lit(col), "title": lit(title), "value": f"k.{value_col.get(col, col)}",
+          "value_fmt": lit(",.0f"), "cmp1": f"c.{col}_1", "cmp1_label": lit("MoM"),
+          "cmp2": f"c.{col}_2", "cmp2_label": lit("vs YE"), "cmp_unit": lit("%"),
+          "cmp_fmt": lit(",.1f"), "note1": note(col, 3, "Month Target"),
+          "note2": note(col, 4, "Year Target")}
+         for (col, _, _), title in zip(KPI_CODES, ["New Acquisition", "Customer Base",
+                                                   "Using Customer", "Sales Volume (K USD)",
+                                                   "Balance (K USD)"], strict=True)])
     return out
 
 
@@ -198,7 +216,8 @@ def card_dashboard(catalog: str) -> dict:
               "card_volume": "Sales Volume (K USD)", "card_ticket": "Spend per Member (USD)",
               "card_mix_sector": "Spend by sector", "card_mix_location": "Spend by location",
               "card_mix_channel": "Spend by channel",
-              "card_risk_compare": "Delinquency vs last day / month (pp)"}
+              "card_risk_compare": "Delinquency vs last day / month (pp)",
+              "card_kpi_cards": "KPI cards (Custom Viz)"}
     ds = {n: d.dataset(n, t, sql[n], rc) for n, t in titles.items()}
     ds_ct = d.dataset("card_customer_types", "Customer type options",
                       sql["card_customer_types"], [])

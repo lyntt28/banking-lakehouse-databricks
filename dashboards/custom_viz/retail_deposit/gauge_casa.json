@@ -1,0 +1,104 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "layer": [
+    {
+      "mark": {
+        "type": "arc",
+        "innerRadius": {
+          "expr": "min(width, height * 2) * 0.32"
+        },
+        "outerRadius": {
+          "expr": "min(width, height * 2) * 0.45"
+        },
+        "theta": {
+          "expr": "-PI / 2"
+        },
+        "theta2": {
+          "expr": "PI / 2"
+        },
+        "color": "#e5e7eb",
+        "y": {
+          "expr": "height * 0.9"
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "arc",
+        "innerRadius": {
+          "expr": "min(width, height * 2) * 0.32"
+        },
+        "outerRadius": {
+          "expr": "min(width, height * 2) * 0.45"
+        },
+        "theta": {
+          "expr": "-PI / 2"
+        },
+        "theta2": {
+          "expr": "-PI / 2 + PI * clamp(isValid(datum.casa_pct) ? datum.casa_pct : 0, 0, 120) / 120"
+        },
+        "color": "#10B981",
+        "y": {
+          "expr": "height * 0.9"
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "fontSize": 26,
+        "fontWeight": "bold",
+        "color": "#10B981",
+        "y": {
+          "expr": "height * 0.78"
+        }
+      },
+      "encoding": {
+        "text": {
+          "value": {
+            "expr": "isValid(datum.casa_pct) ? format(datum.casa_pct, '.1f') + '%' : 'N/A'"
+          }
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "fontSize": 10,
+        "color": "#888",
+        "y": {
+          "expr": "height * 0.97"
+        },
+        "x": {
+          "expr": "width / 2 - min(width, height * 2) * 0.385"
+        },
+        "text": "0%"
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "fontSize": 10,
+        "color": "#888",
+        "y": {
+          "expr": "height * 0.97"
+        },
+        "x": {
+          "expr": "width / 2 + min(width, height * 2) * 0.385"
+        },
+        "text": "120%"
+      }
+    }
+  ],
+  "config": {
+    "view": {
+      "stroke": null
+    }
+  }
+}

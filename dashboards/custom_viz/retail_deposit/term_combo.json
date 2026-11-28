@@ -1,0 +1,135 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "encoding": {
+    "x": {
+      "field": "tenor",
+      "type": "ordinal",
+      "title": null,
+      "sort": null,
+      "axis": {
+        "labelAngle": 0
+      }
+    }
+  },
+  "layer": [
+    {
+      "layer": [
+        {
+          "mark": {
+            "type": "bar",
+            "color": "#009688",
+            "cornerRadiusEnd": 2,
+            "width": {
+              "band": 0.6
+            },
+            "tooltip": true
+          },
+          "encoding": {
+            "y": {
+              "field": "balance",
+              "type": "quantitative",
+              "title": "Balance (K USD)",
+              "axis": {
+                "titleColor": "#009688"
+              }
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "baseline": "top",
+            "dy": 4,
+            "fontSize": 10,
+            "color": "white",
+            "fontWeight": "bold"
+          },
+          "encoding": {
+            "y": {
+              "field": "balance",
+              "type": "quantitative"
+            },
+            "text": {
+              "field": "balance",
+              "format": ",.0f"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "layer": [
+        {
+          "mark": {
+            "type": "line",
+            "color": "#F4A300",
+            "strokeWidth": 2.5,
+            "point": {
+              "filled": true,
+              "size": 50,
+              "color": "#F4A300"
+            },
+            "tooltip": true
+          },
+          "encoding": {
+            "y": {
+              "field": "avg_interest",
+              "type": "quantitative",
+              "title": "Avg Interest (%)",
+              "scale": {
+                "zero": false,
+                "padding": 30
+              },
+              "axis": {
+                "orient": "right",
+                "titleColor": "#F4A300"
+              }
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "dy": -12,
+            "fontSize": 10,
+            "fontWeight": "bold",
+            "color": "#F4A300"
+          },
+          "encoding": {
+            "y": {
+              "field": "avg_interest",
+              "type": "quantitative",
+              "scale": {
+                "zero": false,
+                "padding": 30
+              },
+              "axis": {
+                "orient": "right"
+              }
+            },
+            "text": {
+              "field": "avg_interest",
+              "format": ".2f"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "resolve": {
+    "scale": {
+      "y": "independent"
+    }
+  },
+  "config": {
+    "legend": {
+      "orient": "bottom"
+    }
+  }
+}

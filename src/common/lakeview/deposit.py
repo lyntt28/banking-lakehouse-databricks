@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from common.lakeview.core import Dash, _q
+from common.lakeview.core import Dash, _q, kpi_cards_sql, lit
 
 # ============================================================ 3. RETAIL DEPOSIT (DEPOSIT)
 DEP_COLORS = {   # từ dashboard Chart.js gốc (đã xóa khỏi repo)
@@ -186,6 +186,26 @@ SELECT * FROM VALUES ('all'), ('VND'), ('USD') AS t(currency)""",
     }
 
 
+def _with_kpi_cards(sql: dict[str, str]) -> dict[str, str]:
+    """Thẻ KPI (Custom Viz): giá trị từ dep_tickers + chênh lệch tuyệt đối D/M/Y từ dep_compare."""
+    cols = ["ending_balance", "monthly_avg_balance", "retail_customers"]
+    piv = ", ".join(f"max(CASE WHEN ord = {o} THEN {c} END) AS {c}_{o}"
+                    for c in cols for o in (1, 2, 3))
+    fmt = {"ending_balance": ",.0f", "monthly_avg_balance": ",.0f", "retail_customers": ",.0f"}
+    titles = {"ending_balance": "Ending Balance", "monthly_avg_balance": "Monthly Avg Balance",
+              "retail_customers": "Retail Customers"}
+    sql["dep_kpi_cards"] = kpi_cards_sql(
+        {"k": sql["dep_tickers"], "c": f"SELECT {piv} FROM ({sql['dep_compare']})"},
+        [{"kpi": lit(c), "title": lit(titles[c]), "value": f"k.{c}", "value_fmt": lit(fmt[c]),
+          "cmp1": f"c.{c}_1", "cmp1_label": lit("Last Day"), "cmp2": f"c.{c}_2",
+          "cmp2_label": lit("Last Month"), "cmp3": f"c.{c}_3", "cmp3_label": lit("Last Year"),
+          "cmp_unit": lit(""), "cmp_fmt": lit(",.0f"),
+          "note1": lit("Unit: USD 1,000" if c != "retail_customers" else "Customers"),
+          "note2": "concat('Report date ', date_format(k.report_date, 'yyyy-MM-dd'))"}
+         for c in cols])
+    return sql
+
+
 def deposit_dashboard(catalog: str) -> dict:
     """1 trang: header + bộ lọc, các mục có tiêu đề. Số dư: nghìn USD ('Unit: USD 1,000').
     Bộ lọc áp dụng theo grain từng visual (như dashboard gốc), không ép mọi filter cho mọi
@@ -194,12 +214,13 @@ def deposit_dashboard(catalog: str) -> dict:
     d.param("report_date", "Report date", "DATE", "now/d")
     for p in ("region", "branch", "product", "currency", "nationality"):
         d.param(p, p.capitalize(), "STRING", "all")
-    sql = deposit_sql(catalog)
+    sql = _with_kpi_cards(deposit_sql(catalog))
     loc = ["report_date", "region", "branch"]
     ps = {"dep_tickers": loc, "dep_compare": loc, "dep_gauges": loc,
           "dep_daily30": loc + ["product"], "dep_monthly": loc,
           "dep_region": loc + ["product"], "dep_term": loc, "dep_casa_customer": loc,
-          "dep_edusave": loc, "dep_by_product": loc + ["currency", "nationality"]}
+          "dep_edusave": loc, "dep_by_product": loc + ["currency", "nationality"],
+          "dep_kpi_cards": loc}
     titles = {"dep_tickers": "Tickers", "dep_compare": "Tickers vs last day / month / year",
               "dep_gauges": "Target gauges (YTD growth / growth target)",
               "dep_daily30": "Ending Balance - Last 30 Days", "dep_monthly": MONTHLY_TITLE,
@@ -207,24 +228,29 @@ def deposit_dashboard(catalog: str) -> dict:
               "dep_term": "Deposit by Term and IR (in Month)",
               "dep_casa_customer": "CASA Customer Distribution",
               "dep_edusave": "Edu-Save New open Account_ Accumulate by Month",
-              "dep_by_product": "Balance by Product"}
+              "dep_by_product": "Balance by Product",
+              "dep_kpi_cards": "KPI cards (Custom Viz)"}
     ds = {n: d.dataset(n, t, sql[n], ps[n]) for n, t in titles.items()}
     opt = {n: d.dataset(f"dep_{n}_options", f"{n.capitalize()} options",
                         sql[f"dep_{n}_options"], [])
            for n in ("region", "branch", "product", "currency", "nationality")}
 
     c = DEP_COLORS
-    d.text("# Retail Deposit Performance\nUnit: USD 1,000", 0, 0, 3, 2)
-    d.param_filter("report_date", "Report date", "filter-date-picker", 3, 0)
-    for i, n in enumerate(("region", "branch")):
-        d.param_filter(n, n.capitalize(), "filter-single-select", 4 + i, 0,
-                       options_ds=opt[n], options_col=n)
-    for i, n in enumerate(("product", "currency", "nationality")):
-        d.param_filter(n, n.capitalize(), "filter-single-select", 3 + i, 2,
-                       options_ds=opt[n], options_col=n)
 
-    Y = 2   # dịch xuống 1 hàng bộ lọc
-    d.text("### Overview", 0, 2 + Y - 2, 3)
+    def header_and_filters(page_filters: tuple[str, ...]) -> None:
+        """Header + bộ lọc của trang. Gọi SAU khi đặt widget: bộ lọc chỉ gắn dataset có trên
+        trang hiện tại (Dash.param_filter khi có nhiều trang)."""
+        d.text("# Retail Deposit Performance\nUnit: USD 1,000", 0, 0, 3, 2)
+        d.param_filter("report_date", "Report date", "filter-date-picker", 3, 0)
+        for i, n in enumerate(page_filters):
+            x, y = (4 + i, 0) if i < 2 else (3 + i - 2, 2)
+            d.param_filter(n, n.capitalize(), "filter-single-select", x, y,
+                           options_ds=opt[n], options_col=n)
+
+    # ---- Trang 1: Overview & Performance (như tab 1 của bản HTML gốc)
+    d.page("overview", "Overview & Performance")
+    Y = 2   # chừa 1 hàng cho bộ lọc
+    d.text("### Overview", 0, 2, 3)
     for i, (col, title, key, fmt) in enumerate([
             ("ending_balance", "Ending Balance", "bal", "int"),
             ("monthly_avg_balance", "Monthly Avg Balance", "mavg", "int"),
@@ -235,14 +261,12 @@ def deposit_dashboard(catalog: str) -> dict:
         ("compare", "", "text"), ("ending_balance", "Ending Balance (+/-)", "num"),
         ("monthly_avg_balance", "Monthly Avg Balance (+/-)", "num"),
         ("retail_customers", "Retail Customers (+/-)", "num")], 0, 6 + Y, 6, 3)
-
     d.text("### Target Achievement", 0, 9 + Y)
     for i, (col, title, key) in enumerate([("all_pct", "All Products Target (%)", "all"),
                                            ("casa_pct", "CASA Target (%)", "casa"),
                                            ("tda_pct", "TDA/ISA Target (%)", "tda")]):
         d.counter(ds["dep_gauges"], col, title, 2 * i, 10 + Y, w=2, color=c["gauge"][key],
                   fmt="pct")
-
     d.text("### Balance Trend", 0, 13 + Y)
     d.chart("bar", ds["dep_daily30"], "Ending Balance - Last 30 Days", 0, 14 + Y, 6, 7,
             cat="day", val="balance", single_color=c["daily"], labels=False,
@@ -250,7 +274,6 @@ def deposit_dashboard(catalog: str) -> dict:
     d.chart("bar", ds["dep_monthly"], MONTHLY_TITLE, 0, 21 + Y, 6, 8, cat="month",
             series="series", val="ending_balance", layout="group", colors=c["mom"],
             labels=False, cat_title="Month", val_title="Ending Balance (K USD)")
-
     d.text("### Deposit Mix", 0, 29 + Y)
     d.chart("pie", ds["dep_region"], "Regional Deposit Distribution", 0, 30 + Y, 2, 7,
             cat="region", val="balance", colors=c["region"], cat_title="Region",
@@ -258,17 +281,21 @@ def deposit_dashboard(catalog: str) -> dict:
     d.combo(ds["dep_term"], "Deposit by Term and IR (in Month)", 2, 30 + Y, 4, 7, cat="tenor",
             bar="balance", line="avg_interest", bar_title="Balance (K USD)",
             line_title="Avg Interest (%)", bar_color=c["term_bar"], line_color=c["term_line"])
+    header_and_filters(("region", "branch", "product"))
 
-    d.text("### Customer & Product Insights", 0, 37 + Y)
-    d.chart("pie", ds["dep_casa_customer"], "CASA Customer Distribution", 0, 38 + Y, 2, 7,
+    # ---- Trang 2: Customer & Product Insights (tab 2 của bản gốc)
+    d.page("insights", "Customer & Product Insights")
+    d.text("### Customer & Product Insights", 0, 2, 3)
+    d.chart("pie", ds["dep_casa_customer"], "CASA Customer Distribution", 0, 3 + Y, 2, 7,
             cat="segment", val="customers", colors=c["casa"], cat_title="Segment",
             val_title="Customers")
     d.chart("bar", ds["dep_edusave"], "Edu-Save New open Account_ Accumulate by Month",
-            2, 38 + Y, 4, 7, cat="month", val="cumulative_accounts",
+            2, 3 + Y, 4, 7, cat="month", val="cumulative_accounts",
             single_color=c["edusave"], cat_title="Month", val_title="Accounts")
     d.table(ds["dep_by_product"], "Balance by Product (K USD)", [
         ("product", "Balance by Product", "text"), ("ending_balance", "Ending Balance", "num"),
         ("portion", "Portion (%)", "num"), ("diff_last_day", "+/- Last Day", "num"),
         ("diff_last_month", "+/- Last Month", "num"),
-        ("diff_last_year", "+/- Last Year", "num")], 0, 45 + Y, 6, 9)
+        ("diff_last_year", "+/- Last Year", "num")], 0, 10 + Y, 6, 9)
+    header_and_filters(("region", "branch", "currency", "nationality"))
     return d.to_json()

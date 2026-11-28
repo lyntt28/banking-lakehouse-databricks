@@ -1,0 +1,93 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "transform": [
+    {
+      "joinaggregate": [
+        {
+          "op": "sum",
+          "field": "amount",
+          "as": "_tot"
+        }
+      ]
+    },
+    {
+      "calculate": "datum.amount / datum._tot",
+      "as": "_share"
+    }
+  ],
+  "layer": [
+    {
+      "mark": {
+        "type": "arc",
+        "innerRadius": {
+          "expr": "min(width, height) * 0.30"
+        },
+        "outerRadius": {
+          "expr": "min(width, height) * 0.42"
+        },
+        "tooltip": true
+      },
+      "encoding": {
+        "theta": {
+          "field": "amount",
+          "type": "quantitative",
+          "stack": true
+        },
+        "color": {
+          "field": "slice",
+          "type": "nominal",
+          "title": null,
+          "scale": {
+            "domain": [
+              "POS (Offline)",
+              "Online"
+            ],
+            "range": [
+              "#2F5597",
+              "#BF9000"
+            ]
+          },
+          "legend": {
+            "orient": "bottom",
+            "columns": 2,
+            "labelLimit": 120
+          }
+        },
+        "order": {
+          "field": "slice",
+          "sort": "ascending"
+        }
+      }
+    },
+    {
+      "transform": [
+        {
+          "filter": "datum.slice == 'POS (Offline)'"
+        }
+      ],
+      "mark": {
+        "type": "text",
+        "fontSize": 16,
+        "fontWeight": "bold",
+        "color": "#2F5597"
+      },
+      "encoding": {
+        "text": {
+          "field": "_share",
+          "format": ".1%"
+        }
+      }
+    }
+  ],
+  "config": {
+    "view": {
+      "stroke": null
+    }
+  }
+}

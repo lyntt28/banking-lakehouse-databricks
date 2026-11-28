@@ -1,0 +1,183 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "transform": [
+    {
+      "filter": "datum.kpi == 'monthly_avg_balance'"
+    }
+  ],
+  "layer": [
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "baseline": "top",
+        "fontSize": 12,
+        "fontWeight": "bold",
+        "color": "#666",
+        "x": 4,
+        "y": 4
+      },
+      "encoding": {
+        "text": {
+          "field": "title"
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "baseline": "top",
+        "fontSize": 32,
+        "fontWeight": "bold",
+        "color": "#009688",
+        "x": 4,
+        "y": 26
+      },
+      "encoding": {
+        "text": {
+          "value": {
+            "expr": "isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'"
+          }
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "fontSize": 12,
+        "fontWeight": "bold",
+        "x": {
+          "expr": "width * 0.02"
+        },
+        "y": 80
+      },
+      "encoding": {
+        "text": {
+          "value": {
+            "expr": "isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '▲ ' : (datum.cmp1) < 0 ? '▼ ' : '▪ ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''"
+          }
+        },
+        "color": {
+          "condition": [
+            {
+              "test": "isValid(datum.cmp1) && datum.cmp1 > 0",
+              "value": "#16a34a"
+            },
+            {
+              "test": "isValid(datum.cmp1) && datum.cmp1 < 0",
+              "value": "#dc2626"
+            }
+          ],
+          "value": "#9e9e9e"
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "fontSize": 12,
+        "fontWeight": "bold",
+        "x": {
+          "expr": "width * 0.35"
+        },
+        "y": 80
+      },
+      "encoding": {
+        "text": {
+          "value": {
+            "expr": "isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '▲ ' : (datum.cmp2) < 0 ? '▼ ' : '▪ ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''"
+          }
+        },
+        "color": {
+          "condition": [
+            {
+              "test": "isValid(datum.cmp2) && datum.cmp2 > 0",
+              "value": "#16a34a"
+            },
+            {
+              "test": "isValid(datum.cmp2) && datum.cmp2 < 0",
+              "value": "#dc2626"
+            }
+          ],
+          "value": "#9e9e9e"
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "fontSize": 12,
+        "fontWeight": "bold",
+        "x": {
+          "expr": "width * 0.68"
+        },
+        "y": 80
+      },
+      "encoding": {
+        "text": {
+          "value": {
+            "expr": "isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '▲ ' : (datum.cmp3) < 0 ? '▼ ' : '▪ ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''"
+          }
+        },
+        "color": {
+          "condition": [
+            {
+              "test": "isValid(datum.cmp3) && datum.cmp3 > 0",
+              "value": "#16a34a"
+            },
+            {
+              "test": "isValid(datum.cmp3) && datum.cmp3 < 0",
+              "value": "#dc2626"
+            }
+          ],
+          "value": "#9e9e9e"
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "fontSize": 10,
+        "color": "#888",
+        "x": 4,
+        "y": 104
+      },
+      "encoding": {
+        "text": {
+          "field": "note1"
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "fontSize": 10,
+        "color": "#888",
+        "x": 4,
+        "y": 120
+      },
+      "encoding": {
+        "text": {
+          "field": "note2"
+        }
+      }
+    }
+  ],
+  "config": {
+    "view": {
+      "stroke": null
+    }
+  }
+}

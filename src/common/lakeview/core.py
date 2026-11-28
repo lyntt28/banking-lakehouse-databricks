@@ -218,3 +218,29 @@ def _arrow_pct(expr: str, unit: str = "%") -> str:
     """Số thay đổi -> chuỗi '▲ 1.2%' / '▼ 0.9%' (bảng v2 không tự định dạng số)."""
     return (f"CASE WHEN {expr} IS NULL THEN '-' ELSE concat(CASE WHEN {expr} >= 0 THEN '▲ ' "
             f"ELSE '▼ ' END, format_number(abs({expr}), 1), '{unit}') END")
+
+
+# ============================================================ thẻ KPI (Custom Viz)
+KPI_CARD_COLS = ["kpi", "title", "value", "value_fmt", "cmp1", "cmp1_label", "cmp2",
+                 "cmp2_label", "cmp3", "cmp3_label", "cmp_unit", "cmp_fmt", "note1", "note2"]
+
+
+def kpi_cards_sql(sources: dict[str, str], rows: list[dict[str, str]]) -> str:
+    """Dataset dạng dài cho thẻ KPI (common.lakeview.vega.kpi_card): 1 dòng / KPI.
+
+    sources: alias -> SQL của dataset ĐÃ CÓ (dùng lại nguyên logic, không tính lại);
+    mỗi alias phải trả đúng 1 dòng. rows: mỗi KPI là dict cột (KPI_CARD_COLS) -> biểu thức
+    SQL trên các alias; cột thiếu = NULL."""
+    joins = " CROSS JOIN ".join(f"({sql.strip()}) {alias}" for alias, sql in sources.items())
+    casts = {"value": "DOUBLE", "cmp1": "DOUBLE", "cmp2": "DOUBLE", "cmp3": "DOUBLE"}
+
+    def cell(r: dict, c: str) -> str:
+        return f"CAST({r.get(c, 'NULL')} AS {casts.get(c, 'STRING')})"
+
+    body = ",\n  ".join(", ".join(cell(r, c) for c in KPI_CARD_COLS) for r in rows)
+    return (f"SELECT stack({len(rows)},\n  {body}\n) AS ({', '.join(KPI_CARD_COLS)})\n"
+            f"FROM {joins}")
+
+
+def lit(s: str) -> str:
+    return "'" + s.replace("'", "''") + "'"
