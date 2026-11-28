@@ -40,20 +40,9 @@ Source `gold.card_mart_overdue_daily` (file `credit_card_overdue_YYYYMMDD.txt`) 
 
 ## 3. Retail Deposit Performance Dashboard (DEPOSIT)
 
-| Visual | Metric | Gold source |
-|---|---|---|
-| 3 gauges | % target: All products, CASA, TDA/ISA | `dep_mart_daily` + `deposit_targets` |
-| Account group table | Balance, share %, diff D-1 / M-1 / Y-1, month average balance | `dep_mart_daily` (same layout as `bang1247`) |
-| Balance by region / by product, stacked bar by group class | Balance | same |
-| CASA donut | CASA share by account group | same |
-| Daily balance chart | Balance trend | same |
-| Deposit by term and interest rate | Balance, min/max/avg rate by tenor | `dep_mart_by_tenor` |
-| CASA customer distribution | Retail customers, CASA customers, active vs dormant | `dep_mart_casa_customer` |
-| Edu-Save new open accounts (cumulative by month) | New study-abroad accounts | `dep_mart_new_accounts` |
-
-Filters: region, currency, nationality, group class (1-CASA / 2-TDA / 3-ISA).
-
-Reconciliation: `dep_mart_daily` vs `deposit_summary` (bang1247) source files.
+Marts `dep_mart_trend`, `dep_mart_monthly`, `dep_mart_by_tenor`, `dep_mart_casa_customer`,
+`dep_mart_new_accounts` read through `gold_serving` + `gold_serving.deposit_report_calendar`.
+Metric definitions, filters, migration: [deposit_dashboard.md](deposit_dashboard.md).
 
 ## Built so far (`src/common/gold_cards.py`)
 

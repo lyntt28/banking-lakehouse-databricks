@@ -24,21 +24,25 @@ def tables(spark, results):
     dim_customer = g.build_dim_customer(cust)
     dim_product = g.build_dim_product(r["ref_products"])
     fact_loan = g.build_fact_loan_daily(r["loan_snapshots"], dim_customer)
+    trend = gd.build_mart_deposit_trend(
+        r["core_accounts"], dim_product, r["ref_fx_rates"], r["ref_branches"], AS_OF,
+        customers=dim_customer)
     m = {
         "gold_dim_branch": g.build_dim_branch(r["ref_branches"]),
+        "gold_dim_product": dim_product,
         "gold_loan_mart_overdue_daily": g.build_mart_loan_overdue_daily(fact_loan, dim_product),
         "gold_card_mart_overdue_daily": gc.build_mart_card_overdue_daily(
             r["card_overdue_source"]),
         "gold_card_mart_kpi_daily": gc.build_mart_card_kpi_daily(
             r["card_master"], r["card_transactions_hist"], r["card_statements_hist"], AS_OF),
-        "gold_dep_mart_trend": gd.build_mart_deposit_trend(
-            r["core_accounts"], dim_product, r["ref_fx_rates"], r["ref_branches"], AS_OF,
-            customers=dim_customer),
+        "gold_dep_mart_trend": trend,
+        "gold_dep_mart_monthly": gd.build_mart_deposit_monthly(trend, AS_OF),
         "gold_dep_mart_by_tenor": gd.build_mart_deposit_by_tenor(
-            r["core_accounts"], dim_product, r["ref_fx_rates"], AS_OF),
+            r["core_accounts"], dim_product, r["ref_fx_rates"], AS_OF, r["ref_branches"]),
         "gold_dep_mart_casa_customer": gd.build_mart_casa_customer(
-            r["core_accounts"], dim_product, dim_customer, AS_OF),
-        "gold_dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(r["core_accounts"])
+            r["core_accounts"], dim_product, dim_customer, AS_OF, r["ref_branches"]),
+        "gold_dep_mart_new_accounts": gd.build_mart_deposit_new_accounts(
+            r["core_accounts"], AS_OF, r["ref_branches"])
         .withColumn("as_of_date", F.lit(AS_OF).cast("date")),
         "silver_ref_targets": r["ref_targets"], "silver_ref_fx_rates": r["ref_fx_rates"],
     }
@@ -74,6 +78,9 @@ def tables(spark, results):
     spark.sql(sv.report_calendar_body(
         "SELECT DISTINCT as_of_date FROM gold_card_mart_overdue_daily")) \
         .createOrReplaceTempView("gold_overdue_report_calendar")
+    spark.sql(sv.report_calendar_body(
+        "SELECT DISTINCT as_of_date FROM gold_dep_mart_trend")) \
+        .createOrReplaceTempView("gold_deposit_report_calendar")
     return m
 
 
@@ -89,9 +96,10 @@ def _local_sql(ds: dict, params: dict) -> str:
 
 
 PARAMS = [{"report_date": "DATE'2026-11-01'", "customer_type": "'consumer'", "branch": "'all'",
-           "region": "'all'"},
+           "region": "'all'", "product": "'all'", "currency": "'all'", "nationality": "'all'"},
           {"report_date": "DATE'2026-12-31'", "customer_type": "'all'", "branch": "'101'",
-           "region": "'North'"}]
+           "region": "'North'", "product": "'1-CASA'", "currency": "'VND'",
+           "nationality": "'VIETNAMESE'"}]
 
 
 def _items(body):
@@ -181,7 +189,7 @@ def test_section_order_matches_original():
     assert titles("retail_deposit.lvdash.json") == [
         "Ending Balance", "Monthly Avg Balance", "Retail Customers", "", "All Products Target (%)",
         "CASA Target (%)", "TDA/ISA Target (%)", "Ending Balance - Last 30 Days",
-        "Monthly Average Balance (MoM)", "Regional Deposit Distribution",
+        "Monthly Ending Balance - Year Comparison", "Regional Deposit Distribution",
         "Deposit by Term and IR (in Month)", "CASA Customer Distribution",
         "Edu-Save New open Account_ Accumulate by Month", "Balance by Product (K USD)"]
 

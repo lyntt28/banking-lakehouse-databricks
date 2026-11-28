@@ -61,7 +61,7 @@ PUBLISHED_TABLES = ["dim_date", "dim_branch", "dim_product", "dim_customer", "lo
                     "dep_mart_daily", "cust_mart_360", "card_mart_kpi_daily",
                     "card_mart_spend_mix", "card_mart_kpi_monthly", "dep_mart_trend",
                     "dep_mart_by_tenor", "dep_mart_casa_customer", "dep_mart_new_accounts",
-                    "card_mart_overdue_daily"]
+                    "card_mart_overdue_daily", "dep_mart_monthly"]
 
 
 class GateFailed(RuntimeError):
@@ -257,17 +257,28 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
         fx_day = spark.table(S("ref_fx_rates")).filter(F.col("rate_date") == day)
         trend_hist = (cand("dep_mart_trend") if spark.catalog.tableExists(G("dep_mart_trend"))
                       else None)
-        put(gd.build_mart_deposit_trend(acc_day, dim_product, fx_day,
-                                        spark.table(S("ref_branches")), day_s,
-                                        history=trend_hist,
-                                        customers=dim_customer_g.filter("is_current")),
-            "dep_mart_trend")
-        put(gd.build_mart_deposit_by_tenor(acc_day, dim_product, fx_day, day_s),
+        branches = spark.table(S("ref_branches"))
+        cust_day = gd.customers_as_of(dim_customer_g, day_s)   # KH hiệu lực tại ngày báo cáo
+        dep_trend = stage(gd.build_mart_deposit_trend(acc_day, dim_product, fx_day, branches,
+                                                      day_s, history=trend_hist,
+                                                      customers=cust_day), "dep_mart_trend")
+        put(dep_trend, "dep_mart_trend")
+        # tháng: incremental từ mart tháng của ngày publish trước (chỉ tính lại tháng hiện tại);
+        # lần đầu / sau nâng cấp: dựng từ lịch sử dep_mart_trend
+        prev_monthly = None
+        if spark.catalog.tableExists(G("dep_mart_monthly")):
+            pm = cand("dep_mart_monthly").filter(F.col("as_of_date") < day)
+            last = pm.agg(F.max("as_of_date")).first()[0]
+            if last is not None:
+                prev_monthly = pm.filter(F.col("as_of_date") == F.lit(last))
+        put(gd.build_mart_deposit_monthly(
+            dep_trend, day_s, previous=prev_monthly,
+            trend_history=trend_hist if prev_monthly is None else None), "dep_mart_monthly")
+        put(gd.build_mart_deposit_by_tenor(acc_day, dim_product, fx_day, day_s, branches),
             "dep_mart_by_tenor")
-        put(gd.build_mart_casa_customer(acc_day, dim_product,
-                                        dim_customer_g.filter("is_current"), day_s),
+        put(gd.build_mart_casa_customer(acc_day, dim_product, cust_day, day_s, branches),
             "dep_mart_casa_customer")
-        put(gd.build_mart_deposit_new_accounts(spark.table(S("core_accounts")))
+        put(gd.build_mart_deposit_new_accounts(spark.table(S("core_accounts")), day_s, branches)
             .withColumn("as_of_date", day), "dep_mart_new_accounts")
 
         s.rows_out = fact_loan_day.count()

@@ -165,3 +165,20 @@ def test_card_overdue_errors_detects_invalid_rows():
            "10.00", "20.00"]
     errs = sm.card_overdue_errors([bad])
     assert len(errs) == 5
+
+
+def test_deposit_growth_targets_yearly_per_branch(out):
+    rows = _t(out, "targets", D1)
+    growth = [r for r in rows if r["metric_code"].startswith("DEPOSIT_GROWTH_")]
+    assert {r["metric_code"] for r in growth} == {"DEPOSIT_GROWTH_ALL", "DEPOSIT_GROWTH_CASA",
+                                                  "DEPOSIT_GROWTH_TD_ISA"}
+    assert {r["period_type"] for r in growth} == {"YEAR"}      # chỉ tiêu năm, không theo tháng
+    assert not [r for r in rows if r["metric_code"] in ("DEPOSIT_BALANCE", "DEPOSIT_CASA")]
+
+
+def test_accounts_never_before_open_date(out):
+    for d in (D1, D2):
+        for r in _t(out, "accounts", d):
+            if r["open_date"]:
+                m, dd, y = r["open_date"].split("/")
+                assert date(int(y), int(m), int(dd)) <= date.fromisoformat(d), r

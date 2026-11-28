@@ -32,8 +32,9 @@ landing (CSV/JSON, Volume)
 | `loan_mart_overdue_daily` | as_of_date × branchnbr × product_group × scope × debt_group | snapshot/day | loan_fact_daily | Gate: Σ portfolio_balance = Σ dư nợ Silver |
 | `loan_mart_npl_daily` | as_of_date | full | loan_mart_overdue_daily | So sánh D-1 / M-1 / Y-1 |
 | `dep_mart_daily` | as_of_date × branchnbr × product_type × currencycd | snapshot/day | core_accounts (snapshot ngày) | Gate: khớp bang1247 |
-| `dep_mart_trend` | as_of_date × … | snapshot/day | core_accounts, ref_fx_rates | |
-| `dep_mart_by_tenor` | as_of_date × tenor | snapshot/day | core_accounts | |
+| `dep_mart_trend` | as_of_date × account_group × group_class × currencycd × region × branchnbr × nationality | snapshot/day | core_accounts, ref_fx_rates, dim_customer (as of) | balance_vnd, MTD avg (+ complete flag), D1/M1/Y1 balance / diff / avg + comparison dates. Snapshot thiếu = NULL |
+| `dep_mart_monthly` | as_of_date × month_id × (dims như trend) | snapshot/day | dep_mart_trend | Số dư cuối tháng (tháng hiện tại = as_of_date), bình quân tháng, is_month_closed; từ tháng 1 năm trước |
+| `dep_mart_by_tenor` | as_of_date × group_class × product_type × tenor × currencycd × branchnbr | snapshot/day | core_accounts | tenor_bucket / sort, tử + mẫu lãi suất gia quyền |
 | `dep_mart_casa_customer` | as_of_date × … | snapshot/day | core_accounts, dim_customer | |
 | `dep_mart_new_accounts` | as_of_date × tháng mở | snapshot/batch | core_accounts | Tính lại toàn bộ, lưu 1 bản / batch: dashboard đọc bản của batch đã publish |
 | `cust_mart_360` | customer_id | full | dim_customer, facts | Trạng thái ngày chạy gần nhất |

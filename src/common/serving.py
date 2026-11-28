@@ -47,6 +47,7 @@ TABLE_KIND = {
     "card_mart_spend_mix": "daily", "card_mart_kpi_monthly": "daily", "dep_mart_trend": "daily",
     "dep_mart_by_tenor": "daily", "dep_mart_casa_customer": "daily",
     "dep_mart_new_accounts": "daily", "card_mart_overdue_daily": "daily",
+    "dep_mart_monthly": "daily",
 }
 
 
@@ -104,8 +105,9 @@ def create_serving_views(spark, catalog: str) -> list[str]:
         if spark.catalog.tableExists(src):
             spark.sql(serving_view_sql(catalog, t, spark.table(src).columns))
             done.append(t)
-    if "card_mart_overdue_daily" in done:
-        spark.sql(overdue_calendar_view_sql(catalog))
+    for name, table in CALENDARS.items():
+        if table in done:
+            spark.sql(calendar_view_sql(catalog, name))
     return done
 
 
@@ -214,6 +216,9 @@ def cleanup_superseded(spark, catalog: str, table: str, day_s: str, batch_id: st
 
 # ---------------------------------------------------------------- reporting calendar (Overdue)
 OVERDUE_CALENDAR = "overdue_report_calendar"
+DEPOSIT_CALENDAR = "deposit_report_calendar"
+# view lịch báo cáo -> bảng Gold quyết định "ngày đã publish" của dashboard đó
+CALENDARS = {OVERDUE_CALENDAR: "card_mart_overdue_daily", DEPOSIT_CALENDAR: "dep_mart_trend"}
 
 
 def published_dates_sql(catalog: str, table: str) -> str:
@@ -253,7 +258,11 @@ FROM d c JOIN d p ON p.as_of_date <= c.as_of_date
 GROUP BY c.as_of_date""".strip()
 
 
-def overdue_calendar_view_sql(catalog: str) -> str:
-    view = fq(catalog, "gold_serving", OVERDUE_CALENDAR)
-    body = report_calendar_body(published_dates_sql(catalog, "card_mart_overdue_daily"))
+def calendar_view_sql(catalog: str, name: str) -> str:
+    view = fq(catalog, "gold_serving", name)
+    body = report_calendar_body(published_dates_sql(catalog, CALENDARS[name]))
     return f"CREATE OR REPLACE VIEW {view} AS {body}"
+
+
+def overdue_calendar_view_sql(catalog: str) -> str:
+    return calendar_view_sql(catalog, OVERDUE_CALENDAR)

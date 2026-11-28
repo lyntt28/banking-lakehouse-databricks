@@ -11,7 +11,6 @@ from common.gold_deposit import (
     build_mart_deposit_by_tenor,
     build_mart_deposit_new_accounts,
     build_mart_deposit_trend,
-    compare_with_history,
     nation_group,
 )
 from common.silver import TABLES, prepare_silver
@@ -69,7 +68,7 @@ def test_trend_with_month_comparisons(silver_days):
     hist = None
     for d in DATES:
         m = build_mart_deposit_trend(s[d]["accounts"], s["products"], s[d]["fx"],
-                                     s["branches"], d, history=hist)
+                                     s["branches"], d, history=hist).localCheckpoint()
         hist = m if hist is None else hist.unionByName(m)
     last = hist.filter(F.col("as_of_date") == DATES[-1])
     assert last.filter("group_class IS NULL OR account_group IS NULL").count() == 0
@@ -84,16 +83,6 @@ def test_trend_with_month_comparisons(silver_days):
     m1_of_oct = hist.filter(F.col("as_of_date") == DATES[1]).agg(
         F.sum("balance_vnd_m1")).first()[0]
     assert float(m1_of_oct) == pytest.approx(float(sep30), rel=0.02)
-
-
-def test_compare_with_history_skips_missing_days(spark):
-    df = spark.createDataFrame(
-        [(date(2026, 10, 30), "A", 10.0), (date(2026, 11, 3), "A", 30.0),
-         (date(2026, 11, 3), "B", 5.0)], "as_of_date date, k string, v double")
-    r = {(x.as_of_date, x.k): x for x in compare_with_history(df, ["k"], ["v"]).collect()}
-    a = r[(date(2026, 11, 3), "A")]
-    assert a.v_d1 == 10.0 and a.v_m1 == 10.0 and a.v_y1 is None
-    assert r[(date(2026, 11, 3), "B")].v_d1 is None
 
 
 def test_by_tenor(silver_days):

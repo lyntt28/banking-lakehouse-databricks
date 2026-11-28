@@ -22,6 +22,8 @@ def marts(spark, results):
     overdue = g.build_mart_loan_overdue_daily(fact_loan, dim_product)
     card_daily = gc.build_mart_card_kpi_daily(r["card_master"], r["card_transactions_hist"],
                                               r["card_statements_hist"], AS_OF)
+    trend = gd.build_mart_deposit_trend(r["core_accounts"], dim_product, r["ref_fx_rates"],
+                                        r["ref_branches"], AS_OF)
     m = {
         "dim_branch": g.build_dim_branch(r["ref_branches"]),
         "loan_mart_overdue_daily": overdue,
@@ -30,9 +32,8 @@ def marts(spark, results):
         "card_mart_spend_mix": gc.build_mart_card_spend_mix(r["card_transactions_hist"], AS_OF),
         "card_mart_kpi_monthly": gc.build_mart_card_kpi_monthly(card_daily, r["ref_targets"])
         .withColumn("as_of_date", F.lit(AS_OF).cast("date")),
-        "dep_mart_trend": gd.build_mart_deposit_trend(r["core_accounts"], dim_product,
-                                                          r["ref_fx_rates"],
-                                                          r["ref_branches"], AS_OF),
+        "dep_mart_trend": trend,
+        "dep_mart_monthly": gd.build_mart_deposit_monthly(trend, AS_OF),
         "dep_mart_by_tenor": gd.build_mart_deposit_by_tenor(r["core_accounts"], dim_product,
                                                                 r["ref_fx_rates"], AS_OF),
         "dep_mart_casa_customer": gd.build_mart_casa_customer(r["core_accounts"], dim_product,

@@ -197,44 +197,38 @@ WHERE o.as_of_date = {_LAST_LOAN} GROUP BY o.branchnbr, b.br_name, b.region
 _LAST_DEP = PUB
 
 _v("deposit", 1, "v_deposit_gauges",
-   "3 gauges: % target All products, CASA, TDA/ISA (targets: total only, class split "
-   "needs class-level targets from the source)",
+   "3 gauges: YTD growth (vs previous year-end) / annual growth target (DEPOSIT_GROWTH_*), "
+   "All products, CASA, TDA/ISA",
    f"""
-WITH bal AS (
-  SELECT sum(balance_vnd) AS all_bal,
-         sum(CASE WHEN group_class = '1-CASA' THEN balance_vnd END) AS casa_bal,
-         sum(CASE WHEN group_class IN ('2-TD', '3-ISA') THEN balance_vnd END) AS td_isa_bal
+WITH g AS (
+  SELECT sum(diff_y1) AS all_growth,
+         sum(CASE WHEN group_class = '1-CASA' THEN diff_y1 END) AS casa_growth,
+         sum(CASE WHEN group_class IN ('2-TD', '3-ISA') THEN diff_y1 END) AS td_isa_growth
   FROM {G}.dep_mart_trend WHERE as_of_date = {_LAST_DEP}),
 t AS (
-  SELECT sum(target_value) AS year_target FROM {{catalog}}.silver.ref_targets
-  WHERE metric_code = 'DEPOSIT_BALANCE' AND period_type = 'YEAR'
-    AND period = CAST(year({_LAST_DEP}) AS STRING))
-SELECT all_bal, casa_bal, td_isa_bal, year_target,
-       all_bal / nullif(year_target, 0) * 100 AS all_vs_target_pct,
-       casa_bal / nullif(all_bal, 0) * 100 AS casa_share_pct,
-       td_isa_bal / nullif(all_bal, 0) * 100 AS td_isa_share_pct
-FROM bal CROSS JOIN t
+  SELECT sum(CASE WHEN metric_code = 'DEPOSIT_GROWTH_ALL' THEN target_value END) AS all_t,
+         sum(CASE WHEN metric_code = 'DEPOSIT_GROWTH_CASA' THEN target_value END) AS casa_t,
+         sum(CASE WHEN metric_code = 'DEPOSIT_GROWTH_TD_ISA' THEN target_value END) AS td_isa_t
+  FROM {{catalog}}.silver.ref_targets
+  WHERE period_type = 'YEAR' AND period = CAST(year({_LAST_DEP}) AS STRING))
+SELECT g.*, t.*, all_growth / nullif(all_t, 0) * 100 AS all_achievement_pct,
+       casa_growth / nullif(casa_t, 0) * 100 AS casa_achievement_pct,
+       td_isa_growth / nullif(td_isa_t, 0) * 100 AS td_isa_achievement_pct
+FROM g CROSS JOIN t
 """)
 
 _v("deposit", 2, "v_deposit_account_group_table",
-   "Account group table: balance, share %, diff D-1 / M-1 / Y-1, month average balance "
-   "(bang1247 layout)",
+   "Account group table: balance, share %, diff D-1 / M-1 / Y-1, month-to-date average "
+   "balance (bang1247 layout)",
    f"""
-WITH d AS (
-  SELECT as_of_date, account_group, group_class, sum(balance_vnd) AS balance,
-         sum(balance_vnd_d1) AS bal_d1, sum(balance_vnd_m1) AS bal_m1,
-         sum(balance_vnd_y1) AS bal_y1
-  FROM {G}.dep_mart_trend GROUP BY 1, 2, 3),
-avg_m AS (
-  SELECT account_group, avg(balance) AS month_avg_balance FROM d
-  WHERE date_format(as_of_date, 'yyyy-MM') = date_format({_LAST_DEP}, 'yyyy-MM')
-  GROUP BY account_group)
-SELECT d.group_class, d.account_group, d.balance,
-       CAST(d.balance AS DOUBLE) / sum(CAST(d.balance AS DOUBLE)) OVER () * 100 AS share_pct,
-       d.balance - d.bal_d1 AS diff_d1, d.balance - d.bal_m1 AS diff_m1,
-       d.balance - d.bal_y1 AS diff_y1, a.month_avg_balance
-FROM d LEFT JOIN avg_m a USING (account_group)
-WHERE d.as_of_date = {_LAST_DEP}
+SELECT group_class, account_group, sum(balance_vnd) AS balance,
+       CAST(sum(balance_vnd) AS DOUBLE) / sum(CAST(sum(balance_vnd) AS DOUBLE)) OVER () * 100
+           AS share_pct,
+       sum(diff_d1) AS diff_d1, sum(diff_m1) AS diff_m1, sum(diff_y1) AS diff_y1,
+       CASE WHEN bool_and(monthly_avg_complete) THEN sum(monthly_avg_balance_vnd) END
+           AS month_avg_balance
+FROM {G}.dep_mart_trend WHERE as_of_date = {_LAST_DEP}
+GROUP BY group_class, account_group
 """)
 
 _v("deposit", 3, "v_deposit_by_region_product",
@@ -254,24 +248,38 @@ GROUP BY account_group
 _v("deposit", 5, "v_deposit_daily_balance", "Daily balance trend",
    f"""
 SELECT as_of_date, group_class, sum(balance_vnd) AS balance
-FROM {G}.dep_mart_trend GROUP BY 1, 2
+FROM {G}.dep_mart_trend
+WHERE as_of_date BETWEEN {_LAST_DEP} - INTERVAL 29 DAYS AND {_LAST_DEP} GROUP BY 1, 2
+""")
+
+_v("deposit", 9, "v_deposit_monthly_ending",
+   "Monthly ending balance (month-end snapshot, current month = report date) + monthly avg",
+   f"""
+SELECT month_id, snapshot_date, group_class, sum(ending_balance_vnd) AS ending_balance,
+       CASE WHEN bool_and(monthly_avg_complete) THEN sum(monthly_avg_balance_vnd) END
+           AS monthly_avg_balance,
+       bool_and(is_month_closed) AS is_month_closed
+FROM {G}.dep_mart_monthly WHERE as_of_date = {_LAST_DEP}
+GROUP BY month_id, snapshot_date, group_class
 """)
 
 _v("deposit", 6, "v_deposit_by_tenor",
    "Deposit by term and interest rate: balance, min / max / avg rate by tenor",
    f"""
-SELECT tenor_months, group_class, sum(balance_vnd) AS balance, min(min_rate) AS min_rate,
-       max(max_rate) AS max_rate,
-       sum(weighted_rate * balance_vnd) / nullif(sum(balance_vnd), 0) AS avg_rate
+SELECT tenor_bucket, tenor_months, group_class, sum(balance_vnd) AS balance,
+       min(min_rate) AS min_rate, max(max_rate) AS max_rate,
+       sum(interest_weighted_numerator) / nullif(sum(interest_weighted_denominator), 0)
+           AS avg_rate
 FROM {G}.dep_mart_by_tenor
-WHERE as_of_date = {PUB} GROUP BY 1, 2
+WHERE as_of_date = {PUB} GROUP BY 1, 2, 3
 """)
 
 _v("deposit", 7, "v_casa_customer_distribution",
    "CASA customer distribution: retail customers, CASA customers, active vs dormant",
    f"""
-SELECT c.branchnbr, b.br_name, b.region, c.retail_customers, c.casa_customers,
-       c.casa_active_customers, c.casa_dormant_customers, c.casa_penetration_pct
+SELECT c.branchnbr, b.br_name, c.region, c.retail_customers, c.casa_customers,
+       c.casa_active_customers, c.casa_dormant_customers, c.non_casa_customers,
+       c.casa_penetration_pct
 FROM {G}.dep_mart_casa_customer c LEFT JOIN {G}.dim_branch b ON c.branchnbr = b.branchnbr
 WHERE c.as_of_date = {PUB}
 """)
@@ -279,7 +287,10 @@ WHERE c.as_of_date = {PUB}
 _v("deposit", 8, "v_edusave_new_accounts",
    "Edu-Save new open accounts, cumulative by month",
    f"""
-SELECT open_month, sum(new_accounts) AS new_accounts, sum(new_accounts_ytd) AS cumulative_ytd
+SELECT open_month, sum(new_accounts) AS new_accounts,
+       -- luỹ kế sau khi cộng chi nhánh (CN không mở TK tháng đó vẫn được tính đúng)
+       sum(sum(new_accounts)) OVER (PARTITION BY substr(open_month, 1, 4)
+                                    ORDER BY open_month) AS cumulative_ytd
 FROM {G}.dep_mart_new_accounts WHERE product_type = 'EDUSAVE' AND as_of_date = {PUB}
 GROUP BY open_month
 """)
