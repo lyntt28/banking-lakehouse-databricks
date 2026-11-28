@@ -170,7 +170,11 @@ def test_section_order_matches_original():
     def titles(name, page=0):
         items = sorted(DASHES[name]["pages"][page]["layout"],
                        key=lambda i: (i["position"]["y"], i["position"]["x"]))
-        return [i["widget"]["spec"]["frame"]["title"] for i in items
+        def title(w):   # Custom Viz lưu tiêu đề dạng {"value": ..., "fields": []}
+            t = w["spec"]["frame"]["title"]
+            return t["value"] if isinstance(t, dict) else t
+
+        return [title(i["widget"]) for i in items
                 if "spec" in i["widget"] and not i["widget"]["spec"]["widgetType"]
                 .startswith("filter")]
 

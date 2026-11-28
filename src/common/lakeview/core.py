@@ -4,6 +4,8 @@ Sửa file này ảnh hưởng TẤT CẢ dashboard; sửa 1 dashboard thì vào
 
 from __future__ import annotations
 
+import json
+
 # ============================================================ khung JSON
 _FIELD_ID = 0
 # legend dưới biểu đồ (đã kiểm chứng trên workspace: encodings.color.legend.position)
@@ -135,6 +137,26 @@ class Dash:
             "frame": {"showTitle": True, "title": title}}
         self.place({"name": self._wid("combo"), "queries": self._query(ds, fields, agg=True),
                     "spec": spec}, x, y, w, h)
+
+    def custom_viz(self, ds: str, title: str, spec: dict, x: int, y: int, w: int, h: int,
+                   fields: list[str] | None = None) -> None:
+        """Widget Custom Viz (Vega-Lite, Public Preview). Định dạng lấy từ widget tạo trong UI
+        rồi đọc lại qua API (widgetType custom-vega-viz, spec dạng chuỗi, dữ liệu tên
+        `databricks_query`, field khai báo ở encodings.fields). `fields` mặc định = mọi cột spec
+        đọc (custom_viz.spec_fields)."""
+        from common.lakeview.custom_viz import spec_fields
+
+        spec = {**spec, "data": {"name": "databricks_query"}}
+        fields = fields or spec_fields(spec)
+        self.place({"name": self._wid("viz"),
+                    "queries": self._query(ds, [(f, f"`{f}`") for f in fields], agg=False),
+                    "spec": {"version": 1, "widgetType": "custom-vega-viz",
+                             "frame": {"showTitle": True,
+                                       "title": {"value": title, "fields": []}},
+                             "jsonSpec": {"type": "vega-lite",
+                                          "spec": json.dumps(spec, indent=1)},
+                             "encodings": {"fields": [{"fieldName": f} for f in fields]},
+                             "data": {"queryName": "main_query"}}}, x, y, w, h)
 
     def table(self, ds: str, title: str, cols: list[tuple[str, str, str]], x: int, y: int,
               w: int, h: int) -> None:

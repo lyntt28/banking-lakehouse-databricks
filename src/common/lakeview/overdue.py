@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from common.lakeview import vega
 from common.lakeview.core import (
     S1,
     S2,
@@ -214,15 +215,13 @@ def overdue_dashboard(catalog: str) -> dict:
                                       ("ending_txt", "Ending Balance (USD)")]):
         d.table(ds["ovd_compare"], f"{title} vs Last Day / Month / Year",
                 [("cmp", "Compare", "text"), (col, "Change", "text")], 2 * i, 5, 2, 3)
-    # top-charts-grid 1fr 1.5fr -> 2 + 4
-    combo = dict(bar="overdue_k_usd", line="overdue_ratio",
-                 bar_title="Overdue Amount (1000 USD)", line_title="Overdue Ratio (%)",
-                 bar_color=c["amount"], line_color=c["ratio"])
-    d.combo(ds["ovd_daily_trend"], "Overdue Trend (Last 5 Days)", 0, 8, 2, 7, cat="day",
-            **combo)
-    d.combo(ds["ovd_monthly_trend"], "Overdue Trend (Monthly)", 2, 8, 4, 7, cat="month",
-            **combo)
-    # stacked bar tháng x nhóm nợ (như Chart.js gốc)
+    # Custom Viz: cột (trục trái) + đường tỷ lệ (trục phải) có nhãn, 2 biểu đồ rộng bằng nhau
+    trends = [("ovd_daily_trend", "Overdue Trend (Last 5 Days)", "day"),
+              ("ovd_monthly_trend", "Overdue Trend (Monthly)", "month")]
+    for i, (name, title, cat) in enumerate(trends):
+        d.custom_viz(ds[name], title, vega.dual_axis_combo(
+            cat, "overdue_k_usd", "overdue_ratio", "Overdue Amount (1000 USD)",
+            "Overdue Ratio (%)", c["amount"], c["ratio"]), 3 * i, 8, 3, 7)
     d.chart("bar", ds["ovd_debt_groups"], "Overdue Amount by Debt Groups", 0, 15, 6, 7,
             cat="month", series="del_grp", val="overdue_k_usd", colors=DEBT_COLORS,
             layout="stack", val_title="Overdue Amount (1000 USD)")

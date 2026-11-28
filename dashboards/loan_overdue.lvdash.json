@@ -936,7 +936,7 @@
         },
         {
           "widget": {
-            "name": "combo_09",
+            "name": "viz_09",
             "queries": [
               {
                 "name": "main_query",
@@ -948,88 +948,60 @@
                       "expression": "`day`"
                     },
                     {
-                      "name": "sum(overdue_k_usd)",
-                      "expression": "SUM(`overdue_k_usd`)"
+                      "name": "overdue_k_usd",
+                      "expression": "`overdue_k_usd`"
                     },
                     {
-                      "name": "sum(overdue_ratio)",
-                      "expression": "SUM(`overdue_ratio`)"
+                      "name": "overdue_ratio",
+                      "expression": "`overdue_ratio`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
               "version": 1,
-              "widgetType": "combo",
-              "encodings": {
-                "x": {
-                  "fieldName": "day",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "day"
-                },
-                "y": {
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "primary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(overdue_k_usd)",
-                        "displayName": "Overdue Amount (1000 USD)"
-                      }
-                    ]
-                  },
-                  "secondary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(overdue_ratio)",
-                        "displayName": "Overdue Ratio (%)"
-                      }
-                    ]
-                  }
-                },
-                "color": {
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Overdue Amount (1000 USD)",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "Overdue Ratio (%)",
-                        "color": "#bf9000"
-                      }
-                    ]
-                  },
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Overdue Trend (Last 5 Days)"
+                "title": {
+                  "value": "Overdue Trend (Last 5 Days)",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"encoding\": {\n  \"x\": {\n   \"field\": \"day\",\n   \"type\": \"ordinal\",\n   \"title\": null,\n   \"sort\": null,\n   \"axis\": {\n    \"labelAngle\": 0\n   }\n  }\n },\n \"layer\": [\n  {\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"bar\",\n      \"color\": \"#4472c4\",\n      \"cornerRadiusEnd\": 2,\n      \"width\": {\n       \"band\": 0.6\n      },\n      \"tooltip\": true\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_k_usd\",\n       \"type\": \"quantitative\",\n       \"title\": \"Overdue Amount (1000 USD)\",\n       \"axis\": {\n        \"titleColor\": \"#4472c4\"\n       }\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"baseline\": \"top\",\n      \"dy\": 4,\n      \"fontSize\": 10,\n      \"color\": \"white\",\n      \"fontWeight\": \"bold\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_k_usd\",\n       \"type\": \"quantitative\"\n      },\n      \"text\": {\n       \"field\": \"overdue_k_usd\",\n       \"format\": \",.0f\"\n      }\n     }\n    }\n   ]\n  },\n  {\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"line\",\n      \"color\": \"#bf9000\",\n      \"strokeWidth\": 2.5,\n      \"point\": {\n       \"filled\": true,\n       \"size\": 50,\n       \"color\": \"#bf9000\"\n      },\n      \"tooltip\": true\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_ratio\",\n       \"type\": \"quantitative\",\n       \"title\": \"Overdue Ratio (%)\",\n       \"scale\": {\n        \"zero\": false,\n        \"padding\": 30\n       },\n       \"axis\": {\n        \"orient\": \"right\",\n        \"titleColor\": \"#bf9000\"\n       }\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"dy\": -12,\n      \"fontSize\": 10,\n      \"fontWeight\": \"bold\",\n      \"color\": \"#bf9000\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_ratio\",\n       \"type\": \"quantitative\",\n       \"scale\": {\n        \"zero\": false,\n        \"padding\": 30\n       },\n       \"axis\": {\n        \"orient\": \"right\"\n       }\n      },\n      \"text\": {\n       \"field\": \"overdue_ratio\",\n       \"format\": \".2f\"\n      }\n     }\n    }\n   ]\n  }\n ],\n \"resolve\": {\n  \"scale\": {\n   \"y\": \"independent\"\n  }\n },\n \"config\": {\n  \"legend\": {\n   \"orient\": \"bottom\"\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "day"
+                  },
+                  {
+                    "fieldName": "overdue_k_usd"
+                  },
+                  {
+                    "fieldName": "overdue_ratio"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 0,
             "y": 8,
-            "width": 2,
+            "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "combo_10",
+            "name": "viz_10",
             "queries": [
               {
                 "name": "main_query",
@@ -1041,82 +1013,54 @@
                       "expression": "`month`"
                     },
                     {
-                      "name": "sum(overdue_k_usd)",
-                      "expression": "SUM(`overdue_k_usd`)"
+                      "name": "overdue_k_usd",
+                      "expression": "`overdue_k_usd`"
                     },
                     {
-                      "name": "sum(overdue_ratio)",
-                      "expression": "SUM(`overdue_ratio`)"
+                      "name": "overdue_ratio",
+                      "expression": "`overdue_ratio`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
               "version": 1,
-              "widgetType": "combo",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "month"
-                },
-                "y": {
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "primary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(overdue_k_usd)",
-                        "displayName": "Overdue Amount (1000 USD)"
-                      }
-                    ]
-                  },
-                  "secondary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(overdue_ratio)",
-                        "displayName": "Overdue Ratio (%)"
-                      }
-                    ]
-                  }
-                },
-                "color": {
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Overdue Amount (1000 USD)",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "Overdue Ratio (%)",
-                        "color": "#bf9000"
-                      }
-                    ]
-                  },
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Overdue Trend (Monthly)"
+                "title": {
+                  "value": "Overdue Trend (Monthly)",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"encoding\": {\n  \"x\": {\n   \"field\": \"month\",\n   \"type\": \"ordinal\",\n   \"title\": null,\n   \"sort\": null,\n   \"axis\": {\n    \"labelAngle\": 0\n   }\n  }\n },\n \"layer\": [\n  {\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"bar\",\n      \"color\": \"#4472c4\",\n      \"cornerRadiusEnd\": 2,\n      \"width\": {\n       \"band\": 0.6\n      },\n      \"tooltip\": true\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_k_usd\",\n       \"type\": \"quantitative\",\n       \"title\": \"Overdue Amount (1000 USD)\",\n       \"axis\": {\n        \"titleColor\": \"#4472c4\"\n       }\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"baseline\": \"top\",\n      \"dy\": 4,\n      \"fontSize\": 10,\n      \"color\": \"white\",\n      \"fontWeight\": \"bold\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_k_usd\",\n       \"type\": \"quantitative\"\n      },\n      \"text\": {\n       \"field\": \"overdue_k_usd\",\n       \"format\": \",.0f\"\n      }\n     }\n    }\n   ]\n  },\n  {\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"line\",\n      \"color\": \"#bf9000\",\n      \"strokeWidth\": 2.5,\n      \"point\": {\n       \"filled\": true,\n       \"size\": 50,\n       \"color\": \"#bf9000\"\n      },\n      \"tooltip\": true\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_ratio\",\n       \"type\": \"quantitative\",\n       \"title\": \"Overdue Ratio (%)\",\n       \"scale\": {\n        \"zero\": false,\n        \"padding\": 30\n       },\n       \"axis\": {\n        \"orient\": \"right\",\n        \"titleColor\": \"#bf9000\"\n       }\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"dy\": -12,\n      \"fontSize\": 10,\n      \"fontWeight\": \"bold\",\n      \"color\": \"#bf9000\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_ratio\",\n       \"type\": \"quantitative\",\n       \"scale\": {\n        \"zero\": false,\n        \"padding\": 30\n       },\n       \"axis\": {\n        \"orient\": \"right\"\n       }\n      },\n      \"text\": {\n       \"field\": \"overdue_ratio\",\n       \"format\": \".2f\"\n      }\n     }\n    }\n   ]\n  }\n ],\n \"resolve\": {\n  \"scale\": {\n   \"y\": \"independent\"\n  }\n },\n \"config\": {\n  \"legend\": {\n   \"orient\": \"bottom\"\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "month"
+                  },
+                  {
+                    "fieldName": "overdue_k_usd"
+                  },
+                  {
+                    "fieldName": "overdue_ratio"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
-            "x": 2,
+            "x": 3,
             "y": 8,
-            "width": 4,
+            "width": 3,
             "height": 7
           }
         },
