@@ -22,6 +22,14 @@ File tổng hợp để đối soát (tính từ bản ghi hợp lệ):
 Lỗi cài cố ý (~2% mỗi loại, dưới ngưỡng dừng Job 5%): xem docstring từng module.
 
 Chạy:  python -m data_generator.generate --out ./data/landing --start-date 2026-11-01 --days 3
+Demo Overdue (13 snapshot cuối tháng + 30 ngày gần nhất, đủ cho D-1 / M-1 / Y-1, Monthly,
+Last 5 Days, Debt Group theo năm):
+       python -m data_generator.generate --start-date 2026-10-30 --days 30 --history-months 13
+Demo Retail Deposit (30 ngày daily phủ sang tháng trước + cuối tháng từ tháng 1 năm trước):
+       python -m data_generator.generate --start-date 2026-10-30 --days 30 \
+           --history-from-prev-january
+Đây là cấu hình dữ liệu DEMO, không phải chính sách retention production; dữ liệu đủ từng ngày
+vẫn chạy được (dashboard tự chọn ngày từ lịch báo cáo).
 """
 
 from __future__ import annotations
@@ -46,6 +54,26 @@ class Sizes:
     loans: int = 12_000
     txns_per_day: int = 100_000
     card_txns_per_day: int = 50_000
+
+
+def card_targets(cards: list[dict], sizes: "Sizes", nb: int) -> dict[str, float]:
+    """Chỉ tiêu tháng / chi nhánh cho 5 KPI thẻ, tách theo loại KH theo tỷ trọng thẻ."""
+    out = {}
+    n = max(1, len(cards))
+    for t in ("CN", "TC"):
+        share = sum(1 for c in cards if c["cust_type"] == t) / n
+        out[f"CARD_NEW_ACQ_{t}"] = len(cards) * 0.0015 * 30 / nb * share
+        out[f"CARD_CUSTOMER_BASE_{t}"] = len(cards) * 1.02 / nb * share
+        out[f"CARD_USING_{t}"] = len(cards) * 0.5 / nb * share
+        out[f"CARD_SALES_VOLUME_{t}"] = sizes.card_txns_per_day * 2.5e6 * 30 / nb * share
+        out[f"CARD_BALANCE_{t}"] = len(cards) * 8e6 / nb * share
+    return out
+
+
+def months_since_prev_january(start: date) -> int:
+    """Số mốc cuối tháng từ tháng 1 năm trước tới tháng liền trước `start` (đủ so sánh năm
+    trước / năm nay cho Monthly Ending Balance của Retail Deposit)."""
+    return 12 + start.month - 1
 
 
 def month_ends_before(start: date, months: int) -> list[date]:
@@ -111,13 +139,13 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
             add("targets", write_csv(path("targets", "targets.csv"), ref.TARGET_HEADER,
                                      [r for y in sorted({x.year for x in dates})
                                       for r in ref.target_rows(seed, y, {
-                                          "CARD_NEW_ACQ": len(cards) * 0.0015 * 30 / nb,
-                                          "CARD_SALES_VOLUME": sizes.card_txns_per_day
-                                          * 2.5e6 * 30 / nb,
-                                          "DEPOSIT_BALANCE": dep_vnd / nb,
-                                          "DEPOSIT_CASA": dep_sum({"CASA", "PAYROLL", "SAVING",
-                                                                   "EDUSAVE"}) / nb,
-                                          "DEPOSIT_TD_ISA": dep_sum({"TD", "ISA"}) / nb,
+                                          **card_targets(cards, sizes, nb),
+                                          # tăng trưởng năm ~8% số dư / chi nhánh
+                                          "DEPOSIT_GROWTH_ALL": 0.08 * dep_vnd / nb,
+                                          "DEPOSIT_GROWTH_CASA": 0.08 * dep_sum(
+                                              {"CASA", "PAYROLL", "SAVING", "EDUSAVE"}) / nb,
+                                          "DEPOSIT_GROWTH_TD_ISA": 0.08 * dep_sum(
+                                              {"TD", "ISA"}) / nb,
                                       })]))
         else:
             core.evolve_customers(rnd, customers)
@@ -170,9 +198,13 @@ def generate(out: Path, start: date, days: int, seed: int = 42,
             path("deposit_summary", f"bang1247_{as_of:%Y%m%d}.txt"), sm.DEPOSIT_HEADER,
             sm.deposit_summary(all_accounts, acc_failed, as_of, dep_prev, dep_month),
             delimiter="\t"))
+        ovd_rows = sm.card_overdue(cards, as_of)
+        errs = sm.card_overdue_errors(ovd_rows)
+        if errs:   # file Overdue hợp lệ: sai quy tắc nghiệp vụ là lỗi generator
+            raise ValueError(f"card_overdue {as_of}: {errs[:3]}")
         add("card_overdue", write_csv(
             path("card_overdue", f"credit_card_overdue_{as_of:%Y%m%d}.txt"),
-            sm.CARD_OVERDUE_HEADER, sm.card_overdue(cards, as_of), delimiter="\t"))
+            sm.CARD_OVERDUE_HEADER, ovd_rows, delimiter="\t"))
     return counts
 
 
@@ -185,7 +217,12 @@ def main() -> None:
     p.add_argument("--scale", type=float, default=1.0, help="nhân số dòng (0.1 = 10%%)")
     p.add_argument("--history-months", type=int, default=0,
                    help="thêm snapshot cuối tháng của N tháng trước start-date (13 = YoY)")
+    p.add_argument("--history-from-prev-january", action="store_true",
+                   help="lịch sử cuối tháng từ tháng 1 năm trước (ghi đè --history-months)")
     a = p.parse_args()
+    if a.history_from_prev_january:
+        a.history_months = max(a.history_months,
+                               months_since_prev_january(date.fromisoformat(a.start_date)))
     sizes = Sizes(*(max(1, int(getattr(Sizes(), f.name) * a.scale)) for f in fields(Sizes)))
     counts = generate(Path(a.out), date.fromisoformat(a.start_date), a.days, a.seed, sizes,
                       a.history_months)

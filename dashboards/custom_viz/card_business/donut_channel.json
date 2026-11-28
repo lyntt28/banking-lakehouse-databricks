@@ -1,0 +1,124 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
+  "transform": [
+    {
+      "joinaggregate": [
+        {
+          "op": "sum",
+          "field": "amount",
+          "as": "_tot"
+        }
+      ]
+    },
+    {
+      "calculate": "datum.amount / datum._tot",
+      "as": "_share"
+    }
+  ],
+  "layer": [
+    {
+      "mark": {
+        "type": "arc",
+        "innerRadius": {
+          "expr": "min(width, height) * 0.30"
+        },
+        "outerRadius": {
+          "expr": "min(width, height) * 0.42"
+        },
+        "tooltip": true
+      },
+      "encoding": {
+        "theta": {
+          "field": "amount",
+          "type": "quantitative",
+          "stack": true
+        },
+        "color": {
+          "field": "slice",
+          "type": "nominal",
+          "title": null,
+          "scale": {
+            "domain": [
+              "POS (Offline)",
+              "Online"
+            ],
+            "range": [
+              "#4472c4",
+              "#bf9000"
+            ]
+          },
+          "legend": {
+            "orient": "bottom",
+            "columns": 2,
+            "labelLimit": 120
+          }
+        },
+        "order": {
+          "field": "slice",
+          "sort": "ascending"
+        }
+      }
+    },
+    {
+      "transform": [
+        {
+          "filter": "datum.slice == 'POS (Offline)'"
+        }
+      ],
+      "mark": {
+        "type": "text",
+        "fontSize": 16,
+        "fontWeight": "bold",
+        "color": "#4472c4"
+      },
+      "encoding": {
+        "text": {
+          "field": "_share",
+          "format": ".1%"
+        }
+      }
+    }
+  ]
+}

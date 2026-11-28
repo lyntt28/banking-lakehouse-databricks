@@ -1,13 +1,18 @@
 """Gold: star schema (Kimball) + mart cho dashboard, tính từ bảng Silver.
 
-Dimension
+Dimension (conformed - mọi fact / mart dùng chung, xem docs/star_schema.md)
     dim_date        1 dòng / ngày (date_key = yyyyMMdd)
-    dim_branch      chi nhánh
+    dim_branch      chi nhánh (role-playing: CN quản lý / CN bán ở Overdue)
     dim_product     sản phẩm vay / tiền gửi
     dim_customer    lịch sử SCD2 từ silver.core_customers, khóa thay thế customer_sk
+    dim_card        thẻ (sản phẩm, hạng, loại KH, kênh phát hành, ngày mở / đóng) - SCD1
 Fact
-    loan_fact_daily     snapshot dư nợ theo ngày x khoản vay (grain: as_of_date, acctnbr)
-    core_fact_transaction    giao dịch tài khoản (grain: txn_id)
+    loan_fact_daily        periodic snapshot dư nợ (grain: as_of_date, acctnbr)
+    core_fact_transaction  transaction giao dịch tài khoản (grain: txn_id)
+    fact_deposit_daily     periodic snapshot tài khoản tiền gửi (grain: as_of_date, account_id)
+    fact_card_daily        periodic snapshot thẻ + sao kê (grain: as_of_date, card_no)
+    fact_card_transaction  transaction giao dịch thẻ (grain: txn_id)
+    card_mart_overdue_daily  aggregate fact theo grain file nguồn Overdue (gold_cards)
 Mart (mỗi visual = 1 SELECT đơn giản, xem docs/gold_dashboards.md)
     loan_mart_overdue_daily     dư nợ / nợ quá hạn theo ngày x chi nhánh x sản phẩm x nhóm nợ
     loan_mart_npl_daily              tỷ lệ nợ xấu toàn hàng, kèm so sánh D-1 / M-1 / Y-1
@@ -112,6 +117,60 @@ def build_fact_transaction(txns: DataFrame, accounts: DataFrame,
     )
     f = _as_of_join(f, dim_customer, "value_date")
     return f.withColumn("date_key", date_key("value_date"))
+
+
+DIM_CARD_COLS = ["card_no", "customer_id", "cust_type", "branchnbr", "card_product",
+                 "card_grade", "acquisition_channel", "open_date", "close_date", "status"]
+
+
+def build_dim_card(cards: DataFrame) -> DataFrame:
+    """silver.card_master (bản mới nhất mỗi thẻ) -> dim_card, SCD1 (thuộc tính thẻ gần như
+    không đổi; trạng thái theo ngày nằm ở fact_card_daily)."""
+    w = Window.partitionBy("card_no").orderBy(F.col("snapshot_date").desc_nulls_last())
+    return (cards.withColumn("_rn", F.row_number().over(w)).filter("_rn = 1")
+            .select(*DIM_CARD_COLS))
+
+
+def build_fact_deposit_daily(accounts: DataFrame, fx: DataFrame,
+                             dim_customer: DataFrame, as_of_date: str) -> DataFrame:
+    """Periodic snapshot tài khoản TIỀN GỬI (bỏ TK vay - đã có loan_fact_daily).
+    Giữ tên cột như silver.core_accounts để mart tiền gửi đọc thẳng từ fact;
+    balance_vnd = balance x tỷ giá cùng ngày; customer_sk = phiên bản KH hiệu lực tại ngày."""
+    rate = fx.select("currencycd", F.col("rate_to_vnd").alias("_rate"))
+    f = (accounts.filter(F.col("product_type") != "LOAN")
+         .select("account_id", "customer_id", "branchnbr", "product_type", "currencycd",
+                 "status", "open_date", "close_date", "balance", "int_rate", "tenor_months")
+         .join(rate, "currencycd", "left")
+         .withColumn("balance_vnd", F.col("balance") * F.col("_rate")).drop("_rate")
+         .withColumn("as_of_date", F.lit(as_of_date).cast("date")))
+    f = _as_of_join(f, dim_customer, "as_of_date")
+    return f.withColumn("date_key", date_key("as_of_date"))
+
+
+def build_fact_card_daily(cards: DataFrame, statements: DataFrame,
+                          dim_customer: DataFrame, as_of_date: str) -> DataFrame:
+    """Periodic snapshot thẻ: trạng thái thẻ trong ngày + sao kê cuối ngày (thẻ ACTIVE có sao
+    kê; thẻ khác: số dư NULL). Giữ tên cột như silver để mart thẻ đọc thẳng từ fact."""
+    s = statements.select("card_no", "outstanding_balance", "revolving_balance",
+                          "min_payment_due", "dpd")
+    f = (cards.select(*[c for c in DIM_CARD_COLS], "credit_limit")
+         .join(s, "card_no", "left")
+         .withColumn("as_of_date", F.lit(as_of_date).cast("date")))
+    f = _as_of_join(f, dim_customer, "as_of_date")
+    return f.withColumn("date_key", date_key("as_of_date"))
+
+
+def build_fact_card_transaction(txns: DataFrame, cards: DataFrame,
+                                dim_customer: DataFrame) -> DataFrame:
+    """Transaction fact giao dịch thẻ (grain txn_id). txn_date = ngày dữ liệu của giao dịch;
+    branchnbr / customer từ thẻ (để lọc chi nhánh và nối dim_customer)."""
+    c = cards.select("card_no", "customer_id", "branchnbr").dropDuplicates(["card_no"])
+    f = (txns.join(c, "card_no", "left")
+         .select("txn_id", "card_no", "customer_id", "branchnbr",
+                 F.col("_as_of_date").cast("date").alias("txn_date"), "txn_ts", "amount",
+                 "currencycd", "txn_type", "mcc", "merchant_name", "channel", "location"))
+    f = _as_of_join(f, dim_customer, "txn_date")
+    return f.withColumn("date_key", date_key("txn_date"))
 
 
 # ---------------------------------------------------------------- mart
@@ -230,4 +289,8 @@ GOLD_KEYS = {
     "dim_product": ["prodcode"],
     "loan_fact_daily": ["as_of_date", "acctnbr"],
     "core_fact_transaction": ["txn_id"],
+    "dim_card": ["card_no"],
+    "fact_deposit_daily": ["as_of_date", "account_id"],
+    "fact_card_daily": ["as_of_date", "card_no"],
+    "fact_card_transaction": ["txn_id"],
 }

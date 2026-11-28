@@ -138,3 +138,47 @@ def test_new_accounts_open_after_first_day(out):
     assert new, "không có TK mở mới ở ngày 2"
     assert all(r["account_id"].startswith("25") for r in new)
     assert all(r["product_type"] != "LOAN" for r in new)
+
+
+def test_card_overdue_business_rules_and_continuity(out):
+    from data_generator import summaries as sm
+
+    tot = {}
+    for d in (D1, D2):
+        rows = _t(out, "card_overdue", d, f"credit_card_overdue_{d.replace('-', '')}.txt", "\t")
+        assert rows and all(r["REPORT_DT"] == d.replace("-", "") for r in rows)
+        typed = [[r[c] for c in sm.CARD_OVERDUE_HEADER[:8]]
+                 + [int(r["PORT_ACC"]), int(r["OVD_ACC"]), r["PORT_BAL"], r["OVD_BAL"]]
+                 for r in rows]
+        for t in typed:   # mã CN đọc từ file là chuỗi
+            t[5], t[6] = int(t[5]), int(t[6])
+        assert sm.card_overdue_errors(typed) == []
+        tot[d] = sum(float(r["PORT_BAL"]) for r in rows)
+    # danh mục tiến hoá từ trạng thái hôm trước, không random lại toàn bộ
+    assert tot[D2] == pytest.approx(tot[D1], rel=0.2)
+
+
+def test_card_overdue_errors_detects_invalid_rows():
+    from data_generator import summaries as sm
+
+    bad = ["20261101", "", "Credit Card", "GOLD", "VISA_CLASSIC", 999, 101, "31-90", 1, 2,
+           "10.00", "20.00"]
+    errs = sm.card_overdue_errors([bad])
+    assert len(errs) == 5
+
+
+def test_deposit_growth_targets_yearly_per_branch(out):
+    rows = _t(out, "targets", D1)
+    growth = [r for r in rows if r["metric_code"].startswith("DEPOSIT_GROWTH_")]
+    assert {r["metric_code"] for r in growth} == {"DEPOSIT_GROWTH_ALL", "DEPOSIT_GROWTH_CASA",
+                                                  "DEPOSIT_GROWTH_TD_ISA"}
+    assert {r["period_type"] for r in growth} == {"YEAR"}      # chỉ tiêu năm, không theo tháng
+    assert not [r for r in rows if r["metric_code"] in ("DEPOSIT_BALANCE", "DEPOSIT_CASA")]
+
+
+def test_accounts_never_before_open_date(out):
+    for d in (D1, D2):
+        for r in _t(out, "accounts", d):
+            if r["open_date"]:
+                m, dd, y = r["open_date"].split("/")
+                assert date(int(y), int(m), int(dd)) <= date.fromisoformat(d), r

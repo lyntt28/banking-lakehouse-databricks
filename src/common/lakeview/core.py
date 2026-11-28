@@ -4,8 +4,12 @@ Sửa file này ảnh hưởng TẤT CẢ dashboard; sửa 1 dashboard thì vào
 
 from __future__ import annotations
 
+import json
+
 # ============================================================ khung JSON
 _FIELD_ID = 0
+# legend dưới biểu đồ (đã kiểm chứng trên workspace: encodings.color.legend.position)
+LEGEND = {"position": "bottom"}
 
 
 class Dash:
@@ -59,16 +63,23 @@ class Dash:
             "disaggregated": not agg}}]
 
     def counter(self, ds: str, col: str, title: str, x: int, y: int, w: int = 1, h: int = 3,
-                color: str | None = None, fmt: str | None = None) -> None:
+                color: str | None = None, fmt: str | None = None,
+                compare: tuple[str, str] | None = None) -> None:
+        """compare = (cột giá trị so sánh, nhãn): ô Comparison của counter (so với kỳ trước)."""
         enc = {"fieldName": col, "displayName": title}
         if fmt:
             enc["format"] = _number_format(fmt)
         if color:
             enc["style"] = {"color": color}
+        encodings = {"value": enc}
+        fields = [(col, f"`{col}`")]
+        if compare:
+            encodings["target"] = {"fieldName": compare[0], "displayName": compare[1]}
+            fields.append((compare[0], f"`{compare[0]}`"))
         self.place({"name": self._wid("counter"),
-                    "queries": self._query(ds, [(col, f"`{col}`")], agg=False),
+                    "queries": self._query(ds, fields, agg=False),
                     "spec": {"version": 2, "widgetType": "counter",
-                             "encodings": {"value": enc},
+                             "encodings": encodings,
                              "frame": {"showTitle": True, "title": title}}}, x, y, w, h)
 
     def chart(self, kind: str, ds: str, title: str, x: int, y: int, w: int, h: int, *,
@@ -85,7 +96,7 @@ class Dash:
             enc = {"angle": {"fieldName": agg, "scale": {"type": "quantitative"},
                              "displayName": val_title or val},
                    "color": {"fieldName": cat, "scale": _cat_scale(colors),
-                             "displayName": cat_title or cat}}
+                             "displayName": cat_title or cat, "legend": LEGEND}}
         else:
             c_enc = {"fieldName": cat, "scale": {"type": "categorical"},
                      "displayName": cat_title or cat}
@@ -96,7 +107,7 @@ class Dash:
             enc = {"x": v_enc, "y": c_enc} if horizontal else {"x": c_enc, "y": v_enc}
             if series:
                 enc["color"] = {"fieldName": series, "scale": _cat_scale(colors),
-                                "displayName": "Series"}
+                                "displayName": "Series", "legend": LEGEND}
         if labels:
             enc["label"] = {"show": True}
         spec = {"version": 3, "widgetType": kind, "encodings": enc,
@@ -121,11 +132,31 @@ class Dash:
                   "secondary": {"fields": [{"fieldName": fl, "displayName": line_title}]}},
             "color": {"scale": {"type": "categorical", "mappings": [
                 {"value": bar_title, "color": bar_color},
-                {"value": line_title, "color": line_color}]}},
+                {"value": line_title, "color": line_color}]}, "legend": LEGEND},
             "label": {"show": True}},
             "frame": {"showTitle": True, "title": title}}
         self.place({"name": self._wid("combo"), "queries": self._query(ds, fields, agg=True),
                     "spec": spec}, x, y, w, h)
+
+    def custom_viz(self, ds: str, title: str, spec: dict, x: int, y: int, w: int, h: int,
+                   fields: list[str] | None = None) -> None:
+        """Widget Custom Viz (Vega-Lite, Public Preview). Định dạng lấy từ widget tạo trong UI
+        rồi đọc lại qua API (widgetType custom-vega-viz, spec dạng chuỗi, dữ liệu tên
+        `databricks_query`, field khai báo ở encodings.fields). `fields` mặc định = mọi cột spec
+        đọc (custom_viz.spec_fields)."""
+        from common.lakeview.custom_viz import spec_fields
+
+        spec = {**spec, "data": {"name": "databricks_query"}}
+        fields = fields or spec_fields(spec)
+        self.place({"name": self._wid("viz"),
+                    "queries": self._query(ds, [(f, f"`{f}`") for f in fields], agg=False),
+                    "spec": {"version": 1, "widgetType": "custom-vega-viz",
+                             "frame": {"showTitle": bool(title),
+                                       "title": {"value": title, "fields": []}},
+                             "jsonSpec": {"type": "vega-lite",
+                                          "spec": json.dumps(spec, indent=1)},
+                             "encodings": {"fields": [{"fieldName": f} for f in fields]},
+                             "data": {"queryName": "main_query"}}}, x, y, w, h)
 
     def table(self, ds: str, title: str, cols: list[tuple[str, str, str]], x: int, y: int,
               w: int, h: int) -> None:
@@ -218,3 +249,44 @@ def _arrow_pct(expr: str, unit: str = "%") -> str:
     """Số thay đổi -> chuỗi '▲ 1.2%' / '▼ 0.9%' (bảng v2 không tự định dạng số)."""
     return (f"CASE WHEN {expr} IS NULL THEN '-' ELSE concat(CASE WHEN {expr} >= 0 THEN '▲ ' "
             f"ELSE '▼ ' END, format_number(abs({expr}), 1), '{unit}') END")
+
+
+# ============================================================ thẻ KPI (Custom Viz)
+KPI_CARD_COLS = ["kpi", "title", "value", "value_fmt", "cmp1", "cmp1_label", "cmp2",
+                 "cmp2_label", "cmp3", "cmp3_label", "cmp_unit", "cmp_fmt", "note1", "note2"]
+
+
+def kpi_cards_sql(sources: dict[str, str], rows: list[dict[str, str]]) -> str:
+    """Dataset dạng dài cho thẻ KPI (common.lakeview.vega.kpi_card): 1 dòng / KPI.
+
+    sources: alias -> SQL của dataset ĐÃ CÓ (dùng lại nguyên logic, không tính lại);
+    mỗi alias phải trả đúng 1 dòng. rows: mỗi KPI là dict cột (KPI_CARD_COLS) -> biểu thức
+    SQL trên các alias; cột thiếu = NULL."""
+    joins = " CROSS JOIN ".join(f"({sql.strip()}) {alias}" for alias, sql in sources.items())
+    casts = {"value": "DOUBLE", "cmp1": "DOUBLE", "cmp2": "DOUBLE", "cmp3": "DOUBLE"}
+
+    def cell(r: dict, c: str) -> str:
+        return f"CAST({r.get(c, 'NULL')} AS {casts.get(c, 'STRING')})"
+
+    body = ",\n  ".join(", ".join(cell(r, c) for c in KPI_CARD_COLS) for r in rows)
+    return (f"SELECT stack({len(rows)},\n  {body}\n) AS ({', '.join(KPI_CARD_COLS)})\n"
+            f"FROM {joins}")
+
+
+def lit(s: str) -> str:
+    return "'" + s.replace("'", "''") + "'"
+
+
+# ============================================================ bảng màu CHUNG cho mọi dashboard
+# Một bảng màu cho cả 3 dashboard (đã kiểm tra: dải sáng, độ bão hoà, tách màu cho người mù
+# màu ΔE >= 8, phân biệt mắt thường ΔE >= 15). Gán theo THỨ TỰ cố định, màu đi theo thực thể
+# (CASA luôn là S1...), không theo thứ hạng. Màu chữ / số KPI dùng màu chữ, không dùng màu series.
+S1, S2, S3, S4, S5, S6 = "#4472c4", "#bf9000", "#2f5597", "#70ad47", "#c55a11", "#5b9bd5"
+SERIES = [S1, S2, S3, S4, S5, S6]   # tông Card gốc: xanh, vàng đồng, navy, xanh lá...
+NEUTRAL = "#9e9e9e"          # "Khác", phân khúc phụ (vd Dormant)
+TEXT = "#000000"             # số trên thẻ KPI
+GOOD, BAD = "#008a17", "#d93a3b"   # trạng thái: tốt / xấu (luôn kèm ▲▼ + chữ, không chỉ màu)
+# tông nhạt của S1..S3 cho "năm trước" (cùng thực thể, khác kỳ)
+S1_LIGHT, S2_LIGHT, S3_LIGHT = "#b4c7e7", "#e2c66b", "#8fa9d9"
+# thang tuần tự 1 màu (nhạt -> đậm) cho thứ bậc mức độ, vd nhóm nợ 1-10 ... 361+
+SEVERITY = ["#f3e3b0", "#e2c66b", "#bf9000", "#c55a11", "#843c0c"]

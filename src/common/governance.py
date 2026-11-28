@@ -57,7 +57,9 @@ RESTRICTED_TABLES = ["ops.dq_quarantine", "ops.user_branch"]
 # bảng gold có cột branchnbr -> lọc dòng theo chi nhánh cho branch_users
 BRANCH_FILTERED = ["gold.loan_fact_daily", "gold.core_fact_transaction", "gold.dim_customer",
                    "gold.loan_mart_overdue_daily", "gold.dep_mart_daily",
-                   "gold.cust_mart_360", "gold.card_mart_kpi_daily"]
+                   "gold.cust_mart_360", "gold.card_mart_kpi_daily",
+                   "gold.fact_deposit_daily", "gold.fact_card_daily",
+                   "gold.fact_card_transaction", "gold.dim_card"]
 
 # group -> bảng được SELECT (cấp theo bảng)
 TABLE_GRANTS: dict[str, list[str]] = {

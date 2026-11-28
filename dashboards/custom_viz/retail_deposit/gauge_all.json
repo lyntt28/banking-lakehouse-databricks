@@ -1,0 +1,142 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
+  "layer": [
+    {
+      "mark": {
+        "type": "arc",
+        "innerRadius": {
+          "expr": "min(width / 2 - 10, height - 34) * 0.70"
+        },
+        "outerRadius": {
+          "expr": "min(width / 2 - 10, height - 34)"
+        },
+        "theta": {
+          "expr": "-PI / 2"
+        },
+        "y": {
+          "expr": "height - 22"
+        },
+        "cornerRadius": 3,
+        "theta2": {
+          "expr": "PI / 2"
+        },
+        "color": "#eceff3"
+      }
+    },
+    {
+      "mark": {
+        "type": "arc",
+        "innerRadius": {
+          "expr": "min(width / 2 - 10, height - 34) * 0.70"
+        },
+        "outerRadius": {
+          "expr": "min(width / 2 - 10, height - 34)"
+        },
+        "theta": {
+          "expr": "-PI / 2"
+        },
+        "y": {
+          "expr": "height - 22"
+        },
+        "cornerRadius": 3,
+        "theta2": {
+          "expr": "-PI / 2 + PI * clamp(isValid(datum.all_pct) ? datum.all_pct : 0, 0, 120) / 120"
+        },
+        "color": "#4472c4"
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "fontWeight": "bold",
+        "color": "#4472c4",
+        "baseline": "alphabetic",
+        "fontSize": {
+          "expr": "max(14, min(width / 2 - 10, height - 34) * 0.34)"
+        },
+        "y": {
+          "expr": "height - 22 - 4"
+        }
+      },
+      "encoding": {
+        "text": {
+          "value": {
+            "expr": "isValid(datum.all_pct) ? format(datum.all_pct, '.1f') + '%' : 'N/A'"
+          }
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "fontSize": 10,
+        "color": "#999",
+        "baseline": "top",
+        "y": {
+          "expr": "height - 22 + 6"
+        },
+        "x": {
+          "expr": "width / 2 - min(width / 2 - 10, height - 34) * 0.85"
+        },
+        "text": "0%"
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "fontSize": 10,
+        "color": "#999",
+        "baseline": "top",
+        "y": {
+          "expr": "height - 22 + 6"
+        },
+        "x": {
+          "expr": "width / 2 + min(width / 2 - 10, height - 34) * 0.85"
+        },
+        "text": "120%"
+      }
+    }
+  ]
+}

@@ -4,8 +4,9 @@ Mart
     card_mart_kpi_daily     ngày x chi nhánh x loại KH x kênh phát hành: thẻ hiện hữu, mở mới,
                             đóng, đang dùng, dư nợ, dư nợ quay vòng, chi tiêu, DPD 1+/10+/30+/90+
     card_mart_spend_mix     ngày x loại giao dịch x trong nước/nước ngoài x kênh x MCC
-    card_mart_kpi_monthly   tháng x chi nhánh: tồn cuối kỳ + luỹ kế trong kỳ, MoM / YoY,
-                            % hoàn thành chỉ tiêu tháng / năm (bảng targets)
+    card_mart_kpi_monthly   tháng x chi nhánh x loại KH x kênh (tính tại as_of_date): tồn tại
+                            ngày chốt, luỹ kế MTD / YTD, thẻ dùng distinct MTD, độ đầy đủ
+                            (chỉ tiêu kế hoạch ghép ở dashboard SQL theo đúng loại KH)
 Đối soát
     card_kpi_metrics        mart ngày -> mã chỉ tiêu giống file card_kpi nguồn
     reconcile               so sánh Gold vs nguồn theo từng metric, có dung sai riêng
@@ -93,81 +94,96 @@ def build_mart_card_spend_mix(card_txns: DataFrame, as_of_date: str,
     )
 
 
-# ---------------------------------------------------------------- mart tháng + chỉ tiêu
+# ---------------------------------------------------------------- mart tháng
 STOCK = ["eop_members", "balance", "revolving_balance", "revolving_members", "credit_limit"] + \
     [f"{c.lower()}_{k}" for c, _ in DPD_BUCKETS for k in ("members", "balance")]
 FLOW = ["new_members", "closed_members", "spend_amt", "txn_count"] + list(SPEND_TYPES.values()) \
     + ["domestic_amt", "xborder_amt", "pos_amt", "online_amt"]
+YTD = ["new_members", "closed_members", "spend_amt"]
 
 
-def build_mart_card_kpi_monthly(daily: DataFrame, targets: DataFrame | None = None) -> DataFrame:
-    """Gộp theo tháng x chi nhánh. Chỉ số tồn (stock) lấy ngày cuối cùng có dữ liệu của tháng,
-    chỉ số luỹ kế (flow) cộng cả tháng. `using_members` tháng = max theo ngày (xấp xỉ, vì
-    số thẻ dùng riêng biệt cả tháng cần giao dịch chi tiết)."""
-    d = daily.groupBy("as_of_date", "branchnbr").agg(
-        *[F.sum(c).alias(c) for c in STOCK + FLOW + ["using_members"]])
-    d = d.withColumn("year_month", F.date_format("as_of_date", "yyyy-MM"))
-    w_last = Window.partitionBy("year_month", "branchnbr").orderBy(F.desc("as_of_date"))
-    stock = d.withColumn("_rn", F.row_number().over(w_last)).filter("_rn = 1") \
-        .select("year_month", "branchnbr", F.col("as_of_date").alias("last_date"), *STOCK)
-    flow = d.groupBy("year_month", "branchnbr").agg(
-        *[F.sum(c).alias(c) for c in FLOW], F.max("using_members").alias("using_members"),
-        F.countDistinct("as_of_date").alias("days_with_data"))
-    m = stock.join(flow, ["year_month", "branchnbr"])
+def using_members_by_month(card_txns: DataFrame, cards: DataFrame,
+                           date_col: str = "_as_of_date") -> DataFrame:
+    """Số THẺ có giao dịch hợp lệ (distinct card_no) theo tháng x DIMS, trên toàn bộ giao dịch
+    của kỳ được truyền vào (MTD: truyền giao dịch từ ngày 1 tới ngày báo cáo).
 
-    # MoM / YoY: so với cùng chi nhánh, tháng trước / cùng tháng năm trước
-    prev = m.select("year_month", "branchnbr", "eop_members", "balance", "spend_amt",
-                    "new_members")
-    for tag, months in (("mom", 1), ("yoy", 12)):
-        p = prev.select(
-            F.date_format(F.add_months(F.to_date(F.concat("year_month", F.lit("-01"))), months),
-                          "yyyy-MM").alias("year_month"),
-            "branchnbr",
-            *[F.col(c).alias(f"{c}_{tag}_base") for c in
-              ("eop_members", "balance", "spend_amt", "new_members")])
-        m = m.join(p, ["year_month", "branchnbr"], "left")
-        for c in ("eop_members", "balance", "spend_amt", "new_members"):
-            base = F.col(f"{c}_{tag}_base")
-            m = m.withColumn(f"{c}_{tag}_pct",
-                             F.when(base > 0, (F.col(c) - base) / base * 100)).drop(base)
-
-    if targets is not None:
-        m = _attach_targets(m, targets)
-    return m
+    Đơn vị = thẻ (member = card_no, như file nguồn 02_member_usage), không phải KH. Thuộc
+    tính DIMS của thẻ cố định -> 1 thẻ chỉ thuộc 1 tổ hợp DIMS, cộng qua DIMS không đếm trùng.
+    KHÔNG xấp xỉ bằng SUM / MAX của số thẻ dùng theo ngày."""
+    c = cards.select("card_no", *DIMS).dropDuplicates(["card_no"])
+    # chỉ lấy khoá + ngày: fact giao dịch có thể đã mang sẵn branchnbr / customer_id
+    return (card_txns.select("card_no", date_col).join(c, "card_no", "inner")
+            .withColumn("year_month", F.date_format(F.col(date_col), "yyyy-MM"))
+            .groupBy("year_month", *DIMS)
+            .agg(F.countDistinct("card_no").alias("using_members")))
 
 
-def _attach_targets(m: DataFrame, targets: DataFrame) -> DataFrame:
-    """% hoàn thành chỉ tiêu: mở mới & doanh số theo tháng và luỹ kế năm."""
-    t = targets.filter(F.col("metric_code").isin("CARD_NEW_ACQ", "CARD_SALES_VOLUME"))
-    month_t = t.filter("period_type = 'MONTH'").groupBy(
-        F.col("period").alias("year_month"), "branchnbr").pivot(
-        "metric_code", ["CARD_NEW_ACQ", "CARD_SALES_VOLUME"]).agg(F.sum("target_value"))
-    month_t = month_t.withColumnRenamed("CARD_NEW_ACQ", "target_new_month") \
-        .withColumnRenamed("CARD_SALES_VOLUME", "target_sales_month")
-    year_t = t.filter("period_type = 'YEAR'").groupBy(
-        F.col("period").alias("_year"), "branchnbr").pivot(
-        "metric_code", ["CARD_NEW_ACQ", "CARD_SALES_VOLUME"]).agg(F.sum("target_value"))
-    year_t = year_t.withColumnRenamed("CARD_NEW_ACQ", "target_new_year") \
-        .withColumnRenamed("CARD_SALES_VOLUME", "target_sales_year")
+def _month_rows(daily: DataFrame, using: DataFrame | None) -> DataFrame:
+    """daily (mart ngày, đã lọc kỳ) -> 1 dòng / tháng x DIMS: tồn = ngày cuối có dữ liệu của
+    tháng (cùng 1 ngày chốt cho mọi DIMS), luỹ kế = cộng các ngày, kèm số ngày có dữ liệu."""
+    d = daily.withColumn("year_month", F.date_format("as_of_date", "yyyy-MM"))
+    snap = d.groupBy("year_month").agg(F.max("as_of_date").alias("snapshot_date"),
+                                       F.countDistinct("as_of_date").alias("days_with_data"))
+    last = snap.select(F.col("year_month").alias("_ym"), F.col("snapshot_date").alias("_sd"))
+    stock = d.join(last, (F.col("year_month") == F.col("_ym"))
+                   & (F.col("as_of_date") == F.col("_sd"))) \
+        .groupBy("year_month", *DIMS).agg(*[F.sum(c).alias(c) for c in STOCK])
+    flow = d.groupBy("year_month", *DIMS).agg(*[F.sum(c).alias(c) for c in FLOW])
+    m = flow.join(stock, ["year_month", *DIMS], "full").join(snap, "year_month")
+    if using is not None:
+        m = m.join(using, ["year_month", *DIMS], "left") \
+            .withColumn("using_members", F.coalesce("using_members", F.lit(0)))
+    else:
+        m = m.withColumn("using_members", F.lit(None).cast("long"))
+    return m.fillna(0, subset=STOCK + FLOW)
 
-    w_ytd = Window.partitionBy("branchnbr", F.substring("year_month", 1, 4)) \
-        .orderBy("year_month").rowsBetween(Window.unboundedPreceding, 0)
-    out = (
-        m.withColumn("_year", F.substring("year_month", 1, 4))
-        .withColumn("new_members_ytd", F.sum("new_members").over(w_ytd))
-        .withColumn("spend_amt_ytd", F.sum("spend_amt").over(w_ytd))
-        .join(month_t, ["year_month", "branchnbr"], "left")
-        .join(year_t, ["_year", "branchnbr"], "left")
-        .drop("_year")
-    )
 
-    def pct(a, b):
-        return F.when(F.col(b) > 0, F.col(a) / F.col(b) * 100)
+def build_mart_card_kpi_monthly(daily_month: DataFrame, as_of_date: str,
+                                using_mtd: DataFrame | None = None,
+                                previous: DataFrame | None = None,
+                                history_daily: DataFrame | None = None,
+                                history_using: DataFrame | None = None) -> DataFrame:
+    """card_mart_kpi_monthly tại ngày T (as_of_date = T), tháng 1 năm trước -> tháng của T.
 
-    return (out.withColumn("new_vs_month_target_pct", pct("new_members", "target_new_month"))
-            .withColumn("sales_vs_month_target_pct", pct("spend_amt", "target_sales_month"))
-            .withColumn("new_vs_year_target_pct", pct("new_members_ytd", "target_new_year"))
-            .withColumn("sales_vs_year_target_pct", pct("spend_amt_ytd", "target_sales_year")))
+    Grain: year_month x branchnbr x cust_type x acquisition_channel (giữ filter loại KH /
+    kênh). Tháng của T: tồn tại T, luỹ kế từ ngày 1 tới T (`daily_month` = mart ngày của
+    tháng, <= T), using = distinct MTD (`using_mtd`). Tháng trước đó: chép từ `previous`
+    (mart tháng của ngày publish trước) -> incremental; lần đầu dựng từ `history_daily` /
+    `history_using`. Không đọc dữ liệu sau T.
+
+    flow_complete = có đủ dữ liệu mọi ngày của kỳ (tháng đóng: cả tháng; tháng hiện tại: 1..T).
+    Lịch sử chỉ có snapshot cuối tháng -> tồn đúng, luỹ kế KHÔNG đủ -> dashboard hiện N/A."""
+    from datetime import date
+
+    t = date.fromisoformat(as_of_date)
+    month_now, start = f"{t:%Y-%m}", f"{t.year - 1}-01"
+    cur = _month_rows(daily_month.filter(
+        (F.col("as_of_date") <= F.lit(as_of_date).cast("date"))
+        & (F.date_format("as_of_date", "yyyy-MM") == month_now)), using_mtd)
+    cols = [c for c in cur.columns]
+    if previous is not None:
+        past = previous.filter((F.col("year_month") < month_now)
+                               & (F.col("year_month") >= start)).select(*cols)
+    elif history_daily is not None:
+        past = _month_rows(history_daily.filter(
+            (F.date_format("as_of_date", "yyyy-MM") < month_now)
+            & (F.date_format("as_of_date", "yyyy-MM") >= start)), history_using).select(*cols)
+    else:
+        past = None
+    m = cur if past is None else past.unionByName(cur)
+    month_start = F.to_date(F.concat("year_month", F.lit("-01")))
+    expected = F.when(F.col("year_month") == month_now, F.lit(t.day)) \
+        .otherwise(F.dayofmonth(F.last_day(month_start)))
+    m = (m.withColumn("days_expected", expected)
+         .withColumn("flow_complete", F.col("days_with_data") == F.col("days_expected"))
+         .withColumn("is_month_closed", F.col("snapshot_date") == F.last_day("snapshot_date")))
+    w = Window.partitionBy(*DIMS, F.substring("year_month", 1, 4)).orderBy("year_month") \
+        .rowsBetween(Window.unboundedPreceding, 0)
+    for c in YTD:
+        m = m.withColumn(f"{c}_ytd", F.sum(c).over(w))
+    # YTD chỉ đủ khi mọi tháng từ tháng 1 đều đủ ngày
+    m = m.withColumn("ytd_complete", F.min(F.col("flow_complete").cast("int")).over(w) == 1)
+    return m.withColumn("as_of_date", F.lit(as_of_date).cast("date"))
 
 
 # ---------------------------------------------------------------- đối soát
@@ -193,7 +209,6 @@ def card_kpi_metrics(daily: DataFrame) -> DataFrame:
         return F.when(b > 0, a / b).otherwise(0)
 
     closed = F.col("closed_members_CN") + F.col("closed_members_TC")
-    users = F.col("using_members_CN") + F.col("using_members_TC")
     metrics = {
         "EOP_Consumer": F.col("eop_members_CN"), "EOP_Corporate": F.col("eop_members_TC"),
         "EOP_Total": F.col("eop_members"),
@@ -202,7 +217,7 @@ def card_kpi_metrics(daily: DataFrame) -> DataFrame:
         "Using_Corporate": F.col("using_members_TC"),
         "Usage_Corporate_Rate": rate("using_members_TC", "eop_members_TC"),
         "New_Consumer": F.col("new_members_CN"), "New_Corporate": F.col("new_members_TC"),
-        "New_Total": F.col("new_members"),
+        "New_Member": F.col("new_members"),
         "Consumer_Closed": F.col("closed_members_CN"),
         "Corporate_Closed": F.col("closed_members_TC"), "Member_Closed": closed,
         "Attrition_Rate": F.round(ratio(closed, F.col("eop_members")) * 100, 2),
@@ -211,7 +226,8 @@ def card_kpi_metrics(daily: DataFrame) -> DataFrame:
         "Purchasing_Amt": F.col("purchase_amt"), "Cash_Advance_Amt": F.col("cash_advance_amt"),
         "Installment_Amt": F.col("installment_amt"), "Flexi_Amt": F.col("flexi_amt"),
         "Total_Spending_Amt": F.col("spend_amt"),
-        "Avg_Spending_Per_Member": ratio(F.col("spend_amt"), F.greatest(users, F.lit(1))),
+        # như API gốc (calculate_avg_spending_per_member): chi tiêu / số thẻ hiện hữu (EOP)
+        "Avg_Spending_Per_Member": ratio(F.col("spend_amt"), F.col("eop_members")),
         "Domestic_Spending_Amt": F.col("domestic_amt"),
         "XBorder_Spending_Amt": F.col("xborder_amt"),
         "Domestic_Rate": rate("domestic_amt", "spend_amt"),
@@ -306,3 +322,26 @@ def build_mart_card_overdue_daily(src: DataFrame) -> DataFrame:
         .agg(F.sum("port_acc").alias("port_acc"), F.sum("ovd_acc").alias("ovd_acc"),
              F.sum("port_bal").alias("port_bal"), F.sum("ovd_bal").alias("ovd_bal"))
     )
+
+
+OVD_MEASURES = ("port_acc", "ovd_acc", "port_bal", "ovd_bal")
+
+
+def overdue_reconciliation(silver: DataFrame, gold: DataFrame) -> dict[str, dict]:
+    """Đối soát Silver (card_overdue_source, 1 ngày) vs Gold (card_mart_overdue_daily, cùng
+    ngày): tổng 4 chỉ tiêu phải khớp TUYỆT ĐỐI. Một lần agg mỗi bên; tiền giữ Decimal (Spark
+    decimal -> Python Decimal), không qua float. Trả về {measure: {silver, gold, match}}."""
+    from decimal import Decimal
+
+    def totals(df: DataFrame) -> dict:
+        row = df.agg(*[F.sum(m).alias(m) for m in OVD_MEASURES]).first()
+        out = {}
+        for m in OVD_MEASURES:
+            v = row[m] if row is not None else None
+            if isinstance(v, float):
+                raise TypeError(f"{m}: số tiền / số lượng phải là DECIMAL / BIGINT, không float")
+            out[m] = Decimal(v) if v is not None else Decimal(0)
+        return out
+
+    s, g = totals(silver), totals(gold)
+    return {m: {"silver": s[m], "gold": g[m], "match": s[m] == g[m]} for m in OVD_MEASURES}

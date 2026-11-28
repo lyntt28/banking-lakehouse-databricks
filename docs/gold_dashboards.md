@@ -8,52 +8,31 @@ Common filters: report date, region, branch, product, customer type (consumer/co
 Common comparisons: vs last day (D-1), last month-end (M-1), last year-end/same day (Y-1),
 % of month target, % of year target.
 
-## 1. Card Business Dashboard (Performance & Growth)
+## 1. Card Business Dashboard (CARD)
 
-| Section | Visual | Metric | Gold source |
-|---|---|---|---|
-| Overview | 5 KPI cards with MoM, YoY, % month/year target | New Acquisition, Customer Base (EOP members), Using Customer, Sales Volume (K USD), Balance (K USD) | `card_mart_kpi_monthly` + `card_targets` |
-| New Issuance vs Termination | stacked bar + total line, 7 months | New cards by channel (Smart Credit / Branches) | `card_mart_kpi_monthly` (by acquisition_channel) |
-| | clustered bar, 7 months | In (new) vs Out (closed) | same |
-| Sales Performance | bar, 7 months | Customer Base vs Using Members | same |
-| | bar, 7 months | Balance vs Revolving balance | same |
-| | bar, 7 months | Sales Volume | same |
-| | line, 7 months | Spend per customer (ticket size) | same |
-| Spending Distribution | 3 donuts | By sector (Purchasing / Installment / Cash advance / Flexi), by location (Domestic / X-Border), by channel (POS / Online) | `card_mart_spend_mix` |
-| Delinquency | 4 KPI | DPD 1+, 10+, 30+, NPL 90+ ratio (balance-based) | `card_mart_kpi_monthly` |
+Marts `card_mart_kpi_daily`, `card_mart_kpi_monthly`, `card_mart_spend_mix` via `gold_serving` +
+`gold_serving.card_report_calendar`. Definitions, targets, migration:
+[card_dashboard.md](card_dashboard.md).
 
-Reconciliation: same metric codes as `card_kpi` source files → `ops.dq_results`.
+## 2. Overdue Dashboard (credit card overdue tracking)
 
-## 2. Overdue Dashboard (retail loan overdue tracking, LOAN)
+Source `gold.card_mart_overdue_daily` (file `credit_card_overdue_YYYYMMDD.txt`) read through
+`gold_serving` + `gold_serving.overdue_report_calendar`. Rules, date logic, datasets and runbook:
+[overdue_dashboard.md](overdue_dashboard.md).
 
-| Visual | Metric | Gold source |
-|---|---|---|
-| 3 tickers | Overdue amount, overdue ratio = overdue balance / portfolio balance, vs D-1 / M-1 / Y-1 | `loan_mart_overdue_daily` |
-| Bar + line, daily trend (last N days) and monthly | Overdue amount (bar), overdue ratio % (line) | same |
-| Donut by debt group | Overdue balance by debt group 2–5 | same, `GROUP BY debt_group` |
-| Stacked bar by month x debt group | Overdue balance | same |
-| Bar by product group | Overdue amount / ratio | same + `dim_product` |
-| Branch ranking + treemap | Overdue amount and ratio by branch | same + `dim_branch` |
-
-Definitions: portfolio balance = `ducuoi` (VND equivalent), overdue balance = balance of
-loans with DPD > 0, debt group from DPD (TT 11/2021, `common.banking`).
+| Visual | Metric |
+|---|---|
+| 3 tickers + vs D-1 / M-1 / Y-1 (actual dates) | Overdue ratio, overdue balance, ending balance (USD) |
+| Bar + line, last 5 published days and 6 months | Overdue amount (K USD), overdue ratio % |
+| Stacked bar month x debt group | Overdue amount by `del_grp` |
+| Pie + bar by product group | Overdue amount / Top-5 ratio |
+| Top-5 branches (treemap rules) | Ratio + amount, excl. 8125, > 10,000 USD |
 
 ## 3. Retail Deposit Performance Dashboard (DEPOSIT)
 
-| Visual | Metric | Gold source |
-|---|---|---|
-| 3 gauges | % target: All products, CASA, TDA/ISA | `dep_mart_daily` + `deposit_targets` |
-| Account group table | Balance, share %, diff D-1 / M-1 / Y-1, month average balance | `dep_mart_daily` (same layout as `bang1247`) |
-| Balance by region / by product, stacked bar by group class | Balance | same |
-| CASA donut | CASA share by account group | same |
-| Daily balance chart | Balance trend | same |
-| Deposit by term and interest rate | Balance, min/max/avg rate by tenor | `dep_mart_by_tenor` |
-| CASA customer distribution | Retail customers, CASA customers, active vs dormant | `dep_mart_casa_customer` |
-| Edu-Save new open accounts (cumulative by month) | New study-abroad accounts | `dep_mart_new_accounts` |
-
-Filters: region, currency, nationality, group class (1-CASA / 2-TDA / 3-ISA).
-
-Reconciliation: `dep_mart_daily` vs `deposit_summary` (bang1247) source files.
+Marts `dep_mart_trend`, `dep_mart_monthly`, `dep_mart_by_tenor`, `dep_mart_casa_customer`,
+`dep_mart_new_accounts` read through `gold_serving` + `gold_serving.deposit_report_calendar`.
+Metric definitions, filters, migration: [deposit_dashboard.md](deposit_dashboard.md).
 
 ## Built so far (`src/common/gold_cards.py`)
 

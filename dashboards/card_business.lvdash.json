@@ -4,39 +4,50 @@
       "name": "card_kpi",
       "displayName": "Overview KPI",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (\n",
-        "  SELECT k.* FROM gold_serving.card_mart_kpi_daily k\n",
-        "  WHERE :customer_type = 'all'\n",
-        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
-        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
-        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
-        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
-        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
-        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
-        "               sum(pos_amt) pos, sum(online_amt) online,\n",
-        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
-        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
-        "        FROM f GROUP BY as_of_date),\n",
-        "mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,\n",
-        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
-        "        FROM day GROUP BY 1),\n",
-        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
-        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
-        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))\n",
-        "\n",
-        ", cur AS (\n",
-        "  SELECT\n",
-        "    (SELECT sum(new_m) FROM day, p WHERE date_trunc('MM', as_of_date) = date_trunc('MM', p.d)\n",
-        "       AND as_of_date <= p.d) AS new_acquisition,\n",
-        "    x.eop AS customer_base, x.usg AS using_customer,\n",
-        "    (SELECT sum(spend) FROM day, p WHERE date_trunc('MM', as_of_date) = date_trunc('MM', p.d)\n",
-        "       AND as_of_date <= p.d) / p.usd / 1000 AS sales_volume_k_usd,\n",
-        "    x.bal / p.usd / 1000 AS balance_k_usd,\n",
-        "    x.dpd1 / nullif(x.bal, 0) * 100 AS dpd_1p, x.dpd10 / nullif(x.bal, 0) * 100 AS dpd_10p,\n",
-        "    x.dpd30 / nullif(x.bal, 0) * 100 AS dpd_30p, x.npl / nullif(x.bal, 0) * 100 AS npl\n",
-        "  FROM day x CROSS JOIN p WHERE x.as_of_date = p.d)\n",
-        "SELECT * FROM cur\n"
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        "SELECT cur.d AS report_date, m.new_m AS new_acquisition, m.eop AS customer_base,\n",
+        "       m.usg AS using_customer, m.spend / cur.usd / 1000 AS sales_volume_k_usd, m.bal / cur.usd / 1000 AS balance_k_usd,\n",
+        "       m.dpd1 / nullif(m.bal, 0) * 100 AS dpd_1p, m.dpd10 / nullif(m.bal, 0) * 100 AS dpd_10p,\n",
+        "       m.dpd30 / nullif(m.bal, 0) * 100 AS dpd_30p, m.npl / nullif(m.bal, 0) * 100 AS npl,\n",
+        "       -- tỷ lệ của ngày có dữ liệu liền trước (ô Comparison của counter rủi ro)\n",
+        "       p.dpd_1p_prev, p.dpd_10p_prev, p.dpd_30p_prev, p.npl_prev,\n",
+        "       -- tháng trước (ô Comparison của 5 KPI; luỹ kế tháng thiếu ngày -> NULL)\n",
+        "       lm.new_m AS new_acquisition_lm, lm.eop AS customer_base_lm, lm.usg AS using_customer_lm,\n",
+        "       lm.spend / cur.usd / 1000 AS sales_volume_k_usd_lm, lm.bal / cur.usd / 1000 AS balance_k_usd_lm\n",
+        "FROM cur LEFT JOIN m ON m.year_month = cur.cm\n",
+        "LEFT JOIN m lm ON lm.year_month = cur.lm\n",
+        "LEFT JOIN (\n",
+        "  SELECT sum(f.dpd_1p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_1p_prev,\n",
+        "         sum(f.dpd_10p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_10p_prev,\n",
+        "         sum(f.dpd_30p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_30p_prev,\n",
+        "         sum(f.npl_90p_balance) / nullif(sum(f.balance), 0) * 100 AS npl_prev\n",
+        "  FROM gold_serving.card_mart_kpi_daily f JOIN cur c2 ON f.as_of_date = c2.previous_date WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)) p ON true\n"
       ],
       "parameters": [
         {
@@ -73,91 +84,83 @@
     },
     {
       "name": "card_kpi_compare",
-      "displayName": "Overview KPI vs last month / year / target",
+      "displayName": "Overview KPI vs last month / year-end / target",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (\n",
-        "  SELECT k.* FROM gold_serving.card_mart_kpi_daily k\n",
-        "  WHERE :customer_type = 'all'\n",
-        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
-        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
-        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
-        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
-        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
-        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
-        "               sum(pos_amt) pos, sum(online_amt) online,\n",
-        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
-        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
-        "        FROM f GROUP BY as_of_date),\n",
-        "mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,\n",
-        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
-        "        FROM day GROUP BY 1),\n",
-        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
-        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
-        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))\n",
-        "\n",
-        ", pick AS (\n",
-        "  SELECT 'cur' AS k, p.d AS dd FROM p\n",
-        "  UNION ALL SELECT 'lm', (SELECT max(as_of_date) FROM day, p\n",
-        "                          WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p\n",
-        "  UNION ALL SELECT 'ly', (SELECT max(as_of_date) FROM day, p\n",
-        "                          WHERE as_of_date <= add_months(p.d, -12)) FROM p),\n",
-        "v AS (\n",
-        "  SELECT pk.k,\n",
-        "    (SELECT sum(new_m) FROM day WHERE date_trunc('MM', as_of_date) = date_trunc('MM', pk.dd)\n",
-        "       AND as_of_date <= pk.dd) AS new_acq,\n",
-        "    x.eop, x.usg,\n",
-        "    (SELECT sum(spend) FROM day WHERE date_trunc('MM', as_of_date) = date_trunc('MM', pk.dd)\n",
-        "       AND as_of_date <= pk.dd) AS spend,\n",
-        "    x.bal\n",
-        "  FROM pick pk LEFT JOIN day x ON x.as_of_date = pk.dd),\n",
-        "t AS (\n",
-        "  SELECT metric_code, period_type, sum(target_value) AS target\n",
-        "  FROM silver.ref_targets, p\n",
-        "  WHERE (period_type = 'MONTH' AND period = date_format(p.d, 'yyyy-MM'))\n",
-        "     OR (period_type = 'YEAR' AND period = CAST(year(p.d) AS STRING))\n",
-        "  GROUP BY 1, 2),\n",
-        "ytd AS (SELECT sum(new_m) AS new_ytd, sum(spend) AS spend_ytd FROM day, p\n",
-        "        WHERE year(as_of_date) = year(p.d) AND as_of_date <= p.d),\n",
-        "k AS (\n",
-        "  SELECT 1 AS ord, 'New Acquisition' AS kpi, c.new_acq AS cur, lm.new_acq AS lm,\n",
-        "         ly.new_acq AS ly, 'CARD_NEW_ACQ' AS code, ytd.new_ytd AS ytd_val\n",
-        "  FROM v c, v lm, v ly, ytd WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'\n",
-        "  UNION ALL SELECT 2, 'Customer Base', c.eop, lm.eop, ly.eop, NULL, NULL\n",
-        "  FROM v c, v lm, v ly WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'\n",
-        "  UNION ALL SELECT 3, 'Using Customer', c.usg, lm.usg, ly.usg, NULL, NULL\n",
-        "  FROM v c, v lm, v ly WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'\n",
-        "  UNION ALL SELECT 4, 'Sales Volume (K USD)', c.spend, lm.spend, ly.spend,\n",
-        "         'CARD_SALES_VOLUME', ytd.spend_ytd\n",
-        "  FROM v c, v lm, v ly, ytd WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly'\n",
-        "  UNION ALL SELECT 5, 'Balance (K USD)', c.bal, lm.bal, ly.bal, NULL, NULL\n",
-        "  FROM v c, v lm, v ly WHERE c.k = 'cur' AND lm.k = 'lm' AND ly.k = 'ly')\n",
-        ", r AS (\n",
-        "  SELECT k.ord,\n",
-        "    (k.cur - k.lm) / nullif(k.lm, 0) * 100 AS mom,\n",
-        "    (k.cur - k.ly) / nullif(k.ly, 0) * 100 AS yoy,\n",
-        "    k.cur / nullif(tm.target, 0) * 100 AS tgt_m,\n",
-        "    k.ytd_val / nullif(ty.target, 0) * 100 AS tgt_y\n",
-        "  FROM k\n",
-        "  LEFT JOIN t tm ON tm.metric_code = k.code AND tm.period_type = 'MONTH'\n",
-        "  LEFT JOIN t ty ON ty.metric_code = k.code AND ty.period_type = 'YEAR'),\n",
-        "cmp_rows AS (\n",
-        "  SELECT x.line, x.compare, r.ord, x.val FROM r\n",
-        "  LATERAL VIEW inline(array(\n",
-        "    named_struct('line', 1, 'compare', 'vs Last Month', 'val', CASE WHEN mom IS NULL THEN '-' ELSE concat(CASE WHEN mom >= 0 THEN '▲ ' ELSE '▼ ' END, format_number(abs(mom), 1), '%') END),\n",
-        "    named_struct('line', 2, 'compare', 'vs Last Year', 'val', CASE WHEN yoy IS NULL THEN '-' ELSE concat(CASE WHEN yoy >= 0 THEN '▲ ' ELSE '▼ ' END, format_number(abs(yoy), 1), '%') END),\n",
-        "    named_struct('line', 3, 'compare', '% of Month Target', 'val',\n",
-        "                 CASE WHEN tgt_m IS NULL THEN '-' ELSE concat(format_number(tgt_m, 0), '%') END),\n",
-        "    named_struct('line', 4, 'compare', '% of Year Target', 'val',\n",
-        "                 CASE WHEN tgt_y IS NULL THEN '-' ELSE concat(format_number(tgt_y, 0), '%') END)\n",
-        "  )) x)\n",
-        "SELECT compare,\n",
-        "  max(CASE WHEN ord = 1 THEN val END) AS new_acquisition,\n",
-        "  max(CASE WHEN ord = 2 THEN val END) AS customer_base,\n",
-        "  max(CASE WHEN ord = 3 THEN val END) AS using_customer,\n",
-        "  max(CASE WHEN ord = 4 THEN val END) AS sales_volume,\n",
-        "  max(CASE WHEN ord = 5 THEN val END) AS balance\n",
-        "FROM cmp_rows GROUP BY line, compare ORDER BY line\n"
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        ", t AS (SELECT substr(f.metric_code, 1, length(f.metric_code) - 3) AS code, f.period_type,\n",
+        "               f.target_value\n",
+        "        FROM silver.ref_targets f CROSS JOIN cur\n",
+        "        WHERE left(f.metric_code, 5) = 'CARD_'\n",
+        "          AND (:customer_type = 'all' OR right(f.metric_code, 2) = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "          AND ((f.period_type = 'MONTH' AND f.period = cur.cm)\n",
+        "               OR (f.period_type = 'YEAR' AND f.period = CAST(year(cur.d) AS STRING)))),\n",
+        "tg AS (SELECT\n",
+        "  sum(CASE WHEN t.code = 'CARD_NEW_ACQ' AND t.period_type = 'MONTH' THEN t.target_value END) AS new_acquisition_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_NEW_ACQ' AND t.period_type = 'YEAR' THEN t.target_value END) AS new_acquisition_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_CUSTOMER_BASE' AND t.period_type = 'MONTH' THEN t.target_value END) AS customer_base_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_CUSTOMER_BASE' AND t.period_type = 'YEAR' THEN t.target_value END) AS customer_base_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_USING' AND t.period_type = 'MONTH' THEN t.target_value END) AS using_customer_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_USING' AND t.period_type = 'YEAR' THEN t.target_value END) AS using_customer_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_SALES_VOLUME' AND t.period_type = 'MONTH' THEN t.target_value END) AS sales_volume_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_SALES_VOLUME' AND t.period_type = 'YEAR' THEN t.target_value END) AS sales_volume_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_BALANCE' AND t.period_type = 'MONTH' THEN t.target_value END) AS balance_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_BALANCE' AND t.period_type = 'YEAR' THEN t.target_value END) AS balance_ty\n",
+        "  FROM t),\n",
+        "c AS (SELECT * FROM m CROSS JOIN cur WHERE m.year_month = cur.cm),\n",
+        "p AS (SELECT m.*, 1 AS line FROM m CROSS JOIN cur WHERE m.year_month = cur.lm\n",
+        "      UNION ALL SELECT m.*, 2 FROM m CROSS JOIN cur WHERE m.year_month = cur.ye)\n",
+        "SELECT l.line, concat(CASE l.line WHEN 1 THEN 'vs Last Month (' ELSE 'vs Last Year-end (' END,\n",
+        "                      l.ym, ')') AS compare,\n",
+        "       round((c.new_m - p.new_m) / nullif(p.new_m, 0) * 100, 1) AS new_acquisition,\n",
+        "       round((c.eop - p.eop) / nullif(p.eop, 0) * 100, 1) AS customer_base,\n",
+        "       round((c.usg - p.usg) / nullif(p.usg, 0) * 100, 1) AS using_customer,\n",
+        "       round((c.spend - p.spend) / nullif(p.spend, 0) * 100, 1) AS sales_volume,\n",
+        "       round((c.bal - p.bal) / nullif(p.bal, 0) * 100, 1) AS balance\n",
+        "FROM (SELECT 1 AS line, lm AS ym FROM cur UNION ALL SELECT 2, ye FROM cur) l\n",
+        "CROSS JOIN cur LEFT JOIN c ON true LEFT JOIN p ON p.line = l.line\n",
+        "UNION ALL\n",
+        "SELECT 3, '% of Month Target',\n",
+        "       round(c.new_m / nullif(tg.new_acquisition_tm, 0) * 100, 1),\n",
+        "       round(c.eop / nullif(tg.customer_base_tm, 0) * 100, 1),\n",
+        "       round(c.usg / nullif(tg.using_customer_tm, 0) * 100, 1),\n",
+        "       round(c.spend / nullif(tg.sales_volume_tm, 0) * 100, 1),\n",
+        "       round(c.bal / nullif(tg.balance_tm, 0) * 100, 1)\n",
+        "FROM tg LEFT JOIN c ON true\n",
+        "UNION ALL\n",
+        "-- năm: luỹ kế (flow) YTD / chỉ tiêu năm; tồn: hiện tại / chỉ tiêu cuối năm; using: không có\n",
+        "SELECT 4, '% of Year Target',\n",
+        "       round(c.new_ytd / nullif(tg.new_acquisition_ty, 0) * 100, 1),\n",
+        "       round(c.eop / nullif(tg.customer_base_ty, 0) * 100, 1), CAST(NULL AS DOUBLE),\n",
+        "       round(c.spend_ytd / nullif(tg.sales_volume_ty, 0) * 100, 1),\n",
+        "       round(c.bal / nullif(tg.balance_ty, 0) * 100, 1)\n",
+        "FROM tg LEFT JOIN c ON true\n",
+        "ORDER BY 1\n"
       ],
       "parameters": [
         {
@@ -196,16 +199,21 @@
       "name": "card_new_acq",
       "displayName": "New Acquisition by channel",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d)\n",
-        "SELECT date_format(k.as_of_date, 'yyyyMM') AS month,\n",
-        "       CASE k.acquisition_channel WHEN 'SMART_CREDIT' THEN 'Smart Credit'\n",
-        "            ELSE 'Branches' END AS channel,\n",
-        "       sum(k.new_members) AS cards\n",
-        "FROM gold_serving.card_mart_kpi_daily k CROSS JOIN p\n",
-        "WHERE k.as_of_date <= p.d\n",
-        "  AND date_format(k.as_of_date, 'yyyyMM') > date_format(add_months(p.d, -7), 'yyyyMM')\n",
-        "  AND (:customer_type = 'all'\n",
-        "       OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        "SELECT f.year_month AS month,\n",
+        "       CASE f.acquisition_channel WHEN 'SMART_CREDIT' THEN 'Smart Credit' ELSE 'Branches' END\n",
+        "           AS channel,\n",
+        "       CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS cards\n",
+        "FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END) AND f.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM')\n",
         "GROUP BY 1, 2\n"
       ],
       "parameters": [
@@ -245,29 +253,35 @@
       "name": "card_in_out",
       "displayName": "In & Out",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (\n",
-        "  SELECT k.* FROM gold_serving.card_mart_kpi_daily k\n",
-        "  WHERE :customer_type = 'all'\n",
-        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
-        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
-        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
-        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
-        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
-        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
-        "               sum(pos_amt) pos, sum(online_amt) online,\n",
-        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
-        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
-        "        FROM f GROUP BY as_of_date),\n",
-        "mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,\n",
-        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
-        "        FROM day GROUP BY 1),\n",
-        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
-        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
-        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))\n",
-        "\n",
-        "SELECT ym AS month, 'New Issuance' AS series, new_m AS cards FROM m7\n",
-        "UNION ALL SELECT ym, 'Termination', closed_m FROM m7\n"
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        "SELECT year_month AS month, 'New Issuance' AS series, new_m AS cards FROM six\n",
+        "UNION ALL SELECT year_month, 'Termination', closed_m FROM six\n"
       ],
       "parameters": [
         {
@@ -306,29 +320,35 @@
       "name": "card_base_using",
       "displayName": "Customer Base & Using Mem",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (\n",
-        "  SELECT k.* FROM gold_serving.card_mart_kpi_daily k\n",
-        "  WHERE :customer_type = 'all'\n",
-        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
-        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
-        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
-        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
-        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
-        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
-        "               sum(pos_amt) pos, sum(online_amt) online,\n",
-        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
-        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
-        "        FROM f GROUP BY as_of_date),\n",
-        "mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,\n",
-        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
-        "        FROM day GROUP BY 1),\n",
-        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
-        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
-        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))\n",
-        "\n",
-        "SELECT ym AS month, 'Customer Base' AS series, eop AS members FROM m7\n",
-        "UNION ALL SELECT ym, 'Using Mem', usg FROM m7\n"
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        "SELECT year_month AS month, 'Customer Base' AS series, eop AS members FROM six\n",
+        "UNION ALL SELECT year_month, 'Using Mem', usg FROM six\n"
       ],
       "parameters": [
         {
@@ -367,29 +387,36 @@
       "name": "card_balance",
       "displayName": "Balance (K USD)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (\n",
-        "  SELECT k.* FROM gold_serving.card_mart_kpi_daily k\n",
-        "  WHERE :customer_type = 'all'\n",
-        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
-        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
-        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
-        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
-        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
-        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
-        "               sum(pos_amt) pos, sum(online_amt) online,\n",
-        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
-        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
-        "        FROM f GROUP BY as_of_date),\n",
-        "mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,\n",
-        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
-        "        FROM day GROUP BY 1),\n",
-        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
-        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
-        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))\n",
-        "\n",
-        "SELECT m7.ym AS month, 'Balance' AS series, m7.bal / p.usd / 1000 AS k_usd FROM m7, p\n",
-        "UNION ALL SELECT m7.ym, 'Revolving', m7.rev / p.usd / 1000 FROM m7, p\n"
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        "SELECT six.year_month AS month, 'Balance' AS series, six.bal / cur.usd / 1000 AS k_usd\n",
+        "FROM six CROSS JOIN cur\n",
+        "UNION ALL SELECT six.year_month, 'Revolving', six.rev / cur.usd / 1000 FROM six CROSS JOIN cur\n"
       ],
       "parameters": [
         {
@@ -428,28 +455,34 @@
       "name": "card_volume",
       "displayName": "Sales Volume (K USD)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (\n",
-        "  SELECT k.* FROM gold_serving.card_mart_kpi_daily k\n",
-        "  WHERE :customer_type = 'all'\n",
-        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
-        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
-        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
-        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
-        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
-        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
-        "               sum(pos_amt) pos, sum(online_amt) online,\n",
-        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
-        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
-        "        FROM f GROUP BY as_of_date),\n",
-        "mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,\n",
-        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
-        "        FROM day GROUP BY 1),\n",
-        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
-        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
-        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))\n",
-        "\n",
-        "SELECT m7.ym AS month, m7.spend / p.usd / 1000 AS k_usd FROM m7, p\n"
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        "SELECT six.year_month AS month, six.spend / cur.usd / 1000 AS k_usd FROM six CROSS JOIN cur\n"
       ],
       "parameters": [
         {
@@ -486,30 +519,37 @@
     },
     {
       "name": "card_ticket",
-      "displayName": "Spend per cus (USD)",
+      "displayName": "Spend per Member (USD)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (\n",
-        "  SELECT k.* FROM gold_serving.card_mart_kpi_daily k\n",
-        "  WHERE :customer_type = 'all'\n",
-        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
-        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
-        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
-        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
-        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
-        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
-        "               sum(pos_amt) pos, sum(online_amt) online,\n",
-        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
-        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
-        "        FROM f GROUP BY as_of_date),\n",
-        "mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,\n",
-        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
-        "        FROM day GROUP BY 1),\n",
-        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
-        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
-        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))\n",
-        "\n",
-        "SELECT m7.ym AS month, m7.spend / p.usd / nullif(m7.usg, 0) AS ticket_size FROM m7, p\n"
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        "SELECT six.year_month AS month, six.spend / cur.usd / nullif(six.eop, 0) AS spend_per_member\n",
+        "FROM six CROSS JOIN cur\n"
       ],
       "parameters": [
         {
@@ -548,38 +588,35 @@
       "name": "card_mix_sector",
       "displayName": "Spend by sector",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (\n",
-        "  SELECT k.* FROM gold_serving.card_mart_kpi_daily k\n",
-        "  WHERE :customer_type = 'all'\n",
-        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
-        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
-        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
-        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
-        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
-        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
-        "               sum(pos_amt) pos, sum(online_amt) online,\n",
-        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
-        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
-        "        FROM f GROUP BY as_of_date),\n",
-        "mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,\n",
-        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
-        "        FROM day GROUP BY 1),\n",
-        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
-        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
-        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))\n",
-        "\n",
-        ", x AS (SELECT day.* FROM day, p WHERE day.as_of_date = p.d),\n",
-        "all_mix AS (\n",
-        "  SELECT 'sector' AS donut, 'Purchasing' AS slice, purchase AS amount FROM x\n",
-        "  UNION ALL SELECT 'sector', 'Installment', installment FROM x\n",
-        "  UNION ALL SELECT 'sector', 'Cash Advance', cash FROM x\n",
-        "  UNION ALL SELECT 'sector', 'Flexi', flexi FROM x\n",
-        "  UNION ALL SELECT 'location', 'Domestic', domestic FROM x\n",
-        "  UNION ALL SELECT 'location', 'X-Border', xborder FROM x\n",
-        "  UNION ALL SELECT 'channel', 'POS (Offline)', pos FROM x\n",
-        "  UNION ALL SELECT 'channel', 'Online', online FROM x)\n",
-        "SELECT slice, amount FROM all_mix WHERE donut = 'sector'\n"
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        "SELECT stack(4, 'Purchasing', m.purchase, 'Installment', m.installment, 'Cash Advance', m.cash, 'Flexi', m.flexi) AS (slice, amount)\n",
+        "FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n"
       ],
       "parameters": [
         {
@@ -618,38 +655,35 @@
       "name": "card_mix_location",
       "displayName": "Spend by location",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (\n",
-        "  SELECT k.* FROM gold_serving.card_mart_kpi_daily k\n",
-        "  WHERE :customer_type = 'all'\n",
-        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
-        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
-        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
-        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
-        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
-        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
-        "               sum(pos_amt) pos, sum(online_amt) online,\n",
-        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
-        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
-        "        FROM f GROUP BY as_of_date),\n",
-        "mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,\n",
-        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
-        "        FROM day GROUP BY 1),\n",
-        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
-        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
-        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))\n",
-        "\n",
-        ", x AS (SELECT day.* FROM day, p WHERE day.as_of_date = p.d),\n",
-        "all_mix AS (\n",
-        "  SELECT 'sector' AS donut, 'Purchasing' AS slice, purchase AS amount FROM x\n",
-        "  UNION ALL SELECT 'sector', 'Installment', installment FROM x\n",
-        "  UNION ALL SELECT 'sector', 'Cash Advance', cash FROM x\n",
-        "  UNION ALL SELECT 'sector', 'Flexi', flexi FROM x\n",
-        "  UNION ALL SELECT 'location', 'Domestic', domestic FROM x\n",
-        "  UNION ALL SELECT 'location', 'X-Border', xborder FROM x\n",
-        "  UNION ALL SELECT 'channel', 'POS (Offline)', pos FROM x\n",
-        "  UNION ALL SELECT 'channel', 'Online', online FROM x)\n",
-        "SELECT slice, amount FROM all_mix WHERE donut = 'location'\n"
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        "SELECT stack(2, 'Domestic', m.domestic, 'X-Border', m.xborder) AS (slice, amount)\n",
+        "FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n"
       ],
       "parameters": [
         {
@@ -688,38 +722,35 @@
       "name": "card_mix_channel",
       "displayName": "Spend by channel",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (\n",
-        "  SELECT k.* FROM gold_serving.card_mart_kpi_daily k\n",
-        "  WHERE :customer_type = 'all'\n",
-        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
-        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
-        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
-        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
-        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
-        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
-        "               sum(pos_amt) pos, sum(online_amt) online,\n",
-        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
-        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
-        "        FROM f GROUP BY as_of_date),\n",
-        "mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,\n",
-        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
-        "        FROM day GROUP BY 1),\n",
-        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
-        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
-        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))\n",
-        "\n",
-        ", x AS (SELECT day.* FROM day, p WHERE day.as_of_date = p.d),\n",
-        "all_mix AS (\n",
-        "  SELECT 'sector' AS donut, 'Purchasing' AS slice, purchase AS amount FROM x\n",
-        "  UNION ALL SELECT 'sector', 'Installment', installment FROM x\n",
-        "  UNION ALL SELECT 'sector', 'Cash Advance', cash FROM x\n",
-        "  UNION ALL SELECT 'sector', 'Flexi', flexi FROM x\n",
-        "  UNION ALL SELECT 'location', 'Domestic', domestic FROM x\n",
-        "  UNION ALL SELECT 'location', 'X-Border', xborder FROM x\n",
-        "  UNION ALL SELECT 'channel', 'POS (Offline)', pos FROM x\n",
-        "  UNION ALL SELECT 'channel', 'Online', online FROM x)\n",
-        "SELECT slice, amount FROM all_mix WHERE donut = 'channel'\n"
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        "SELECT stack(2, 'POS (Offline)', m.pos, 'Online', m.online) AS (slice, amount)\n",
+        "FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n"
       ],
       "parameters": [
         {
@@ -756,45 +787,197 @@
     },
     {
       "name": "card_risk_compare",
-      "displayName": "Delinquency vs last day / month",
+      "displayName": "Delinquency vs last day / month (pp)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_kpi_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (\n",
-        "  SELECT k.* FROM gold_serving.card_mart_kpi_daily k\n",
-        "  WHERE :customer_type = 'all'\n",
-        "     OR k.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END),\n",
-        "day AS (SELECT as_of_date, sum(eop_members) eop, sum(using_members) usg,\n",
-        "               sum(new_members) new_m, sum(closed_members) closed_m, sum(spend_amt) spend,\n",
-        "               sum(balance) bal, sum(revolving_balance) rev, sum(purchase_amt) purchase,\n",
-        "               sum(installment_amt) installment, sum(cash_advance_amt) cash,\n",
-        "               sum(flexi_amt) flexi, sum(domestic_amt) domestic, sum(xborder_amt) xborder,\n",
-        "               sum(pos_amt) pos, sum(online_amt) online,\n",
-        "               sum(dpd_1p_balance) dpd1, sum(dpd_10p_balance) dpd10,\n",
-        "               sum(dpd_30p_balance) dpd30, sum(npl_90p_balance) npl\n",
-        "        FROM f GROUP BY as_of_date),\n",
-        "mon AS (SELECT date_format(as_of_date, 'yyyyMM') AS ym, max(as_of_date) AS last_d,\n",
-        "               sum(new_m) new_m, sum(closed_m) closed_m, sum(spend) spend\n",
-        "        FROM day GROUP BY 1),\n",
-        "m7 AS (SELECT m.ym, m.new_m, m.closed_m, m.spend, x.eop, x.usg, x.bal, x.rev\n",
-        "       FROM mon m JOIN day x ON x.as_of_date = m.last_d CROSS JOIN p\n",
-        "       WHERE m.last_d <= p.d AND m.ym > date_format(add_months(p.d, -7), 'yyyyMM'))\n",
-        "\n",
-        ", pk AS (SELECT p.d AS cur,\n",
-        "                (SELECT max(as_of_date) FROM day, p WHERE as_of_date < p.d) AS d1,\n",
-        "                (SELECT max(as_of_date) FROM day, p\n",
-        "                 WHERE as_of_date <= last_day(add_months(p.d, -1))) AS m1 FROM p),\n",
-        "rt AS (SELECT as_of_date, dpd1 / nullif(bal, 0) * 100 AS r1, dpd10 / nullif(bal, 0) * 100 AS r10,\n",
-        "              dpd30 / nullif(bal, 0) * 100 AS r30, npl / nullif(bal, 0) * 100 AS rn FROM day),\n",
-        "v AS (SELECT c.r1 - d.r1 AS d_r1, c.r10 - d.r10 AS d_r10, c.r30 - d.r30 AS d_r30,\n",
-        "             c.rn - d.rn AS d_rn, c.r1 - m.r1 AS m_r1, c.r10 - m.r10 AS m_r10,\n",
-        "             c.r30 - m.r30 AS m_r30, c.rn - m.rn AS m_rn\n",
-        "      FROM pk JOIN rt c ON c.as_of_date = pk.cur\n",
-        "      LEFT JOIN rt d ON d.as_of_date = pk.d1 LEFT JOIN rt m ON m.as_of_date = pk.m1)\n",
-        "SELECT 1 AS line, 'vs Last Day' AS compare, CASE WHEN d_r1 IS NULL THEN '-' ELSE concat(CASE WHEN d_r1 >= 0 THEN '▲ ' ELSE '▼ ' END, format_number(abs(d_r1), 1), ' pp') END AS dpd_1p, CASE WHEN d_r10 IS NULL THEN '-' ELSE concat(CASE WHEN d_r10 >= 0 THEN '▲ ' ELSE '▼ ' END, format_number(abs(d_r10), 1), ' pp') END AS dpd_10p,\n",
-        "       CASE WHEN d_r30 IS NULL THEN '-' ELSE concat(CASE WHEN d_r30 >= 0 THEN '▲ ' ELSE '▼ ' END, format_number(abs(d_r30), 1), ' pp') END AS dpd_30p, CASE WHEN d_rn IS NULL THEN '-' ELSE concat(CASE WHEN d_rn >= 0 THEN '▲ ' ELSE '▼ ' END, format_number(abs(d_rn), 1), ' pp') END AS npl FROM v\n",
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", rt AS (SELECT f.as_of_date, sum(f.dpd_1p_balance) / nullif(sum(f.balance), 0) * 100 AS r1,\n",
+        "                sum(f.dpd_10p_balance) / nullif(sum(f.balance), 0) * 100 AS r10,\n",
+        "                sum(f.dpd_30p_balance) / nullif(sum(f.balance), 0) * 100 AS r30,\n",
+        "                sum(f.npl_90p_balance) / nullif(sum(f.balance), 0) * 100 AS rn\n",
+        "         FROM gold_serving.card_mart_kpi_daily f\n",
+        "         WHERE f.as_of_date IN (SELECT d FROM cur UNION ALL SELECT previous_date FROM cur\n",
+        "                                UNION ALL SELECT previous_month_date FROM cur) AND (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "         GROUP BY f.as_of_date),\n",
+        "l AS (SELECT 1 AS line, 'vs Last Day' AS cmp, previous_date AS dd FROM cur\n",
+        "      UNION ALL SELECT 2, 'vs Last Month', previous_month_date FROM cur)\n",
+        "SELECT l.line, concat(l.cmp, ' (', coalesce(date_format(l.dd, 'yyyy-MM-dd'), 'N/A'), ') pp')\n",
+        "           AS compare,\n",
+        "       round(c.r1 - p.r1, 2) AS dpd_1p, round(c.r10 - p.r10, 2) AS dpd_10p,\n",
+        "       round(c.r30 - p.r30, 2) AS dpd_30p, round(c.rn - p.rn, 2) AS npl\n",
+        "FROM l CROSS JOIN cur LEFT JOIN rt c ON c.as_of_date = cur.d LEFT JOIN rt p ON p.as_of_date = l.dd\n",
+        "ORDER BY l.line\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Customer type",
+          "keyword": "customer_type",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "consumer"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "card_kpi_cards",
+      "displayName": "KPI cards (Custom Viz)",
+      "queryLines": [
+        "SELECT stack(5,\n",
+        "  CAST('new_acquisition' AS STRING), CAST('New Acquisition' AS STRING), CAST(k.new_acquisition AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.new_acquisition_1 AS DOUBLE), CAST('MoM' AS STRING), CAST(c.new_acquisition_2 AS DOUBLE), CAST('vs YE' AS STRING), CAST(NULL AS DOUBLE), CAST(NULL AS STRING), CAST('%' AS STRING), CAST(',.1f' AS STRING), CAST(coalesce(concat(format_number(c.new_acquisition_3, 0), '% of Month Target'), 'Month Target: N/A') AS STRING), CAST(coalesce(concat(format_number(c.new_acquisition_4, 0), '% of Year Target'), 'Year Target: N/A') AS STRING),\n",
+        "  CAST('customer_base' AS STRING), CAST('Customer Base' AS STRING), CAST(k.customer_base AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.customer_base_1 AS DOUBLE), CAST('MoM' AS STRING), CAST(c.customer_base_2 AS DOUBLE), CAST('vs YE' AS STRING), CAST(NULL AS DOUBLE), CAST(NULL AS STRING), CAST('%' AS STRING), CAST(',.1f' AS STRING), CAST(coalesce(concat(format_number(c.customer_base_3, 0), '% of Month Target'), 'Month Target: N/A') AS STRING), CAST(coalesce(concat(format_number(c.customer_base_4, 0), '% of Year Target'), 'Year Target: N/A') AS STRING),\n",
+        "  CAST('using_customer' AS STRING), CAST('Using Customer' AS STRING), CAST(k.using_customer AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.using_customer_1 AS DOUBLE), CAST('MoM' AS STRING), CAST(c.using_customer_2 AS DOUBLE), CAST('vs YE' AS STRING), CAST(NULL AS DOUBLE), CAST(NULL AS STRING), CAST('%' AS STRING), CAST(',.1f' AS STRING), CAST(coalesce(concat(format_number(c.using_customer_3, 0), '% of Month Target'), 'Month Target: N/A') AS STRING), CAST(coalesce(concat(format_number(c.using_customer_4, 0), '% of Year Target'), 'Year Target: N/A') AS STRING),\n",
+        "  CAST('sales_volume' AS STRING), CAST('Sales Volume (K USD)' AS STRING), CAST(k.sales_volume_k_usd AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.sales_volume_1 AS DOUBLE), CAST('MoM' AS STRING), CAST(c.sales_volume_2 AS DOUBLE), CAST('vs YE' AS STRING), CAST(NULL AS DOUBLE), CAST(NULL AS STRING), CAST('%' AS STRING), CAST(',.1f' AS STRING), CAST(coalesce(concat(format_number(c.sales_volume_3, 0), '% of Month Target'), 'Month Target: N/A') AS STRING), CAST(coalesce(concat(format_number(c.sales_volume_4, 0), '% of Year Target'), 'Year Target: N/A') AS STRING),\n",
+        "  CAST('balance' AS STRING), CAST('Balance (K USD)' AS STRING), CAST(k.balance_k_usd AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.balance_1 AS DOUBLE), CAST('MoM' AS STRING), CAST(c.balance_2 AS DOUBLE), CAST('vs YE' AS STRING), CAST(NULL AS DOUBLE), CAST(NULL AS STRING), CAST('%' AS STRING), CAST(',.1f' AS STRING), CAST(coalesce(concat(format_number(c.balance_3, 0), '% of Month Target'), 'Month Target: N/A') AS STRING), CAST(coalesce(concat(format_number(c.balance_4, 0), '% of Year Target'), 'Year Target: N/A') AS STRING)\n",
+        ") AS (kpi, title, value, value_fmt, cmp1, cmp1_label, cmp2, cmp2_label, cmp3, cmp3_label, cmp_unit, cmp_fmt, note1, note2)\n",
+        "FROM (WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        "SELECT cur.d AS report_date, m.new_m AS new_acquisition, m.eop AS customer_base,\n",
+        "       m.usg AS using_customer, m.spend / cur.usd / 1000 AS sales_volume_k_usd, m.bal / cur.usd / 1000 AS balance_k_usd,\n",
+        "       m.dpd1 / nullif(m.bal, 0) * 100 AS dpd_1p, m.dpd10 / nullif(m.bal, 0) * 100 AS dpd_10p,\n",
+        "       m.dpd30 / nullif(m.bal, 0) * 100 AS dpd_30p, m.npl / nullif(m.bal, 0) * 100 AS npl,\n",
+        "       -- tỷ lệ của ngày có dữ liệu liền trước (ô Comparison của counter rủi ro)\n",
+        "       p.dpd_1p_prev, p.dpd_10p_prev, p.dpd_30p_prev, p.npl_prev,\n",
+        "       -- tháng trước (ô Comparison của 5 KPI; luỹ kế tháng thiếu ngày -> NULL)\n",
+        "       lm.new_m AS new_acquisition_lm, lm.eop AS customer_base_lm, lm.usg AS using_customer_lm,\n",
+        "       lm.spend / cur.usd / 1000 AS sales_volume_k_usd_lm, lm.bal / cur.usd / 1000 AS balance_k_usd_lm\n",
+        "FROM cur LEFT JOIN m ON m.year_month = cur.cm\n",
+        "LEFT JOIN m lm ON lm.year_month = cur.lm\n",
+        "LEFT JOIN (\n",
+        "  SELECT sum(f.dpd_1p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_1p_prev,\n",
+        "         sum(f.dpd_10p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_10p_prev,\n",
+        "         sum(f.dpd_30p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_30p_prev,\n",
+        "         sum(f.npl_90p_balance) / nullif(sum(f.balance), 0) * 100 AS npl_prev\n",
+        "  FROM gold_serving.card_mart_kpi_daily f JOIN cur c2 ON f.as_of_date = c2.previous_date WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)) p ON true) k CROSS JOIN (SELECT max(CASE WHEN line = 1 THEN new_acquisition END) AS new_acquisition_1, max(CASE WHEN line = 2 THEN new_acquisition END) AS new_acquisition_2, max(CASE WHEN line = 3 THEN new_acquisition END) AS new_acquisition_3, max(CASE WHEN line = 4 THEN new_acquisition END) AS new_acquisition_4, max(CASE WHEN line = 1 THEN customer_base END) AS customer_base_1, max(CASE WHEN line = 2 THEN customer_base END) AS customer_base_2, max(CASE WHEN line = 3 THEN customer_base END) AS customer_base_3, max(CASE WHEN line = 4 THEN customer_base END) AS customer_base_4, max(CASE WHEN line = 1 THEN using_customer END) AS using_customer_1, max(CASE WHEN line = 2 THEN using_customer END) AS using_customer_2, max(CASE WHEN line = 3 THEN using_customer END) AS using_customer_3, max(CASE WHEN line = 4 THEN using_customer END) AS using_customer_4, max(CASE WHEN line = 1 THEN sales_volume END) AS sales_volume_1, max(CASE WHEN line = 2 THEN sales_volume END) AS sales_volume_2, max(CASE WHEN line = 3 THEN sales_volume END) AS sales_volume_3, max(CASE WHEN line = 4 THEN sales_volume END) AS sales_volume_4, max(CASE WHEN line = 1 THEN balance END) AS balance_1, max(CASE WHEN line = 2 THEN balance END) AS balance_2, max(CASE WHEN line = 3 THEN balance END) AS balance_3, max(CASE WHEN line = 4 THEN balance END) AS balance_4 FROM (\n",
+        "WITH cur AS (\n",
+        "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
+        "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
+        "         date_format(add_months(c.report_date, -1), 'yyyy-MM') AS lm,\n",
+        "         concat(CAST(year(c.report_date) - 1 AS STRING), '-12') AS ye,\n",
+        "         (SELECT max_by(x.rate_to_vnd, x.rate_date) FROM silver.ref_fx_rates x\n",
+        "          WHERE x.currencycd = 'USD' AND x.rate_date <= c.report_date) AS usd\n",
+        "  FROM gold_serving.card_report_calendar c\n",
+        "  WHERE c.report_date = (SELECT max(report_date) FROM gold_serving.card_report_calendar WHERE report_date <= :report_date))\n",
+        ", m AS (\n",
+        "  SELECT f.year_month, max(f.snapshot_date) AS snapshot_date,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.new_members) END AS new_m, CASE WHEN bool_and(f.flow_complete) THEN sum(f.closed_members) END AS closed_m,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.using_members) END AS usg, CASE WHEN bool_and(f.flow_complete) THEN sum(f.spend_amt) END AS spend,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.new_members_ytd) END AS new_ytd,\n",
+        "         CASE WHEN bool_and(f.ytd_complete) THEN sum(f.spend_amt_ytd) END AS spend_ytd,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.purchase_amt) END AS purchase, CASE WHEN bool_and(f.flow_complete) THEN sum(f.installment_amt) END AS installment,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.cash_advance_amt) END AS cash, CASE WHEN bool_and(f.flow_complete) THEN sum(f.flexi_amt) END AS flexi,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.domestic_amt) END AS domestic, CASE WHEN bool_and(f.flow_complete) THEN sum(f.xborder_amt) END AS xborder,\n",
+        "         CASE WHEN bool_and(f.flow_complete) THEN sum(f.pos_amt) END AS pos, CASE WHEN bool_and(f.flow_complete) THEN sum(f.online_amt) END AS online,\n",
+        "         sum(f.eop_members) AS eop, sum(f.balance) AS bal, sum(f.revolving_balance) AS rev,\n",
+        "         sum(f.dpd_1p_balance) AS dpd1, sum(f.dpd_10p_balance) AS dpd10,\n",
+        "         sum(f.dpd_30p_balance) AS dpd30, sum(f.npl_90p_balance) AS npl\n",
+        "  FROM gold_serving.card_mart_kpi_monthly f JOIN cur ON f.as_of_date = cur.d\n",
+        "  WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "  GROUP BY f.year_month),\n",
+        "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
+        "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
+        ", t AS (SELECT substr(f.metric_code, 1, length(f.metric_code) - 3) AS code, f.period_type,\n",
+        "               f.target_value\n",
+        "        FROM silver.ref_targets f CROSS JOIN cur\n",
+        "        WHERE left(f.metric_code, 5) = 'CARD_'\n",
+        "          AND (:customer_type = 'all' OR right(f.metric_code, 2) = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)\n",
+        "          AND ((f.period_type = 'MONTH' AND f.period = cur.cm)\n",
+        "               OR (f.period_type = 'YEAR' AND f.period = CAST(year(cur.d) AS STRING)))),\n",
+        "tg AS (SELECT\n",
+        "  sum(CASE WHEN t.code = 'CARD_NEW_ACQ' AND t.period_type = 'MONTH' THEN t.target_value END) AS new_acquisition_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_NEW_ACQ' AND t.period_type = 'YEAR' THEN t.target_value END) AS new_acquisition_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_CUSTOMER_BASE' AND t.period_type = 'MONTH' THEN t.target_value END) AS customer_base_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_CUSTOMER_BASE' AND t.period_type = 'YEAR' THEN t.target_value END) AS customer_base_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_USING' AND t.period_type = 'MONTH' THEN t.target_value END) AS using_customer_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_USING' AND t.period_type = 'YEAR' THEN t.target_value END) AS using_customer_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_SALES_VOLUME' AND t.period_type = 'MONTH' THEN t.target_value END) AS sales_volume_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_SALES_VOLUME' AND t.period_type = 'YEAR' THEN t.target_value END) AS sales_volume_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_BALANCE' AND t.period_type = 'MONTH' THEN t.target_value END) AS balance_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_BALANCE' AND t.period_type = 'YEAR' THEN t.target_value END) AS balance_ty\n",
+        "  FROM t),\n",
+        "c AS (SELECT * FROM m CROSS JOIN cur WHERE m.year_month = cur.cm),\n",
+        "p AS (SELECT m.*, 1 AS line FROM m CROSS JOIN cur WHERE m.year_month = cur.lm\n",
+        "      UNION ALL SELECT m.*, 2 FROM m CROSS JOIN cur WHERE m.year_month = cur.ye)\n",
+        "SELECT l.line, concat(CASE l.line WHEN 1 THEN 'vs Last Month (' ELSE 'vs Last Year-end (' END,\n",
+        "                      l.ym, ')') AS compare,\n",
+        "       round((c.new_m - p.new_m) / nullif(p.new_m, 0) * 100, 1) AS new_acquisition,\n",
+        "       round((c.eop - p.eop) / nullif(p.eop, 0) * 100, 1) AS customer_base,\n",
+        "       round((c.usg - p.usg) / nullif(p.usg, 0) * 100, 1) AS using_customer,\n",
+        "       round((c.spend - p.spend) / nullif(p.spend, 0) * 100, 1) AS sales_volume,\n",
+        "       round((c.bal - p.bal) / nullif(p.bal, 0) * 100, 1) AS balance\n",
+        "FROM (SELECT 1 AS line, lm AS ym FROM cur UNION ALL SELECT 2, ye FROM cur) l\n",
+        "CROSS JOIN cur LEFT JOIN c ON true LEFT JOIN p ON p.line = l.line\n",
         "UNION ALL\n",
-        "SELECT 2, 'vs Last Month', CASE WHEN m_r1 IS NULL THEN '-' ELSE concat(CASE WHEN m_r1 >= 0 THEN '▲ ' ELSE '▼ ' END, format_number(abs(m_r1), 1), ' pp') END, CASE WHEN m_r10 IS NULL THEN '-' ELSE concat(CASE WHEN m_r10 >= 0 THEN '▲ ' ELSE '▼ ' END, format_number(abs(m_r10), 1), ' pp') END, CASE WHEN m_r30 IS NULL THEN '-' ELSE concat(CASE WHEN m_r30 >= 0 THEN '▲ ' ELSE '▼ ' END, format_number(abs(m_r30), 1), ' pp') END, CASE WHEN m_rn IS NULL THEN '-' ELSE concat(CASE WHEN m_rn >= 0 THEN '▲ ' ELSE '▼ ' END, format_number(abs(m_rn), 1), ' pp') END FROM v\n",
-        "ORDER BY line\n"
+        "SELECT 3, '% of Month Target',\n",
+        "       round(c.new_m / nullif(tg.new_acquisition_tm, 0) * 100, 1),\n",
+        "       round(c.eop / nullif(tg.customer_base_tm, 0) * 100, 1),\n",
+        "       round(c.usg / nullif(tg.using_customer_tm, 0) * 100, 1),\n",
+        "       round(c.spend / nullif(tg.sales_volume_tm, 0) * 100, 1),\n",
+        "       round(c.bal / nullif(tg.balance_tm, 0) * 100, 1)\n",
+        "FROM tg LEFT JOIN c ON true\n",
+        "UNION ALL\n",
+        "-- năm: luỹ kế (flow) YTD / chỉ tiêu năm; tồn: hiện tại / chỉ tiêu cuối năm; using: không có\n",
+        "SELECT 4, '% of Year Target',\n",
+        "       round(c.new_ytd / nullif(tg.new_acquisition_ty, 0) * 100, 1),\n",
+        "       round(c.eop / nullif(tg.customer_base_ty, 0) * 100, 1), CAST(NULL AS DOUBLE),\n",
+        "       round(c.spend_ytd / nullif(tg.sales_volume_ty, 0) * 100, 1),\n",
+        "       round(c.bal / nullif(tg.balance_ty, 0) * 100, 1)\n",
+        "FROM tg LEFT JOIN c ON true\n",
+        "ORDER BY 1)) c\n"
       ],
       "parameters": [
         {
@@ -877,16 +1060,60 @@
         },
         {
           "widget": {
-            "name": "counter_03",
+            "name": "viz_03",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_kpi_cards",
                   "fields": [
                     {
-                      "name": "new_acquisition",
-                      "expression": "`new_acquisition`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -894,27 +1121,61 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "new_acquisition",
-                  "displayName": "New Acquisition",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#1F2937"
-                  }
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "New Acquisition"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'new_acquisition'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 6,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"upper(datum.title)\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 30,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#000000\",\n    \"x\": 6,\n    \"y\": 24\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11.5,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"right\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11.5,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width - 6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 94\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 109\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -922,21 +1183,65 @@
             "x": 0,
             "y": 3,
             "width": 1,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_04",
+            "name": "viz_04",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_kpi_cards",
                   "fields": [
                     {
-                      "name": "customer_base",
-                      "expression": "`customer_base`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -944,27 +1249,61 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "customer_base",
-                  "displayName": "Customer Base",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#2F5597"
-                  }
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Customer Base"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'customer_base'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 6,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"upper(datum.title)\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 30,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\",\n    \"x\": 6,\n    \"y\": 24\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11.5,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"right\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11.5,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width - 6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 94\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 109\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -972,21 +1311,65 @@
             "x": 1,
             "y": 3,
             "width": 1,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_05",
+            "name": "viz_05",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_kpi_cards",
                   "fields": [
                     {
-                      "name": "using_customer",
-                      "expression": "`using_customer`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -994,27 +1377,61 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "using_customer",
-                  "displayName": "Using Customer",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#C55A11"
-                  }
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Using Customer"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'using_customer'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 6,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"upper(datum.title)\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 30,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#c55a11\",\n    \"x\": 6,\n    \"y\": 24\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11.5,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"right\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11.5,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width - 6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 94\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 109\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1022,21 +1439,65 @@
             "x": 2,
             "y": 3,
             "width": 1,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_06",
+            "name": "viz_06",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_kpi_cards",
                   "fields": [
                     {
-                      "name": "sales_volume_k_usd",
-                      "expression": "`sales_volume_k_usd`"
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
                     }
                   ],
                   "disaggregated": true
@@ -1044,27 +1505,61 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "sales_volume_k_usd",
-                  "displayName": "Sales Volume (K USD)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#2F5597"
-                  }
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "Sales Volume (K USD)"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'sales_volume'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 6,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"upper(datum.title)\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 30,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#2f5597\",\n    \"x\": 6,\n    \"y\": 24\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11.5,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"right\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11.5,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width - 6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 94\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 109\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1072,12 +1567,172 @@
             "x": 3,
             "y": 3,
             "width": 1,
-            "height": 3
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "counter_07",
+            "name": "viz_07",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi_cards",
+                  "fields": [
+                    {
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'balance'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 6,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"upper(datum.title)\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 30,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#5b9bd5\",\n    \"x\": 6,\n    \"y\": 24\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11.5,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"right\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11.5,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width - 6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 94\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 109\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 3,
+            "width": 1,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "text_08",
+            "multilineTextboxSpec": {
+              "lines": [
+                "**Report scope**\n\nNew / Using / Sales = MTD; Base / Balance = tại ngày báo cáo. Using = số thẻ có giao dịch (card-level)."
+              ]
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 3,
+            "width": 1,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "text_09",
+            "multilineTextboxSpec": {
+              "lines": [
+                "### 🟧 Delinquency"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_10",
             "queries": [
               {
                 "name": "main_query",
@@ -1085,8 +1740,12 @@
                   "datasetName": "card_kpi",
                   "fields": [
                     {
-                      "name": "balance_k_usd",
-                      "expression": "`balance_k_usd`"
+                      "name": "dpd_1p",
+                      "expression": "`dpd_1p`"
+                    },
+                    {
+                      "name": "dpd_1p_prev",
+                      "expression": "`dpd_1p_prev`"
                     }
                   ],
                   "disaggregated": true
@@ -1098,81 +1757,54 @@
               "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "balance_k_usd",
-                  "displayName": "Balance (K USD)",
+                  "fieldName": "dpd_1p",
+                  "displayName": "DPD 1+ (%)",
                   "format": {
                     "type": "number-plain",
                     "decimalPlaces": {
                       "type": "exact",
-                      "places": 0
-                    }
+                      "places": 2
+                    },
+                    "suffix": "%"
                   },
                   "style": {
-                    "color": "#5B9BD5"
+                    "color": "#000000"
                   }
+                },
+                "target": {
+                  "fieldName": "dpd_1p_prev",
+                  "displayName": "vs Last Day"
                 }
               },
               "frame": {
                 "showTitle": true,
-                "title": "Balance (K USD)"
+                "title": "DPD 1+ (%)"
               }
             }
           },
           "position": {
-            "x": 4,
-            "y": 3,
+            "x": 1,
+            "y": 8,
             "width": 1,
             "height": 3
           }
         },
         {
           "widget": {
-            "name": "text_08",
-            "multilineTextboxSpec": {
-              "lines": [
-                "**Report scope**\n\nMoM / YoY và % chỉ tiêu ở bảng bên dưới; lọc Consumer / Corporate / Total ở góc phải."
-              ]
-            }
-          },
-          "position": {
-            "x": 5,
-            "y": 3,
-            "width": 1,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "table_09",
+            "name": "counter_11",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi_compare",
+                  "datasetName": "card_kpi",
                   "fields": [
                     {
-                      "name": "compare",
-                      "expression": "`compare`"
+                      "name": "dpd_10p",
+                      "expression": "`dpd_10p`"
                     },
                     {
-                      "name": "new_acquisition",
-                      "expression": "`new_acquisition`"
-                    },
-                    {
-                      "name": "customer_base",
-                      "expression": "`customer_base`"
-                    },
-                    {
-                      "name": "using_customer",
-                      "expression": "`using_customer`"
-                    },
-                    {
-                      "name": "sales_volume",
-                      "expression": "`sales_volume`"
-                    },
-                    {
-                      "name": "balance",
-                      "expression": "`balance`"
+                      "name": "dpd_10p_prev",
+                      "expression": "`dpd_10p_prev`"
                     }
                   ],
                   "disaggregated": true
@@ -1181,51 +1813,162 @@
             ],
             "spec": {
               "version": 2,
-              "widgetType": "table",
+              "widgetType": "counter",
               "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "compare",
-                    "displayName": "compare"
+                "value": {
+                  "fieldName": "dpd_10p",
+                  "displayName": "DPD 10+ (%)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
                   },
-                  {
-                    "fieldName": "new_acquisition",
-                    "displayName": "New Acquisition"
-                  },
-                  {
-                    "fieldName": "customer_base",
-                    "displayName": "Customer Base"
-                  },
-                  {
-                    "fieldName": "using_customer",
-                    "displayName": "Using Customer"
-                  },
-                  {
-                    "fieldName": "sales_volume",
-                    "displayName": "Sales Volume"
-                  },
-                  {
-                    "fieldName": "balance",
-                    "displayName": "Balance"
+                  "style": {
+                    "color": "#000000"
                   }
-                ]
+                },
+                "target": {
+                  "fieldName": "dpd_10p_prev",
+                  "displayName": "vs Last Day"
+                }
               },
               "frame": {
-                "showTitle": false,
-                "title": ""
+                "showTitle": true,
+                "title": "DPD 10+ (%)"
               }
             }
           },
           "position": {
-            "x": 0,
-            "y": 6,
-            "width": 6,
+            "x": 2,
+            "y": 8,
+            "width": 1,
             "height": 3
           }
         },
         {
           "widget": {
-            "name": "text_10",
+            "name": "counter_12",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "dpd_30p",
+                      "expression": "`dpd_30p`"
+                    },
+                    {
+                      "name": "dpd_30p_prev",
+                      "expression": "`dpd_30p_prev`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "dpd_30p",
+                  "displayName": "DPD 30+ (%)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
+                  },
+                  "style": {
+                    "color": "#000000"
+                  }
+                },
+                "target": {
+                  "fieldName": "dpd_30p_prev",
+                  "displayName": "vs Last Day"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "DPD 30+ (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 8,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_13",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "npl",
+                      "expression": "`npl`"
+                    },
+                    {
+                      "name": "npl_prev",
+                      "expression": "`npl_prev`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "npl",
+                  "displayName": "NPL (%)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
+                  },
+                  "style": {
+                    "color": "#000000"
+                  }
+                },
+                "target": {
+                  "fieldName": "npl_prev",
+                  "displayName": "vs Last Day"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "NPL (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 8,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "text_14",
             "multilineTextboxSpec": {
               "lines": [
                 "### 🟧 New Issuance vs. Termination"
@@ -1234,14 +1977,14 @@
           },
           "position": {
             "x": 0,
-            "y": 9,
+            "y": 11,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "bar_11",
+            "name": "viz_15",
             "queries": [
               {
                 "name": "main_query",
@@ -1249,80 +1992,64 @@
                   "datasetName": "card_new_acq",
                   "fields": [
                     {
-                      "name": "month",
-                      "expression": "`month`"
+                      "name": "cards",
+                      "expression": "`cards`"
                     },
                     {
                       "name": "channel",
                       "expression": "`channel`"
                     },
                     {
-                      "name": "sum(cards)",
-                      "expression": "SUM(`cards`)"
+                      "name": "month",
+                      "expression": "`month`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "month"
-                },
-                "y": {
-                  "fieldName": "sum(cards)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "cards"
-                },
-                "color": {
-                  "fieldName": "channel",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Smart Credit",
-                        "color": "#4472C4"
-                      },
-                      {
-                        "value": "Branches",
-                        "color": "#B4C7E7"
-                      }
-                    ]
-                  },
-                  "displayName": "Series"
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "New Acquisition"
+                "title": {
+                  "value": "New Acquisition",
+                  "fields": []
+                }
               },
-              "mark": {
-                "layout": "stack"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"encoding\": {\n  \"x\": {\n   \"field\": \"month\",\n   \"type\": \"ordinal\",\n   \"title\": null,\n   \"axis\": {\n    \"labelAngle\": 0\n   }\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"width\": {\n     \"band\": 0.7\n    },\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"y\": {\n     \"field\": \"cards\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": null,\n     \"stack\": \"zero\"\n    },\n    \"color\": {\n     \"field\": \"channel\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"Smart Credit\",\n       \"Branches\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\"\n      ]\n     }\n    }\n   }\n  },\n  {\n   \"transform\": [\n    {\n     \"aggregate\": [\n      {\n       \"op\": \"sum\",\n       \"field\": \"cards\",\n       \"as\": \"_total\"\n      }\n     ],\n     \"groupby\": [\n      \"month\"\n     ]\n    }\n   ],\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"line\",\n      \"strokeDash\": [\n       6,\n       4\n      ],\n      \"strokeWidth\": 2,\n      \"color\": \"#7f7f7f\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"_total\",\n       \"type\": \"quantitative\"\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"dy\": -8,\n      \"fontSize\": 10,\n      \"color\": \"#444\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"_total\",\n       \"type\": \"quantitative\"\n      },\n      \"text\": {\n       \"field\": \"_total\",\n       \"format\": \",.0f\"\n      }\n     }\n    }\n   ]\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cards"
+                  },
+                  {
+                    "fieldName": "channel"
+                  },
+                  {
+                    "fieldName": "month"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 0,
-            "y": 10,
+            "y": 12,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_12",
+            "name": "bar_16",
             "queries": [
               {
                 "name": "main_query",
@@ -1371,15 +2098,18 @@
                     "mappings": [
                       {
                         "value": "New Issuance",
-                        "color": "#2F5597"
+                        "color": "#4472c4"
                       },
                       {
                         "value": "Termination",
-                        "color": "#A5A5A5"
+                        "color": "#9e9e9e"
                       }
                     ]
                   },
-                  "displayName": "Series"
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true
@@ -1396,14 +2126,14 @@
           },
           "position": {
             "x": 3,
-            "y": 10,
+            "y": 12,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "text_13",
+            "name": "text_17",
             "multilineTextboxSpec": {
               "lines": [
                 "### 🟧 Sales Performance"
@@ -1412,14 +2142,14 @@
           },
           "position": {
             "x": 0,
-            "y": 17,
+            "y": 19,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "bar_14",
+            "name": "bar_18",
             "queries": [
               {
                 "name": "main_query",
@@ -1468,15 +2198,18 @@
                     "mappings": [
                       {
                         "value": "Customer Base",
-                        "color": "#B4C7E7"
+                        "color": "#4472c4"
                       },
                       {
                         "value": "Using Mem",
-                        "color": "#A5A5A5"
+                        "color": "#bf9000"
                       }
                     ]
                   },
-                  "displayName": "Series"
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 }
               },
               "frame": {
@@ -1490,14 +2223,14 @@
           },
           "position": {
             "x": 0,
-            "y": 18,
+            "y": 20,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_15",
+            "name": "bar_19",
             "queries": [
               {
                 "name": "main_query",
@@ -1546,15 +2279,18 @@
                     "mappings": [
                       {
                         "value": "Balance",
-                        "color": "#4472C4"
+                        "color": "#4472c4"
                       },
                       {
                         "value": "Revolving",
-                        "color": "#BF9000"
+                        "color": "#bf9000"
                       }
                     ]
                   },
-                  "displayName": "Series"
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 }
               },
               "frame": {
@@ -1562,20 +2298,20 @@
                 "title": "Balance (K USD)"
               },
               "mark": {
-                "layout": "stack"
+                "layout": "group"
               }
             }
           },
           "position": {
             "x": 3,
-            "y": 18,
+            "y": 20,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_16",
+            "name": "bar_20",
             "queries": [
               {
                 "name": "main_query",
@@ -1620,21 +2356,21 @@
               },
               "mark": {
                 "colors": [
-                  "#4472C4"
+                  "#4472c4"
                 ]
               }
             }
           },
           "position": {
             "x": 0,
-            "y": 25,
+            "y": 27,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "line_17",
+            "name": "line_21",
             "queries": [
               {
                 "name": "main_query",
@@ -1646,8 +2382,8 @@
                       "expression": "`month`"
                     },
                     {
-                      "name": "sum(ticket_size)",
-                      "expression": "SUM(`ticket_size`)"
+                      "name": "sum(spend_per_member)",
+                      "expression": "SUM(`spend_per_member`)"
                     }
                   ],
                   "disaggregated": false
@@ -1666,254 +2402,29 @@
                   "displayName": "month"
                 },
                 "y": {
-                  "fieldName": "sum(ticket_size)",
+                  "fieldName": "sum(spend_per_member)",
                   "scale": {
                     "type": "quantitative"
                   },
-                  "displayName": "ticket_size"
+                  "displayName": "spend_per_member"
                 }
               },
               "frame": {
                 "showTitle": true,
-                "title": "Spend per cus (USD)"
+                "title": "Spend per Member (USD)"
               },
               "mark": {
                 "colors": [
-                  "#70AD47"
+                  "#bf9000"
                 ]
               }
             }
           },
           "position": {
             "x": 3,
-            "y": 25,
+            "y": 27,
             "width": 3,
             "height": 7
-          }
-        },
-        {
-          "widget": {
-            "name": "text_18",
-            "multilineTextboxSpec": {
-              "lines": [
-                "### 🟧 Spending Distribution"
-              ]
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 33,
-            "width": 6,
-            "height": 1
-          }
-        },
-        {
-          "widget": {
-            "name": "pie_19",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_mix_sector",
-                  "fields": [
-                    {
-                      "name": "slice",
-                      "expression": "`slice`"
-                    },
-                    {
-                      "name": "sum(amount)",
-                      "expression": "SUM(`amount`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 3,
-              "widgetType": "pie",
-              "encodings": {
-                "angle": {
-                  "fieldName": "sum(amount)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "amount"
-                },
-                "color": {
-                  "fieldName": "slice",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Purchasing",
-                        "color": "#2F5597"
-                      },
-                      {
-                        "value": "Installment",
-                        "color": "#BF9000"
-                      },
-                      {
-                        "value": "Cash Advance",
-                        "color": "#7F7F7F"
-                      },
-                      {
-                        "value": "Flexi",
-                        "color": "#B4C7E7"
-                      }
-                    ]
-                  },
-                  "displayName": "slice"
-                },
-                "label": {
-                  "show": true
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "By Sectors"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 34,
-            "width": 2,
-            "height": 6
-          }
-        },
-        {
-          "widget": {
-            "name": "pie_20",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_mix_location",
-                  "fields": [
-                    {
-                      "name": "slice",
-                      "expression": "`slice`"
-                    },
-                    {
-                      "name": "sum(amount)",
-                      "expression": "SUM(`amount`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 3,
-              "widgetType": "pie",
-              "encodings": {
-                "angle": {
-                  "fieldName": "sum(amount)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "amount"
-                },
-                "color": {
-                  "fieldName": "slice",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Domestic",
-                        "color": "#2F5597"
-                      },
-                      {
-                        "value": "X-Border",
-                        "color": "#BF9000"
-                      }
-                    ]
-                  },
-                  "displayName": "slice"
-                },
-                "label": {
-                  "show": true
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "By Locations"
-              }
-            }
-          },
-          "position": {
-            "x": 2,
-            "y": 34,
-            "width": 2,
-            "height": 6
-          }
-        },
-        {
-          "widget": {
-            "name": "pie_21",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_mix_channel",
-                  "fields": [
-                    {
-                      "name": "slice",
-                      "expression": "`slice`"
-                    },
-                    {
-                      "name": "sum(amount)",
-                      "expression": "SUM(`amount`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 3,
-              "widgetType": "pie",
-              "encodings": {
-                "angle": {
-                  "fieldName": "sum(amount)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "amount"
-                },
-                "color": {
-                  "fieldName": "slice",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "POS (Offline)",
-                        "color": "#2F5597"
-                      },
-                      {
-                        "value": "Online",
-                        "color": "#BF9000"
-                      }
-                    ]
-                  },
-                  "displayName": "slice"
-                },
-                "label": {
-                  "show": true
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "By Channels"
-              }
-            }
-          },
-          "position": {
-            "x": 4,
-            "y": 34,
-            "width": 2,
-            "height": 6
           }
         },
         {
@@ -1921,29 +2432,33 @@
             "name": "text_22",
             "multilineTextboxSpec": {
               "lines": [
-                "### 🟧 Delinquency"
+                "### 🟧 Spending Distribution (MTD)"
               ]
             }
           },
           "position": {
             "x": 0,
-            "y": 40,
+            "y": 35,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "counter_23",
+            "name": "viz_23",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_mix_sector",
                   "fields": [
                     {
-                      "name": "dpd_1p",
-                      "expression": "`dpd_1p`"
+                      "name": "amount",
+                      "expression": "`amount`"
+                    },
+                    {
+                      "name": "slice",
+                      "expression": "`slice`"
                     }
                   ],
                   "disaggregated": true
@@ -1951,50 +2466,57 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "dpd_1p",
-                  "displayName": "DPD 1+ (%)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#2F5597"
-                  }
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "DPD 1+ (%)"
+                "title": {
+                  "value": "By Sectors",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"joinaggregate\": [\n    {\n     \"op\": \"sum\",\n     \"field\": \"amount\",\n     \"as\": \"_tot\"\n    }\n   ]\n  },\n  {\n   \"calculate\": \"datum.amount / datum._tot\",\n   \"as\": \"_share\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height) * 0.30\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height) * 0.42\"\n    },\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"theta\": {\n     \"field\": \"amount\",\n     \"type\": \"quantitative\",\n     \"stack\": true\n    },\n    \"color\": {\n     \"field\": \"slice\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"Purchasing\",\n       \"Installment\",\n       \"Cash Advance\",\n       \"Flexi\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\",\n       \"#2f5597\",\n       \"#70ad47\"\n      ]\n     },\n     \"legend\": {\n      \"orient\": \"bottom\",\n      \"columns\": 2,\n      \"labelLimit\": 120\n     }\n    },\n    \"order\": {\n     \"field\": \"slice\",\n     \"sort\": \"ascending\"\n    }\n   }\n  },\n  {\n   \"transform\": [\n    {\n     \"filter\": \"datum.slice == 'Purchasing'\"\n    }\n   ],\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 16,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"_share\",\n     \"format\": \".1%\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "amount"
+                  },
+                  {
+                    "fieldName": "slice"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
-            "x": 1,
-            "y": 41,
-            "width": 1,
-            "height": 3
+            "x": 0,
+            "y": 36,
+            "width": 2,
+            "height": 6
           }
         },
         {
           "widget": {
-            "name": "counter_24",
+            "name": "viz_24",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_mix_location",
                   "fields": [
                     {
-                      "name": "dpd_10p",
-                      "expression": "`dpd_10p`"
+                      "name": "amount",
+                      "expression": "`amount`"
+                    },
+                    {
+                      "name": "slice",
+                      "expression": "`slice`"
                     }
                   ],
                   "disaggregated": true
@@ -2002,50 +2524,57 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "dpd_10p",
-                  "displayName": "DPD 10+ (%)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#2F5597"
-                  }
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "DPD 10+ (%)"
+                "title": {
+                  "value": "By Locations",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"joinaggregate\": [\n    {\n     \"op\": \"sum\",\n     \"field\": \"amount\",\n     \"as\": \"_tot\"\n    }\n   ]\n  },\n  {\n   \"calculate\": \"datum.amount / datum._tot\",\n   \"as\": \"_share\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height) * 0.30\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height) * 0.42\"\n    },\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"theta\": {\n     \"field\": \"amount\",\n     \"type\": \"quantitative\",\n     \"stack\": true\n    },\n    \"color\": {\n     \"field\": \"slice\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"Domestic\",\n       \"X-Border\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\"\n      ]\n     },\n     \"legend\": {\n      \"orient\": \"bottom\",\n      \"columns\": 2,\n      \"labelLimit\": 120\n     }\n    },\n    \"order\": {\n     \"field\": \"slice\",\n     \"sort\": \"ascending\"\n    }\n   }\n  },\n  {\n   \"transform\": [\n    {\n     \"filter\": \"datum.slice == 'Domestic'\"\n    }\n   ],\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 16,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"_share\",\n     \"format\": \".1%\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "amount"
+                  },
+                  {
+                    "fieldName": "slice"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 2,
-            "y": 41,
-            "width": 1,
-            "height": 3
+            "y": 36,
+            "width": 2,
+            "height": 6
           }
         },
         {
           "widget": {
-            "name": "counter_25",
+            "name": "viz_25",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "card_kpi",
+                  "datasetName": "card_mix_channel",
                   "fields": [
                     {
-                      "name": "dpd_30p",
-                      "expression": "`dpd_30p`"
+                      "name": "amount",
+                      "expression": "`amount`"
+                    },
+                    {
+                      "name": "slice",
+                      "expression": "`slice`"
                     }
                   ],
                   "disaggregated": true
@@ -2053,166 +2582,44 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "dpd_30p",
-                  "displayName": "DPD 30+ (%)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#2F5597"
-                  }
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "DPD 30+ (%)"
-              }
-            }
-          },
-          "position": {
-            "x": 3,
-            "y": 41,
-            "width": 1,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "counter_26",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_kpi",
-                  "fields": [
-                    {
-                      "name": "npl",
-                      "expression": "`npl`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "npl",
-                  "displayName": "NPL (%)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#2F5597"
-                  }
+                "title": {
+                  "value": "By Channels",
+                  "fields": []
                 }
               },
-              "frame": {
-                "showTitle": true,
-                "title": "NPL (%)"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"joinaggregate\": [\n    {\n     \"op\": \"sum\",\n     \"field\": \"amount\",\n     \"as\": \"_tot\"\n    }\n   ]\n  },\n  {\n   \"calculate\": \"datum.amount / datum._tot\",\n   \"as\": \"_share\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height) * 0.30\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height) * 0.42\"\n    },\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"theta\": {\n     \"field\": \"amount\",\n     \"type\": \"quantitative\",\n     \"stack\": true\n    },\n    \"color\": {\n     \"field\": \"slice\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"POS (Offline)\",\n       \"Online\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\"\n      ]\n     },\n     \"legend\": {\n      \"orient\": \"bottom\",\n      \"columns\": 2,\n      \"labelLimit\": 120\n     }\n    },\n    \"order\": {\n     \"field\": \"slice\",\n     \"sort\": \"ascending\"\n    }\n   }\n  },\n  {\n   \"transform\": [\n    {\n     \"filter\": \"datum.slice == 'POS (Offline)'\"\n    }\n   ],\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 16,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"_share\",\n     \"format\": \".1%\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "amount"
+                  },
+                  {
+                    "fieldName": "slice"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 4,
-            "y": 41,
-            "width": 1,
-            "height": 3
+            "y": 36,
+            "width": 2,
+            "height": 6
           }
         },
         {
           "widget": {
-            "name": "table_27",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_risk_compare",
-                  "fields": [
-                    {
-                      "name": "compare",
-                      "expression": "`compare`"
-                    },
-                    {
-                      "name": "dpd_1p",
-                      "expression": "`dpd_1p`"
-                    },
-                    {
-                      "name": "dpd_10p",
-                      "expression": "`dpd_10p`"
-                    },
-                    {
-                      "name": "dpd_30p",
-                      "expression": "`dpd_30p`"
-                    },
-                    {
-                      "name": "npl",
-                      "expression": "`npl`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "compare",
-                    "displayName": "compare"
-                  },
-                  {
-                    "fieldName": "dpd_1p",
-                    "displayName": "DPD 1+"
-                  },
-                  {
-                    "fieldName": "dpd_10p",
-                    "displayName": "DPD 10+"
-                  },
-                  {
-                    "fieldName": "dpd_30p",
-                    "displayName": "DPD 30+"
-                  },
-                  {
-                    "fieldName": "npl",
-                    "displayName": "NPL"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": false,
-                "title": ""
-              }
-            }
-          },
-          "position": {
-            "x": 1,
-            "y": 44,
-            "width": 4,
-            "height": 2
-          }
-        },
-        {
-          "widget": {
-            "name": "filter_28",
+            "name": "filter_26",
             "queries": [
               {
                 "name": "param_card_kpi_report_date",
@@ -2369,6 +2776,19 @@
                   ],
                   "disaggregated": false
                 }
+              },
+              {
+                "name": "param_card_kpi_cards_report_date",
+                "query": {
+                  "datasetName": "card_kpi_cards",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
               }
             ],
             "spec": {
@@ -2423,6 +2843,10 @@
                   {
                     "parameterName": "report_date",
                     "queryName": "param_card_risk_compare_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_card_kpi_cards_report_date"
                   }
                 ]
               },
@@ -2441,7 +2865,7 @@
         },
         {
           "widget": {
-            "name": "filter_29",
+            "name": "filter_27",
             "queries": [
               {
                 "name": "options",
@@ -2611,6 +3035,19 @@
                   ],
                   "disaggregated": false
                 }
+              },
+              {
+                "name": "param_card_kpi_cards_customer_type",
+                "query": {
+                  "datasetName": "card_kpi_cards",
+                  "parameters": [
+                    {
+                      "name": "customer_type",
+                      "keyword": "customer_type"
+                    }
+                  ],
+                  "disaggregated": false
+                }
               }
             ],
             "spec": {
@@ -2670,6 +3107,10 @@
                   {
                     "parameterName": "customer_type",
                     "queryName": "param_card_risk_compare_customer_type"
+                  },
+                  {
+                    "parameterName": "customer_type",
+                    "queryName": "param_card_kpi_cards_customer_type"
                   }
                 ]
               },

@@ -367,9 +367,17 @@ DEPOSIT_SUMMARY = SilverTable(
     ],
 )
 
+# Grain nguồn CHƯA được data contract xác nhận là duy nhất: file mẫu gốc 2.000 dòng có 711 dòng
+# trùng khóa nghiệp vụ dưới đây nhưng KHÔNG trùng hoàn toàn -> coi là dòng cộng dồn hợp lệ, Gold
+# SUM theo grain. Vì vậy KHÔNG có rule trùng khóa (không tự bỏ / quarantine các dòng này) và
+# ghi Silver theo replace_day (file sau cùng của ngày thay cả ngày; MERGE theo khóa sẽ lỗi khi
+# 1 khóa có nhiều dòng). Gửi lại file / file sửa: latest_delivery; dòng trùng hoàn toàn: bỏ.
+# Khi contract xác nhận grain duy nhất: thêm lại Rule("ovd_key_unique", "_dup_key_count = 1").
+OVD_DEL_GROUPS = ("0", "1-10", "11-90", "91-180", "181-360", "361+")
 CARD_OVERDUE = SilverTable(
     name="card_overdue_source", source="card_overdue",
     key=["report_dt", "product_group", "product_name", "mng_br", "sal_br", "del_grp"],
+    write_mode="replace_day",
     cast={
         "report_dt": _date("REPORT_DT", "yyyyMMdd"), "prdt_code": _str("PRDT_CODE"),
         "product_type": _str("PRODUCT_TYPE"), "product_group": _str("PRODUCT_GROUP"),
@@ -377,20 +385,22 @@ CARD_OVERDUE = SilverTable(
         # mã CN có thể xuất dạng số thực ("7911.0") -> bỏ đuôi .0
         "mng_br": lambda: F.regexp_replace(_blank_to_null("MNG_BR"), r"\.0+$", ""),
         "sal_br": lambda: F.regexp_replace(_blank_to_null("SAL_BR"), r"\.0+$", ""),
-        "del_grp": _str("DEL_GRP"),
+        "del_grp": lambda: F.regexp_replace(_blank_to_null("DEL_GRP"), r"\s+", ""),
         "port_acc": _num("PORT_ACC", "bigint"), "ovd_acc": _num("OVD_ACC", "bigint"),
         "port_bal": _num("PORT_BAL", "decimal(22,2)"),
         "ovd_bal": _num("OVD_BAL", "decimal(22,2)"),
     },
     rules=[
-        Rule("ovd_key_not_null", "report_dt IS NOT NULL AND mng_br IS NOT NULL "
-                                 "AND del_grp IS NOT NULL"),
-        Rule("ovd_key_unique", "_dup_key_count = 1"),
+        Rule("ovd_report_dt_valid", "report_dt IS NOT NULL"),
+        Rule("ovd_key_not_null", "mng_br IS NOT NULL AND del_grp IS NOT NULL"),
         Rule("ovd_balance_numeric", "port_bal IS NOT NULL AND ovd_bal IS NOT NULL"),
+        Rule("ovd_acc_numeric", "port_acc IS NOT NULL AND ovd_acc IS NOT NULL"),
         Rule("ovd_balance_not_negative", "port_bal >= 0 AND ovd_bal >= 0"),
+        Rule("ovd_acc_not_negative", "port_acc >= 0 AND ovd_acc >= 0"),
         Rule("ovd_not_above_portfolio", "ovd_bal <= port_bal", "WARN"),
+        Rule("ovd_acc_not_above_portfolio", "ovd_acc <= port_acc", "WARN"),
         Rule("ovd_del_grp_known",
-             "del_grp IN ('0', '1-10', '11-90', '91-180', '181-360', '361+')", "WARN"),
+             "del_grp IN (" + ", ".join(f"'{g}'" for g in OVD_DEL_GROUPS) + ")", "WARN"),
     ],
 )
 

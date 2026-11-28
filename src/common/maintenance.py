@@ -20,6 +20,9 @@ CLUSTERING: dict[str, list[str]] = {
     "gold.loan_mart_overdue_daily": ["as_of_date", "branchnbr"],
     "gold.card_mart_kpi_daily": ["as_of_date", "branchnbr"],
     "ops.dq_quarantine": ["table_name", "_source_file"],
+    # gold.card_mart_overdue_daily: CHƯA thêm clustering - bảng nhỏ (vài nghìn dòng / ngày).
+    # Đo trước (overdue_dashboard_* bên dưới + DESCRIBE DETAIL: numFiles / sizeInBytes), chỉ
+    # thêm ["as_of_date", "mng_br"] khi Query Profile cho thấy quét thừa file đáng kể.
 }
 
 # Truy vấn đại diện cho dashboard để đo trước / sau (thay {catalog}, {day})
@@ -35,6 +38,22 @@ BENCHMARKS: dict[str, str] = {
         "SELECT * FROM {catalog}.gold.core_fact_transaction WHERE account_id = "
         "(SELECT min(account_id) FROM {catalog}.gold.core_fact_transaction "
         "WHERE value_date = DATE'{day}')"),
+    # Overdue dashboard: cách cũ (tổng hợp toàn lịch sử rồi mới chọn ngày) vs cách mới (chọn
+    # ngày từ lịch báo cáo rồi mới lọc mart). So sánh thời gian, bytes / files scanned.
+    "overdue_dashboard_old_history_scan": (
+        "WITH day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port "
+        "FROM {catalog}.gold_serving.card_mart_overdue_daily GROUP BY as_of_date) "
+        "SELECT * FROM day WHERE as_of_date IN (DATE'{day}', "
+        "(SELECT max(as_of_date) FROM day WHERE as_of_date < DATE'{day}'))"),
+    "overdue_dashboard_new_calendar_first": (
+        "WITH cur AS (SELECT report_date, previous_date "
+        "FROM {catalog}.gold_serving.overdue_report_calendar WHERE report_date = "
+        "(SELECT max(report_date) FROM {catalog}.gold_serving.overdue_report_calendar "
+        "WHERE report_date <= DATE'{day}')), "
+        "d AS (SELECT report_date AS d FROM cur UNION SELECT previous_date FROM cur) "
+        "SELECT f.as_of_date, sum(f.ovd_bal) ovd, sum(f.port_bal) port "
+        "FROM {catalog}.gold_serving.card_mart_overdue_daily f JOIN d ON f.as_of_date = d.d "
+        "GROUP BY f.as_of_date"),
     "customer_lookup": (
         "SELECT * FROM {catalog}.gold.dim_customer WHERE customer_id = '1000042'"),
 }
@@ -62,3 +81,8 @@ def vacuum_statements(catalog: str, retain_hours: int = 168,
 
 def benchmark_sql(catalog: str, day: str) -> dict[str, str]:
     return {k: v.format(catalog=catalog, day=day) for k, v in BENCHMARKS.items()}
+
+
+def table_detail_sql(catalog: str, table: str) -> str:
+    """Kiểm tra small files trước khi quyết định OPTIMIZE: numFiles, sizeInBytes."""
+    return f"DESCRIBE DETAIL {catalog}.{table}"

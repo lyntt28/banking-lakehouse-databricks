@@ -47,6 +47,8 @@ TABLE_KIND = {
     "card_mart_spend_mix": "daily", "card_mart_kpi_monthly": "daily", "dep_mart_trend": "daily",
     "dep_mart_by_tenor": "daily", "dep_mart_casa_customer": "daily",
     "dep_mart_new_accounts": "daily", "card_mart_overdue_daily": "daily",
+    "dep_mart_monthly": "daily", "dim_card": "snapshot", "fact_deposit_daily": "daily",
+    "fact_card_daily": "daily", "fact_card_transaction": "append",
 }
 
 
@@ -104,6 +106,9 @@ def create_serving_views(spark, catalog: str) -> list[str]:
         if spark.catalog.tableExists(src):
             spark.sql(serving_view_sql(catalog, t, spark.table(src).columns))
             done.append(t)
+    for name, table in CALENDARS.items():
+        if table in done:
+            spark.sql(calendar_view_sql(catalog, name))
     return done
 
 
@@ -208,3 +213,59 @@ def cleanup_superseded(spark, catalog: str, table: str, day_s: str, batch_id: st
     keep_sql = ", ".join(f"'{b}'" for b in sorted(keep))
     scope = f"as_of_date = DATE'{day_s}' AND " if kind == "daily" else ""
     spark.sql(f"DELETE FROM {target} WHERE {scope}{BATCH_COL} NOT IN ({keep_sql})")
+
+
+# ---------------------------------------------------------------- reporting calendar (Overdue)
+OVERDUE_CALENDAR = "overdue_report_calendar"
+DEPOSIT_CALENDAR = "deposit_report_calendar"
+CARD_CALENDAR = "card_report_calendar"
+# view lịch báo cáo -> bảng Gold quyết định "ngày đã publish" của dashboard đó
+CALENDARS = {OVERDUE_CALENDAR: "card_mart_overdue_daily", DEPOSIT_CALENDAR: "dep_mart_trend",
+             CARD_CALENDAR: "card_mart_kpi_daily"}
+
+
+def published_dates_sql(catalog: str, table: str) -> str:
+    """Ngày có batch ĐÃ KÍCH HOẠT và có mặt trong snapshot bảng Gold (cùng điều kiện với
+    `serving_view_sql` daily) -> chỉ ngày publish thành công, không phải mọi ngày ở landing /
+    Bronze. Chỉ đọc 2 cột (as_of_date, batch_id) của bảng Gold + con trỏ (nhỏ)."""
+    src = fq(catalog, "gold", table)
+    return (f"SELECT DISTINCT p.as_of_date FROM {_pointer(catalog)} p "
+            f"JOIN (SELECT DISTINCT as_of_date, {BATCH_COL} FROM {src}) b "
+            f"ON p.as_of_date = b.as_of_date AND p.run_id = b.{BATCH_COL}")
+
+
+def report_calendar_body(dates_sql: str) -> str:
+    """Lịch báo cáo từ danh sách ngày có dữ liệu (`dates_sql` trả cột as_of_date).
+
+    Mỗi report_date (ngày đã publish) kèm ngày so sánh THỰC TẾ (NULL = không có dữ liệu kỳ đó,
+    không giả định bằng 0):
+      previous_date       : ngày có dữ liệu liền trước (D-1; trên lịch sử chỉ có cuối tháng thì
+                            đây là snapshot trước đó, dashboard hiển thị ngày thật)
+      previous_month_date : ngày cuối có dữ liệu TRONG tháng trước (M-1)
+      previous_year_date  : ngày cuối có dữ liệu TRONG năm trước (Y-1)
+      is_month_last       : report_date là ngày cuối có dữ liệu của tháng đó
+    Không bao giờ chọn ngày > report_date. Lịch nhỏ (vài trăm dòng) -> self join rẻ."""
+    return f"""
+WITH d AS ({dates_sql})
+SELECT c.as_of_date AS report_date,
+       date_trunc('MONTH', c.as_of_date) AS month_start,
+       max(CASE WHEN p.as_of_date < c.as_of_date THEN p.as_of_date END) AS previous_date,
+       max(CASE WHEN p.as_of_date <= last_day(add_months(c.as_of_date, -1))
+                 AND p.as_of_date > last_day(add_months(c.as_of_date, -2))
+                THEN p.as_of_date END) AS previous_month_date,
+       max(CASE WHEN year(p.as_of_date) = year(c.as_of_date) - 1
+                THEN p.as_of_date END) AS previous_year_date,
+       c.as_of_date = max(c.as_of_date) OVER (PARTITION BY date_trunc('MONTH', c.as_of_date))
+           AS is_month_last
+FROM d c JOIN d p ON p.as_of_date <= c.as_of_date
+GROUP BY c.as_of_date""".strip()
+
+
+def calendar_view_sql(catalog: str, name: str) -> str:
+    view = fq(catalog, "gold_serving", name)
+    body = report_calendar_body(published_dates_sql(catalog, CALENDARS[name]))
+    return f"CREATE OR REPLACE VIEW {view} AS {body}"
+
+
+def overdue_calendar_view_sql(catalog: str) -> str:
+    return calendar_view_sql(catalog, OVERDUE_CALENDAR)

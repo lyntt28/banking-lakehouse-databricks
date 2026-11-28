@@ -1,40 +1,33 @@
 {
   "datasets": [
     {
-      "name": "ovd_fx",
-      "displayName": "FX rate",
+      "name": "ovd_kpi",
+      "displayName": "KPI (current) + FX",
       "queryLines": [
-        "SELECT (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS fx_vnd_usd\n"
-      ],
-      "parameters": [
-        {
-          "displayName": "Report date",
-          "keyword": "report_date",
-          "dataType": "DATE",
-          "defaultSelection": {
-            "values": {
-              "dataType": "DATE",
-              "values": [
-                {
-                  "value": "now/d"
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "ovd_tickers",
-      "displayName": "Tickers",
-      "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (SELECT * FROM gold_serving.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
-        "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
-        "\n",
-        "SELECT x.ovd / nullif(x.port, 0) * 100 AS overdue_ratio,\n",
-        "       x.ovd / p.usd AS overdue_usd, x.port / p.usd AS ending_usd\n",
-        "FROM day x, p WHERE x.as_of_date = p.d\n"
+        "WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", per AS (\n",
+        "  SELECT stack(4, 0, 'CURRENT', 'Current', report_date,\n",
+        "                  1, 'D1', 'vs Last Day', previous_date,\n",
+        "                  2, 'M1', 'vs Last Month', previous_month_date,\n",
+        "                  3, 'Y1', 'vs Last Year', previous_year_date) AS (ord, period, cmp, d)\n",
+        "  FROM cur),\n",
+        "v AS (\n",
+        "SELECT f.as_of_date, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN (SELECT DISTINCT d FROM per WHERE d IS NOT NULL) x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date),\n",
+        "k AS (\n",
+        "  SELECT per.ord, per.period, per.cmp, per.d AS actual_date, v.port AS port_bal, v.ovd AS ovd_bal,\n",
+        "         v.ovd / nullif(v.port, 0) * 100 AS overdue_ratio,\n",
+        "         v.ovd / cur.usd AS overdue_usd, v.port / cur.usd AS ending_balance_usd, cur.usd\n",
+        "  FROM per CROSS JOIN cur LEFT JOIN v ON v.as_of_date = per.d)\n",
+        "SELECT actual_date, usd AS fx_vnd_usd, overdue_ratio, overdue_usd,\n",
+        "       ending_balance_usd AS ending_usd\n",
+        "FROM k WHERE period = 'CURRENT'\n"
       ],
       "parameters": [
         {
@@ -71,34 +64,40 @@
     },
     {
       "name": "ovd_compare",
-      "displayName": "Tickers vs last day / month / year",
+      "displayName": "KPI vs Last Day / Month / Year",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (SELECT * FROM gold_serving.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
-        "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
-        "\n",
-        ", pick AS (\n",
-        "  SELECT 1 AS ord, 'vs Last Day' AS cmp,\n",
-        "         (SELECT max(as_of_date) FROM day, p WHERE as_of_date <= date_sub(p.d, 1)) AS dd FROM p\n",
-        "  UNION ALL SELECT 2, 'vs Last Month', (SELECT max(as_of_date) FROM day, p\n",
-        "         WHERE as_of_date <= last_day(add_months(p.d, -1))) FROM p\n",
-        "  UNION ALL SELECT 3, 'vs Last Year', (SELECT max(as_of_date) FROM day, p\n",
-        "         WHERE as_of_date <= make_date(year(p.d) - 1, 12, 31)) FROM p),\n",
-        "cur AS (SELECT x.* FROM day x, p WHERE x.as_of_date = p.d)\n",
-        "SELECT pk.ord, pk.cmp, v.ratio_pp, v.overdue_usd, v.ending_usd,\n",
-        "  -- như dashboard gốc: ▲ / ▼ / ▪ + trị tuyệt đối (USD làm tròn, % 2 số lẻ)\n",
-        "  concat(CASE WHEN v.ratio_pp > 0 THEN '▲ ' WHEN v.ratio_pp < 0 THEN '▼ ' ELSE '▪ ' END,\n",
-        "         format_number(abs(v.ratio_pp), 2), '%') AS ratio_txt,\n",
-        "  concat(CASE WHEN v.overdue_usd > 0 THEN '▲ ' WHEN v.overdue_usd < 0 THEN '▼ ' ELSE '▪ ' END,\n",
-        "         format_number(abs(v.overdue_usd), 0)) AS overdue_txt,\n",
-        "  concat(CASE WHEN v.ending_usd > 0 THEN '▲ ' WHEN v.ending_usd < 0 THEN '▼ ' ELSE '▪ ' END,\n",
-        "         format_number(abs(v.ending_usd), 0)) AS ending_txt\n",
-        "FROM pick pk CROSS JOIN cur CROSS JOIN p LEFT JOIN day c ON c.as_of_date = pk.dd\n",
-        "LATERAL VIEW inline(array(struct(\n",
-        "  round((cur.ovd / nullif(cur.port, 0) - c.ovd / nullif(c.port, 0)) * 100, 2) AS ratio_pp,\n",
-        "  round((cur.ovd - c.ovd) / p.usd, 0) AS overdue_usd,\n",
-        "  round((cur.port - c.port) / p.usd, 0) AS ending_usd))) v\n",
-        "ORDER BY pk.ord\n"
+        "WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", per AS (\n",
+        "  SELECT stack(4, 0, 'CURRENT', 'Current', report_date,\n",
+        "                  1, 'D1', 'vs Last Day', previous_date,\n",
+        "                  2, 'M1', 'vs Last Month', previous_month_date,\n",
+        "                  3, 'Y1', 'vs Last Year', previous_year_date) AS (ord, period, cmp, d)\n",
+        "  FROM cur),\n",
+        "v AS (\n",
+        "SELECT f.as_of_date, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN (SELECT DISTINCT d FROM per WHERE d IS NOT NULL) x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date),\n",
+        "k AS (\n",
+        "  SELECT per.ord, per.period, per.cmp, per.d AS actual_date, v.port AS port_bal, v.ovd AS ovd_bal,\n",
+        "         v.ovd / nullif(v.port, 0) * 100 AS overdue_ratio,\n",
+        "         v.ovd / cur.usd AS overdue_usd, v.port / cur.usd AS ending_balance_usd, cur.usd\n",
+        "  FROM per CROSS JOIN cur LEFT JOIN v ON v.as_of_date = per.d)\n",
+        ", c AS (SELECT * FROM k WHERE period = 'CURRENT')\n",
+        "SELECT k.ord, k.period, k.actual_date,\n",
+        "       concat(k.cmp, ' (', coalesce(date_format(k.actual_date, 'yyyy-MM-dd'), 'N/A'), ')') AS cmp,\n",
+        "       round(c.overdue_ratio - k.overdue_ratio, 2) AS ratio_pp,\n",
+        "       round(c.overdue_usd - k.overdue_usd, 0) AS overdue_usd,\n",
+        "       round(c.ending_balance_usd - k.ending_balance_usd, 0) AS ending_usd,\n",
+        "       CASE WHEN round(c.overdue_ratio - k.overdue_ratio, 2) IS NULL THEN 'N/A' ELSE concat(CASE WHEN round(c.overdue_ratio - k.overdue_ratio, 2) > 0 THEN '▲ ' WHEN round(c.overdue_ratio - k.overdue_ratio, 2) < 0 THEN '▼ ' ELSE '▪ ' END, format_number(abs(round(c.overdue_ratio - k.overdue_ratio, 2)), 2), ' pp') END AS ratio_txt,\n",
+        "       CASE WHEN round(c.overdue_usd - k.overdue_usd, 0) IS NULL THEN 'N/A' ELSE concat(CASE WHEN round(c.overdue_usd - k.overdue_usd, 0) > 0 THEN '▲ ' WHEN round(c.overdue_usd - k.overdue_usd, 0) < 0 THEN '▼ ' ELSE '▪ ' END, format_number(abs(round(c.overdue_usd - k.overdue_usd, 0)), 0), '') END AS overdue_txt,\n",
+        "       CASE WHEN round(c.ending_balance_usd - k.ending_balance_usd, 0) IS NULL THEN 'N/A' ELSE concat(CASE WHEN round(c.ending_balance_usd - k.ending_balance_usd, 0) > 0 THEN '▲ ' WHEN round(c.ending_balance_usd - k.ending_balance_usd, 0) < 0 THEN '▼ ' ELSE '▪ ' END, format_number(abs(round(c.ending_balance_usd - k.ending_balance_usd, 0)), 0), '') END AS ending_txt\n",
+        "FROM k CROSS JOIN c WHERE k.period <> 'CURRENT'\n",
+        "ORDER BY k.ord\n"
       ],
       "parameters": [
         {
@@ -134,19 +133,25 @@
       ]
     },
     {
-      "name": "ovd_last5",
+      "name": "ovd_daily_trend",
       "displayName": "Overdue Trend (Last 5 Days)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (SELECT * FROM gold_serving.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
-        "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
-        "\n",
-        ", dd AS (SELECT DISTINCT as_of_date FROM gold_serving.card_mart_overdue_daily, p WHERE as_of_date <= p.d\n",
-        "         ORDER BY as_of_date DESC LIMIT 5)\n",
-        "SELECT date_format(dd.as_of_date, 'MM-dd') AS day,\n",
-        "       coalesce(x.ovd, 0) / p.usd / 1000 AS overdue_k_usd,\n",
-        "       coalesce(x.ovd / nullif(x.port, 0) * 100, 0) AS overdue_ratio\n",
-        "FROM dd CROSS JOIN p LEFT JOIN day x ON x.as_of_date = dd.as_of_date\n"
+        "WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", dd AS (SELECT c.report_date AS d FROM cal c ORDER BY c.report_date DESC LIMIT 5),\n",
+        "v AS (\n",
+        "SELECT f.as_of_date, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN dd x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date)\n",
+        "SELECT date_format(dd.d, 'MM-dd') AS day, dd.d AS actual_date,\n",
+        "       v.ovd / cur.usd / 1000 AS overdue_k_usd,\n",
+        "       v.ovd / nullif(v.port, 0) * 100 AS overdue_ratio\n",
+        "FROM dd CROSS JOIN cur LEFT JOIN v ON v.as_of_date = dd.d\n",
+        "ORDER BY dd.d\n"
       ],
       "parameters": [
         {
@@ -182,20 +187,26 @@
       ]
     },
     {
-      "name": "ovd_monthly",
+      "name": "ovd_monthly_trend",
       "displayName": "Overdue Trend (Monthly)",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (SELECT * FROM gold_serving.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
-        "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
-        "\n",
-        ", m AS (SELECT date_format(as_of_date, 'yyyy-MM') AS month, max(as_of_date) AS last_d\n",
-        "        FROM gold_serving.card_mart_overdue_daily, p WHERE as_of_date <= p.d\n",
-        "          AND as_of_date > last_day(add_months(p.d, -6)) GROUP BY 1)\n",
-        "\n",
-        "SELECT m.month, coalesce(x.ovd, 0) / p.usd / 1000 AS overdue_k_usd,\n",
-        "       coalesce(x.ovd / nullif(x.port, 0) * 100, 0) AS overdue_ratio\n",
-        "FROM m CROSS JOIN p LEFT JOIN day x ON x.as_of_date = m.last_d\n"
+        "WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", m AS (SELECT max(c.report_date) AS d FROM cal c, cur\n",
+        "        WHERE c.report_date > last_day(add_months(cur.report_date, -6)) GROUP BY date_trunc('MONTH', c.report_date))\n",
+        ", v AS (\n",
+        "SELECT f.as_of_date, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN m x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date)\n",
+        "SELECT date_format(m.d, 'yyyy-MM') AS month, m.d AS actual_date,\n",
+        "       v.ovd / cur.usd / 1000 AS overdue_k_usd,\n",
+        "       v.ovd / nullif(v.port, 0) * 100 AS overdue_ratio\n",
+        "FROM m CROSS JOIN cur LEFT JOIN v ON v.as_of_date = m.d\n",
+        "ORDER BY m.d\n"
       ],
       "parameters": [
         {
@@ -234,15 +245,23 @@
       "name": "ovd_debt_groups",
       "displayName": "Overdue Amount by Debt Groups",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (SELECT * FROM gold_serving.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
-        "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
-        "\n",
-        ", m AS (SELECT date_format(as_of_date, 'yyyy-MM') AS month, max(as_of_date) AS last_d\n",
-        "        FROM gold_serving.card_mart_overdue_daily, p WHERE as_of_date <= p.d AND year(as_of_date) = year(p.d) GROUP BY 1)\n",
-        "SELECT m.month, coalesce(x.ovd, 0) / p.usd / 1000 AS overdue_k_usd,\n",
-        "       coalesce(x.ovd / nullif(x.port, 0) * 100, 0) AS overdue_ratio\n",
-        "FROM m CROSS JOIN p LEFT JOIN day x ON x.as_of_date = m.last_d\n"
+        "WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", m AS (SELECT max(c.report_date) AS d FROM cal c, cur\n",
+        "        WHERE year(c.report_date) = year(cur.report_date) GROUP BY date_trunc('MONTH', c.report_date))\n",
+        ", v AS (\n",
+        "SELECT f.as_of_date, f.del_grp, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN m x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date, f.del_grp)\n",
+        "SELECT date_format(v.as_of_date, 'yyyy-MM') AS month, v.as_of_date AS actual_date,\n",
+        "       v.del_grp, v.ovd / cur.usd / 1000 AS overdue_k_usd\n",
+        "FROM v CROSS JOIN cur\n",
+        "WHERE v.del_grp <> '0'\n",
+        "ORDER BY month, v.del_grp\n"
       ],
       "parameters": [
         {
@@ -278,16 +297,22 @@
       ]
     },
     {
-      "name": "ovd_product_amount",
-      "displayName": "Overdue Amount by Product Groups",
+      "name": "ovd_product",
+      "displayName": "Overdue by Product Groups",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (SELECT * FROM gold_serving.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
-        "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
-        "\n",
-        "SELECT coalesce(f.product_group, 'Other') AS product_group,\n",
-        "       sum(f.ovd_bal) / p.usd / 1000 AS overdue_k_usd\n",
-        "FROM f, p WHERE f.as_of_date = p.d GROUP BY 1, p.usd\n"
+        "WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", v AS (\n",
+        "SELECT f.as_of_date, coalesce(f.product_group, 'Other') AS pg, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN (SELECT report_date AS d FROM cur) x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date, coalesce(f.product_group, 'Other'))\n",
+        "SELECT pg AS product_group, ovd / cur.usd / 1000 AS overdue_k_usd,\n",
+        "       ovd / nullif(port, 0) * 100 AS overdue_ratio\n",
+        "FROM v CROSS JOIN cur\n"
       ],
       "parameters": [
         {
@@ -323,18 +348,175 @@
       ]
     },
     {
-      "name": "ovd_product_ratio",
+      "name": "ovd_product_top5",
       "displayName": "Overdue Ratio by Product Groups - Top5",
       "queryLines": [
-        "WITH p AS (SELECT (SELECT max(as_of_date) FROM gold_serving.card_mart_overdue_daily WHERE as_of_date <= :report_date AND as_of_date <= (SELECT max(as_of_date) FROM ops.published_batches)) AS d, (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd),\n",
-        "f AS (SELECT * FROM gold_serving.card_mart_overdue_daily WHERE :branch = 'all' OR mng_br = :branch),\n",
-        "day AS (SELECT as_of_date, sum(ovd_bal) ovd, sum(port_bal) port FROM f GROUP BY as_of_date)\n",
-        "\n",
-        "SELECT product_group, overdue_ratio FROM (\n",
-        "  SELECT coalesce(f.product_group, 'Other') AS product_group,\n",
-        "         coalesce(sum(f.ovd_bal) / nullif(sum(f.port_bal), 0) * 100, 0) AS overdue_ratio\n",
-        "  FROM f, p WHERE f.as_of_date = p.d GROUP BY 1)\n",
-        "ORDER BY overdue_ratio DESC LIMIT 5\n"
+        "WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", v AS (\n",
+        "SELECT f.as_of_date, coalesce(f.product_group, 'Other') AS pg, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN (SELECT report_date AS d FROM cur) x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date, coalesce(f.product_group, 'Other'))\n",
+        "SELECT pg AS product_group, ovd / nullif(port, 0) * 100 AS overdue_ratio\n",
+        "FROM v WHERE port > 0\n",
+        "ORDER BY overdue_ratio DESC, product_group LIMIT 5\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ovd_branch_top5",
+      "displayName": "Overdue by Branch - Top5",
+      "queryLines": [
+        "WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", v AS (\n",
+        "SELECT f.as_of_date, f.mng_br, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN (SELECT report_date AS d FROM cur) x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date, f.mng_br)\n",
+        "SELECT v.mng_br AS branch, v.ovd / cur.usd AS overdue_usd,\n",
+        "       v.ovd / cur.usd / 1000 AS overdue_k_usd,\n",
+        "       v.ovd / nullif(v.port, 0) * 100 AS overdue_ratio\n",
+        "FROM v CROSS JOIN cur\n",
+        "WHERE v.mng_br <> '8125' AND v.ovd / cur.usd > 10000\n",
+        "ORDER BY overdue_ratio DESC, branch LIMIT 5\n"
+      ],
+      "parameters": [
+        {
+          "displayName": "Report date",
+          "keyword": "report_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "Branch",
+          "keyword": "branch",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [
+                {
+                  "value": "all"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ovd_kpi_cards",
+      "displayName": "KPI cards (Custom Viz)",
+      "queryLines": [
+        "SELECT stack(3,\n",
+        "  CAST('overdue_ratio' AS STRING), CAST('Overdue Ratio' AS STRING), CAST(k.overdue_ratio AS DOUBLE), CAST('.2f' AS STRING), CAST(c.ratio_pp_D1 AS DOUBLE), CAST('vs Last Day' AS STRING), CAST(c.ratio_pp_M1 AS DOUBLE), CAST('vs Last Month' AS STRING), CAST(c.ratio_pp_Y1 AS DOUBLE), CAST('vs Last Year' AS STRING), CAST(' pp' AS STRING), CAST('.2f' AS STRING), CAST(concat('Report date ', date_format(k.actual_date, 'yyyy-MM-dd')) AS STRING), CAST(concat('FX ', format_number(k.fx_vnd_usd, 0), ' VND/USD') AS STRING),\n",
+        "  CAST('overdue_usd' AS STRING), CAST('Overdue Balance (USD)' AS STRING), CAST(k.overdue_usd AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.overdue_usd_D1 AS DOUBLE), CAST('vs Last Day' AS STRING), CAST(c.overdue_usd_M1 AS DOUBLE), CAST('vs Last Month' AS STRING), CAST(c.overdue_usd_Y1 AS DOUBLE), CAST('vs Last Year' AS STRING), CAST('' AS STRING), CAST(',.0f' AS STRING), CAST(concat('Report date ', date_format(k.actual_date, 'yyyy-MM-dd')) AS STRING), CAST(concat('FX ', format_number(k.fx_vnd_usd, 0), ' VND/USD') AS STRING),\n",
+        "  CAST('ending_usd' AS STRING), CAST('Ending Balance (USD)' AS STRING), CAST(k.ending_usd AS DOUBLE), CAST(',.0f' AS STRING), CAST(c.ending_usd_D1 AS DOUBLE), CAST('vs Last Day' AS STRING), CAST(c.ending_usd_M1 AS DOUBLE), CAST('vs Last Month' AS STRING), CAST(c.ending_usd_Y1 AS DOUBLE), CAST('vs Last Year' AS STRING), CAST('' AS STRING), CAST(',.0f' AS STRING), CAST(concat('Report date ', date_format(k.actual_date, 'yyyy-MM-dd')) AS STRING), CAST(concat('FX ', format_number(k.fx_vnd_usd, 0), ' VND/USD') AS STRING)\n",
+        ") AS (kpi, title, value, value_fmt, cmp1, cmp1_label, cmp2, cmp2_label, cmp3, cmp3_label, cmp_unit, cmp_fmt, note1, note2)\n",
+        "FROM (WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", per AS (\n",
+        "  SELECT stack(4, 0, 'CURRENT', 'Current', report_date,\n",
+        "                  1, 'D1', 'vs Last Day', previous_date,\n",
+        "                  2, 'M1', 'vs Last Month', previous_month_date,\n",
+        "                  3, 'Y1', 'vs Last Year', previous_year_date) AS (ord, period, cmp, d)\n",
+        "  FROM cur),\n",
+        "v AS (\n",
+        "SELECT f.as_of_date, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN (SELECT DISTINCT d FROM per WHERE d IS NOT NULL) x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date),\n",
+        "k AS (\n",
+        "  SELECT per.ord, per.period, per.cmp, per.d AS actual_date, v.port AS port_bal, v.ovd AS ovd_bal,\n",
+        "         v.ovd / nullif(v.port, 0) * 100 AS overdue_ratio,\n",
+        "         v.ovd / cur.usd AS overdue_usd, v.port / cur.usd AS ending_balance_usd, cur.usd\n",
+        "  FROM per CROSS JOIN cur LEFT JOIN v ON v.as_of_date = per.d)\n",
+        "SELECT actual_date, usd AS fx_vnd_usd, overdue_ratio, overdue_usd,\n",
+        "       ending_balance_usd AS ending_usd\n",
+        "FROM k WHERE period = 'CURRENT') k CROSS JOIN (SELECT max(CASE WHEN period = 'D1' THEN ratio_pp END) AS ratio_pp_D1, max(CASE WHEN period = 'M1' THEN ratio_pp END) AS ratio_pp_M1, max(CASE WHEN period = 'Y1' THEN ratio_pp END) AS ratio_pp_Y1, max(CASE WHEN period = 'D1' THEN overdue_usd END) AS overdue_usd_D1, max(CASE WHEN period = 'M1' THEN overdue_usd END) AS overdue_usd_M1, max(CASE WHEN period = 'Y1' THEN overdue_usd END) AS overdue_usd_Y1, max(CASE WHEN period = 'D1' THEN ending_usd END) AS ending_usd_D1, max(CASE WHEN period = 'M1' THEN ending_usd END) AS ending_usd_M1, max(CASE WHEN period = 'Y1' THEN ending_usd END) AS ending_usd_Y1 FROM (\n",
+        "WITH cal AS (SELECT report_date, previous_date, previous_month_date, previous_year_date\n",
+        "             FROM gold_serving.overdue_report_calendar WHERE report_date <= :report_date),\n",
+        "cur AS (SELECT c.report_date, c.previous_date, c.previous_month_date, c.previous_year_date,\n",
+        "               (SELECT max_by(rate_to_vnd, rate_date) FROM silver.ref_fx_rates WHERE currencycd = 'USD' AND rate_date <= :report_date) AS usd\n",
+        "        FROM cal c WHERE c.report_date = (SELECT max(report_date) FROM cal))\n",
+        ", per AS (\n",
+        "  SELECT stack(4, 0, 'CURRENT', 'Current', report_date,\n",
+        "                  1, 'D1', 'vs Last Day', previous_date,\n",
+        "                  2, 'M1', 'vs Last Month', previous_month_date,\n",
+        "                  3, 'Y1', 'vs Last Year', previous_year_date) AS (ord, period, cmp, d)\n",
+        "  FROM cur),\n",
+        "v AS (\n",
+        "SELECT f.as_of_date, sum(f.ovd_bal) AS ovd, sum(f.port_bal) AS port\n",
+        "FROM gold_serving.card_mart_overdue_daily f JOIN (SELECT DISTINCT d FROM per WHERE d IS NOT NULL) x ON f.as_of_date = x.d\n",
+        "WHERE (:branch = 'all' OR f.mng_br = :branch)\n",
+        "GROUP BY f.as_of_date),\n",
+        "k AS (\n",
+        "  SELECT per.ord, per.period, per.cmp, per.d AS actual_date, v.port AS port_bal, v.ovd AS ovd_bal,\n",
+        "         v.ovd / nullif(v.port, 0) * 100 AS overdue_ratio,\n",
+        "         v.ovd / cur.usd AS overdue_usd, v.port / cur.usd AS ending_balance_usd, cur.usd\n",
+        "  FROM per CROSS JOIN cur LEFT JOIN v ON v.as_of_date = per.d)\n",
+        ", c AS (SELECT * FROM k WHERE period = 'CURRENT')\n",
+        "SELECT k.ord, k.period, k.actual_date,\n",
+        "       concat(k.cmp, ' (', coalesce(date_format(k.actual_date, 'yyyy-MM-dd'), 'N/A'), ')') AS cmp,\n",
+        "       round(c.overdue_ratio - k.overdue_ratio, 2) AS ratio_pp,\n",
+        "       round(c.overdue_usd - k.overdue_usd, 0) AS overdue_usd,\n",
+        "       round(c.ending_balance_usd - k.ending_balance_usd, 0) AS ending_usd,\n",
+        "       CASE WHEN round(c.overdue_ratio - k.overdue_ratio, 2) IS NULL THEN 'N/A' ELSE concat(CASE WHEN round(c.overdue_ratio - k.overdue_ratio, 2) > 0 THEN '▲ ' WHEN round(c.overdue_ratio - k.overdue_ratio, 2) < 0 THEN '▼ ' ELSE '▪ ' END, format_number(abs(round(c.overdue_ratio - k.overdue_ratio, 2)), 2), ' pp') END AS ratio_txt,\n",
+        "       CASE WHEN round(c.overdue_usd - k.overdue_usd, 0) IS NULL THEN 'N/A' ELSE concat(CASE WHEN round(c.overdue_usd - k.overdue_usd, 0) > 0 THEN '▲ ' WHEN round(c.overdue_usd - k.overdue_usd, 0) < 0 THEN '▼ ' ELSE '▪ ' END, format_number(abs(round(c.overdue_usd - k.overdue_usd, 0)), 0), '') END AS overdue_txt,\n",
+        "       CASE WHEN round(c.ending_balance_usd - k.ending_balance_usd, 0) IS NULL THEN 'N/A' ELSE concat(CASE WHEN round(c.ending_balance_usd - k.ending_balance_usd, 0) > 0 THEN '▲ ' WHEN round(c.ending_balance_usd - k.ending_balance_usd, 0) < 0 THEN '▼ ' ELSE '▪ ' END, format_number(abs(round(c.ending_balance_usd - k.ending_balance_usd, 0)), 0), '') END AS ending_txt\n",
+        "FROM k CROSS JOIN c WHERE k.period <> 'CURRENT'\n",
+        "ORDER BY k.ord)) c\n"
       ],
       "parameters": [
         {
@@ -374,7 +556,8 @@
       "displayName": "Branch options",
       "queryLines": [
         "SELECT 'all' AS branch UNION ALL\n",
-        "SELECT DISTINCT mng_br FROM gold_serving.card_mart_overdue_daily WHERE mng_br IS NOT NULL\n"
+        "SELECT DISTINCT mng_br FROM gold_serving.card_mart_overdue_daily\n",
+        "WHERE as_of_date = (SELECT max(report_date) FROM gold_serving.overdue_report_calendar) AND mng_br IS NOT NULL\n"
       ],
       "parameters": []
     }
@@ -407,7 +590,7 @@
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ovd_fx",
+                  "datasetName": "ovd_kpi",
                   "fields": [
                     {
                       "name": "fx_vnd_usd",
@@ -433,7 +616,7 @@
                     }
                   },
                   "style": {
-                    "color": "#0077B6"
+                    "color": "#000000"
                   }
                 }
               },
@@ -452,13 +635,447 @@
         },
         {
           "widget": {
-            "name": "counter_03",
+            "name": "viz_03",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ovd_tickers",
+                  "datasetName": "ovd_kpi_cards",
                   "fields": [
+                    {
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'overdue_ratio'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 6,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"upper(datum.title)\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 30,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#2f5597\",\n    \"x\": 6,\n    \"y\": 24\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.36\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 94\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 109\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "viz_04",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_kpi_cards",
+                  "fields": [
+                    {
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'overdue_usd'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 6,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"upper(datum.title)\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 30,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\",\n    \"x\": 6,\n    \"y\": 24\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.36\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#dc2626\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#16a34a\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 94\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 109\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "viz_05",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_kpi_cards",
+                  "fields": [
+                    {
+                      "name": "cmp1",
+                      "expression": "`cmp1`"
+                    },
+                    {
+                      "name": "cmp1_label",
+                      "expression": "`cmp1_label`"
+                    },
+                    {
+                      "name": "cmp2",
+                      "expression": "`cmp2`"
+                    },
+                    {
+                      "name": "cmp2_label",
+                      "expression": "`cmp2_label`"
+                    },
+                    {
+                      "name": "cmp3",
+                      "expression": "`cmp3`"
+                    },
+                    {
+                      "name": "cmp3_label",
+                      "expression": "`cmp3_label`"
+                    },
+                    {
+                      "name": "cmp_fmt",
+                      "expression": "`cmp_fmt`"
+                    },
+                    {
+                      "name": "cmp_unit",
+                      "expression": "`cmp_unit`"
+                    },
+                    {
+                      "name": "kpi",
+                      "expression": "`kpi`"
+                    },
+                    {
+                      "name": "note1",
+                      "expression": "`note1`"
+                    },
+                    {
+                      "name": "note2",
+                      "expression": "`note2`"
+                    },
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "value_fmt",
+                      "expression": "`value_fmt`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "custom-vega-viz",
+              "frame": {
+                "showTitle": false,
+                "title": {
+                  "value": "",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"filter\": \"datum.kpi == 'ending_usd'\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#666\",\n    \"x\": 6,\n    \"y\": 4\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"upper(datum.title)\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 30,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#bf9000\",\n    \"x\": 6,\n    \"y\": 24\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'\"\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"6\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '\\u25b2 ' : (datum.cmp1) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp1) && datum.cmp1 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.36\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '\\u25b2 ' : (datum.cmp2) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp2) && datum.cmp2 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 11,\n    \"fontWeight\": \"bold\",\n    \"x\": {\n     \"expr\": \"width * 0.68\"\n    },\n    \"y\": 70\n   },\n   \"encoding\": {\n    \"text\": {\n     \"value\": {\n      \"expr\": \"isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '\\u25b2 ' : (datum.cmp3) < 0 ? '\\u25bc ' : '\\u25aa ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''\"\n     }\n    },\n    \"color\": {\n     \"condition\": [\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 > 0\",\n       \"value\": \"#16a34a\"\n      },\n      {\n       \"test\": \"isValid(datum.cmp3) && datum.cmp3 < 0\",\n       \"value\": \"#dc2626\"\n      }\n     ],\n     \"value\": \"#9e9e9e\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 94\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note1\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"align\": \"left\",\n    \"baseline\": \"top\",\n    \"fontSize\": 10,\n    \"color\": \"#888\",\n    \"x\": 6,\n    \"y\": 109\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"note2\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cmp1"
+                  },
+                  {
+                    "fieldName": "cmp1_label"
+                  },
+                  {
+                    "fieldName": "cmp2"
+                  },
+                  {
+                    "fieldName": "cmp2_label"
+                  },
+                  {
+                    "fieldName": "cmp3"
+                  },
+                  {
+                    "fieldName": "cmp3_label"
+                  },
+                  {
+                    "fieldName": "cmp_fmt"
+                  },
+                  {
+                    "fieldName": "cmp_unit"
+                  },
+                  {
+                    "fieldName": "kpi"
+                  },
+                  {
+                    "fieldName": "note1"
+                  },
+                  {
+                    "fieldName": "note2"
+                  },
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "value_fmt"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "viz_06",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ovd_daily_trend",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "overdue_k_usd",
+                      "expression": "`overdue_k_usd`"
+                    },
                     {
                       "name": "overdue_ratio",
                       "expression": "`overdue_ratio`"
@@ -469,471 +1086,112 @@
               }
             ],
             "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "overdue_ratio",
-                  "displayName": "Overdue Ratio",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#48bb78"
-                  }
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Overdue Ratio"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 2,
-            "width": 2,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "counter_04",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "ovd_tickers",
-                  "fields": [
-                    {
-                      "name": "overdue_usd",
-                      "expression": "`overdue_usd`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "overdue_usd",
-                  "displayName": "Overdue Balance (USD)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#4299e1"
-                  }
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Overdue Balance (USD)"
-              }
-            }
-          },
-          "position": {
-            "x": 2,
-            "y": 2,
-            "width": 2,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "counter_05",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "ovd_tickers",
-                  "fields": [
-                    {
-                      "name": "ending_usd",
-                      "expression": "`ending_usd`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "ending_usd",
-                  "displayName": "Ending Balance (USD)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 0
-                    }
-                  },
-                  "style": {
-                    "color": "#ed8936"
-                  }
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Ending Balance (USD)"
-              }
-            }
-          },
-          "position": {
-            "x": 4,
-            "y": 2,
-            "width": 2,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "table_06",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "ovd_compare",
-                  "fields": [
-                    {
-                      "name": "cmp",
-                      "expression": "`cmp`"
-                    },
-                    {
-                      "name": "ratio_txt",
-                      "expression": "`ratio_txt`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "cmp",
-                    "displayName": "Compare"
-                  },
-                  {
-                    "fieldName": "ratio_txt",
-                    "displayName": "Change"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Overdue Ratio vs Last Day / Month / Year"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 5,
-            "width": 2,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "table_07",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "ovd_compare",
-                  "fields": [
-                    {
-                      "name": "cmp",
-                      "expression": "`cmp`"
-                    },
-                    {
-                      "name": "overdue_txt",
-                      "expression": "`overdue_txt`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "cmp",
-                    "displayName": "Compare"
-                  },
-                  {
-                    "fieldName": "overdue_txt",
-                    "displayName": "Change"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Overdue Balance (USD) vs Last Day / Month / Year"
-              }
-            }
-          },
-          "position": {
-            "x": 2,
-            "y": 5,
-            "width": 2,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "table_08",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "ovd_compare",
-                  "fields": [
-                    {
-                      "name": "cmp",
-                      "expression": "`cmp`"
-                    },
-                    {
-                      "name": "ending_txt",
-                      "expression": "`ending_txt`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "cmp",
-                    "displayName": "Compare"
-                  },
-                  {
-                    "fieldName": "ending_txt",
-                    "displayName": "Change"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Ending Balance (USD) vs Last Day / Month / Year"
-              }
-            }
-          },
-          "position": {
-            "x": 4,
-            "y": 5,
-            "width": 2,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "combo_09",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "ovd_last5",
-                  "fields": [
-                    {
-                      "name": "day",
-                      "expression": "`day`"
-                    },
-                    {
-                      "name": "sum(overdue_k_usd)",
-                      "expression": "SUM(`overdue_k_usd`)"
-                    },
-                    {
-                      "name": "sum(overdue_ratio)",
-                      "expression": "SUM(`overdue_ratio`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
               "version": 1,
-              "widgetType": "combo",
-              "encodings": {
-                "x": {
-                  "fieldName": "day",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "day"
-                },
-                "y": {
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "primary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(overdue_k_usd)",
-                        "displayName": "Overdue Amount (1000 USD)"
-                      }
-                    ]
-                  },
-                  "secondary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(overdue_ratio)",
-                        "displayName": "Overdue Ratio (%)"
-                      }
-                    ]
-                  }
-                },
-                "color": {
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Overdue Amount (1000 USD)",
-                        "color": "#3498DB"
-                      },
-                      {
-                        "value": "Overdue Ratio (%)",
-                        "color": "#E67E22"
-                      }
-                    ]
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Overdue Trend (Last 5 Days)"
+                "title": {
+                  "value": "Overdue Trend (Last 5 Days)",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"encoding\": {\n  \"x\": {\n   \"field\": \"day\",\n   \"type\": \"ordinal\",\n   \"title\": null,\n   \"sort\": null,\n   \"axis\": {\n    \"labelAngle\": 0\n   }\n  }\n },\n \"layer\": [\n  {\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"bar\",\n      \"color\": \"#4472c4\",\n      \"cornerRadiusEnd\": 2,\n      \"width\": {\n       \"band\": 0.6\n      },\n      \"tooltip\": true\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_k_usd\",\n       \"type\": \"quantitative\",\n       \"title\": \"Overdue Amount (1000 USD)\",\n       \"axis\": {\n        \"titleColor\": \"#4472c4\"\n       }\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"baseline\": \"bottom\",\n      \"dy\": -6,\n      \"fontSize\": 10,\n      \"color\": \"white\",\n      \"fontWeight\": \"bold\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"datum\": 0,\n       \"type\": \"quantitative\"\n      },\n      \"text\": {\n       \"field\": \"overdue_k_usd\",\n       \"format\": \",.0f\"\n      }\n     }\n    }\n   ]\n  },\n  {\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"line\",\n      \"color\": \"#bf9000\",\n      \"strokeWidth\": 2.5,\n      \"point\": {\n       \"filled\": true,\n       \"size\": 50,\n       \"color\": \"#bf9000\"\n      },\n      \"tooltip\": true\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_ratio\",\n       \"type\": \"quantitative\",\n       \"title\": \"Overdue Ratio (%)\",\n       \"scale\": {\n        \"zero\": false,\n        \"padding\": 30\n       },\n       \"axis\": {\n        \"orient\": \"right\",\n        \"titleColor\": \"#bf9000\"\n       }\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"dy\": -12,\n      \"fontSize\": 10,\n      \"fontWeight\": \"bold\",\n      \"color\": \"#bf9000\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_ratio\",\n       \"type\": \"quantitative\",\n       \"scale\": {\n        \"zero\": false,\n        \"padding\": 30\n       },\n       \"axis\": {\n        \"orient\": \"right\"\n       }\n      },\n      \"text\": {\n       \"field\": \"overdue_ratio\",\n       \"format\": \".2f\"\n      }\n     }\n    }\n   ]\n  }\n ],\n \"resolve\": {\n  \"scale\": {\n   \"y\": \"independent\"\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "day"
+                  },
+                  {
+                    "fieldName": "overdue_k_usd"
+                  },
+                  {
+                    "fieldName": "overdue_ratio"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
             "x": 0,
-            "y": 8,
-            "width": 2,
+            "y": 6,
+            "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "combo_10",
+            "name": "viz_07",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ovd_monthly",
+                  "datasetName": "ovd_monthly_trend",
                   "fields": [
                     {
                       "name": "month",
                       "expression": "`month`"
                     },
                     {
-                      "name": "sum(overdue_k_usd)",
-                      "expression": "SUM(`overdue_k_usd`)"
+                      "name": "overdue_k_usd",
+                      "expression": "`overdue_k_usd`"
                     },
                     {
-                      "name": "sum(overdue_ratio)",
-                      "expression": "SUM(`overdue_ratio`)"
+                      "name": "overdue_ratio",
+                      "expression": "`overdue_ratio`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
               "version": 1,
-              "widgetType": "combo",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "month"
-                },
-                "y": {
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "primary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(overdue_k_usd)",
-                        "displayName": "Overdue Amount (1000 USD)"
-                      }
-                    ]
-                  },
-                  "secondary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(overdue_ratio)",
-                        "displayName": "Overdue Ratio (%)"
-                      }
-                    ]
-                  }
-                },
-                "color": {
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Overdue Amount (1000 USD)",
-                        "color": "#3498DB"
-                      },
-                      {
-                        "value": "Overdue Ratio (%)",
-                        "color": "#E67E22"
-                      }
-                    ]
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Overdue Trend (Monthly)"
+                "title": {
+                  "value": "Overdue Trend (Monthly)",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"encoding\": {\n  \"x\": {\n   \"field\": \"month\",\n   \"type\": \"ordinal\",\n   \"title\": null,\n   \"sort\": null,\n   \"axis\": {\n    \"labelAngle\": 0\n   }\n  }\n },\n \"layer\": [\n  {\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"bar\",\n      \"color\": \"#4472c4\",\n      \"cornerRadiusEnd\": 2,\n      \"width\": {\n       \"band\": 0.6\n      },\n      \"tooltip\": true\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_k_usd\",\n       \"type\": \"quantitative\",\n       \"title\": \"Overdue Amount (1000 USD)\",\n       \"axis\": {\n        \"titleColor\": \"#4472c4\"\n       }\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"baseline\": \"bottom\",\n      \"dy\": -6,\n      \"fontSize\": 10,\n      \"color\": \"white\",\n      \"fontWeight\": \"bold\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"datum\": 0,\n       \"type\": \"quantitative\"\n      },\n      \"text\": {\n       \"field\": \"overdue_k_usd\",\n       \"format\": \",.0f\"\n      }\n     }\n    }\n   ]\n  },\n  {\n   \"layer\": [\n    {\n     \"mark\": {\n      \"type\": \"line\",\n      \"color\": \"#bf9000\",\n      \"strokeWidth\": 2.5,\n      \"point\": {\n       \"filled\": true,\n       \"size\": 50,\n       \"color\": \"#bf9000\"\n      },\n      \"tooltip\": true\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_ratio\",\n       \"type\": \"quantitative\",\n       \"title\": \"Overdue Ratio (%)\",\n       \"scale\": {\n        \"zero\": false,\n        \"padding\": 30\n       },\n       \"axis\": {\n        \"orient\": \"right\",\n        \"titleColor\": \"#bf9000\"\n       }\n      }\n     }\n    },\n    {\n     \"mark\": {\n      \"type\": \"text\",\n      \"dy\": -12,\n      \"fontSize\": 10,\n      \"fontWeight\": \"bold\",\n      \"color\": \"#bf9000\"\n     },\n     \"encoding\": {\n      \"y\": {\n       \"field\": \"overdue_ratio\",\n       \"type\": \"quantitative\",\n       \"scale\": {\n        \"zero\": false,\n        \"padding\": 30\n       },\n       \"axis\": {\n        \"orient\": \"right\"\n       }\n      },\n      \"text\": {\n       \"field\": \"overdue_ratio\",\n       \"format\": \".2f\"\n      }\n     }\n    }\n   ]\n  }\n ],\n \"resolve\": {\n  \"scale\": {\n   \"y\": \"independent\"\n  }\n },\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "month"
+                  },
+                  {
+                    "fieldName": "overdue_k_usd"
+                  },
+                  {
+                    "fieldName": "overdue_ratio"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
           "position": {
-            "x": 2,
-            "y": 8,
-            "width": 4,
+            "x": 3,
+            "y": 6,
+            "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "combo_11",
+            "name": "bar_08",
             "queries": [
               {
                 "name": "main_query",
@@ -945,12 +1203,12 @@
                       "expression": "`month`"
                     },
                     {
-                      "name": "sum(overdue_k_usd)",
-                      "expression": "SUM(`overdue_k_usd`)"
+                      "name": "del_grp",
+                      "expression": "`del_grp`"
                     },
                     {
-                      "name": "sum(overdue_ratio)",
-                      "expression": "SUM(`overdue_ratio`)"
+                      "name": "sum(overdue_k_usd)",
+                      "expression": "SUM(`overdue_k_usd`)"
                     }
                   ],
                   "disaggregated": false
@@ -958,8 +1216,8 @@
               }
             ],
             "spec": {
-              "version": 1,
-              "widgetType": "combo",
+              "version": 3,
+              "widgetType": "bar",
               "encodings": {
                 "x": {
                   "fieldName": "month",
@@ -969,39 +1227,42 @@
                   "displayName": "month"
                 },
                 "y": {
+                  "fieldName": "sum(overdue_k_usd)",
                   "scale": {
                     "type": "quantitative"
                   },
-                  "primary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(overdue_k_usd)",
-                        "displayName": "Overdue Amount (1000 USD)"
-                      }
-                    ]
-                  },
-                  "secondary": {
-                    "fields": [
-                      {
-                        "fieldName": "sum(overdue_ratio)",
-                        "displayName": "Overdue Ratio (%)"
-                      }
-                    ]
-                  }
+                  "displayName": "Overdue Amount (1000 USD)"
                 },
                 "color": {
+                  "fieldName": "del_grp",
                   "scale": {
                     "type": "categorical",
                     "mappings": [
                       {
-                        "value": "Overdue Amount (1000 USD)",
-                        "color": "#3498DB"
+                        "value": "1-10",
+                        "color": "#f3e3b0"
                       },
                       {
-                        "value": "Overdue Ratio (%)",
-                        "color": "#E67E22"
+                        "value": "11-90",
+                        "color": "#e2c66b"
+                      },
+                      {
+                        "value": "91-180",
+                        "color": "#bf9000"
+                      },
+                      {
+                        "value": "181-360",
+                        "color": "#c55a11"
+                      },
+                      {
+                        "value": "361+",
+                        "color": "#843c0c"
                       }
                     ]
+                  },
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
                   }
                 },
                 "label": {
@@ -1011,24 +1272,27 @@
               "frame": {
                 "showTitle": true,
                 "title": "Overdue Amount by Debt Groups"
+              },
+              "mark": {
+                "layout": "stack"
               }
             }
           },
           "position": {
             "x": 0,
-            "y": 15,
+            "y": 13,
             "width": 6,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "pie_12",
+            "name": "pie_09",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ovd_product_amount",
+                  "datasetName": "ovd_product",
                   "fields": [
                     {
                       "name": "product_group",
@@ -1059,7 +1323,10 @@
                   "scale": {
                     "type": "categorical"
                   },
-                  "displayName": "product_group"
+                  "displayName": "product_group",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true
@@ -1073,19 +1340,19 @@
           },
           "position": {
             "x": 0,
-            "y": 22,
+            "y": 20,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_13",
+            "name": "bar_10",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ovd_product_ratio",
+                  "datasetName": "ovd_product_top5",
                   "fields": [
                     {
                       "name": "product_group",
@@ -1131,39 +1398,156 @@
               },
               "mark": {
                 "colors": [
-                  "#3498DB"
+                  "#4472c4"
                 ]
               }
             }
           },
           "position": {
             "x": 3,
-            "y": 22,
+            "y": 20,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "filter_14",
+            "name": "bar_11",
             "queries": [
               {
-                "name": "param_ovd_fx_report_date",
+                "name": "main_query",
                 "query": {
-                  "datasetName": "ovd_fx",
-                  "parameters": [
+                  "datasetName": "ovd_branch_top5",
+                  "fields": [
                     {
-                      "name": "report_date",
-                      "keyword": "report_date"
+                      "name": "branch",
+                      "expression": "`branch`"
+                    },
+                    {
+                      "name": "sum(overdue_ratio)",
+                      "expression": "SUM(`overdue_ratio`)"
                     }
                   ],
                   "disaggregated": false
                 }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "sum(overdue_ratio)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Overdue Ratio (%)"
+                },
+                "y": {
+                  "fieldName": "branch",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "x-reversed"
+                    }
+                  },
+                  "displayName": "branch"
+                },
+                "label": {
+                  "show": true
+                }
               },
+              "frame": {
+                "showTitle": true,
+                "title": "Top 5 Branches by Overdue Ratio"
+              },
+              "mark": {
+                "colors": [
+                  "#bf9000"
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 27,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_12",
+            "queries": [
               {
-                "name": "param_ovd_tickers_report_date",
+                "name": "main_query",
                 "query": {
-                  "datasetName": "ovd_tickers",
+                  "datasetName": "ovd_branch_top5",
+                  "fields": [
+                    {
+                      "name": "branch",
+                      "expression": "`branch`"
+                    },
+                    {
+                      "name": "sum(overdue_k_usd)",
+                      "expression": "SUM(`overdue_k_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "sum(overdue_k_usd)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Overdue Amount (1000 USD)"
+                },
+                "y": {
+                  "fieldName": "branch",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "x-reversed"
+                    }
+                  },
+                  "displayName": "branch"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Top 5 Branches - Overdue Amount"
+              },
+              "mark": {
+                "colors": [
+                  "#4472c4"
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 27,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_13",
+            "queries": [
+              {
+                "name": "param_ovd_kpi_report_date",
+                "query": {
+                  "datasetName": "ovd_kpi",
                   "parameters": [
                     {
                       "name": "report_date",
@@ -1187,9 +1571,9 @@
                 }
               },
               {
-                "name": "param_ovd_last5_report_date",
+                "name": "param_ovd_daily_trend_report_date",
                 "query": {
-                  "datasetName": "ovd_last5",
+                  "datasetName": "ovd_daily_trend",
                   "parameters": [
                     {
                       "name": "report_date",
@@ -1200,9 +1584,9 @@
                 }
               },
               {
-                "name": "param_ovd_monthly_report_date",
+                "name": "param_ovd_monthly_trend_report_date",
                 "query": {
-                  "datasetName": "ovd_monthly",
+                  "datasetName": "ovd_monthly_trend",
                   "parameters": [
                     {
                       "name": "report_date",
@@ -1226,9 +1610,9 @@
                 }
               },
               {
-                "name": "param_ovd_product_amount_report_date",
+                "name": "param_ovd_product_report_date",
                 "query": {
-                  "datasetName": "ovd_product_amount",
+                  "datasetName": "ovd_product",
                   "parameters": [
                     {
                       "name": "report_date",
@@ -1239,9 +1623,35 @@
                 }
               },
               {
-                "name": "param_ovd_product_ratio_report_date",
+                "name": "param_ovd_product_top5_report_date",
                 "query": {
-                  "datasetName": "ovd_product_ratio",
+                  "datasetName": "ovd_product_top5",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_branch_top5_report_date",
+                "query": {
+                  "datasetName": "ovd_branch_top5",
+                  "parameters": [
+                    {
+                      "name": "report_date",
+                      "keyword": "report_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_kpi_cards_report_date",
+                "query": {
+                  "datasetName": "ovd_kpi_cards",
                   "parameters": [
                     {
                       "name": "report_date",
@@ -1259,11 +1669,7 @@
                 "fields": [
                   {
                     "parameterName": "report_date",
-                    "queryName": "param_ovd_fx_report_date"
-                  },
-                  {
-                    "parameterName": "report_date",
-                    "queryName": "param_ovd_tickers_report_date"
+                    "queryName": "param_ovd_kpi_report_date"
                   },
                   {
                     "parameterName": "report_date",
@@ -1271,11 +1677,11 @@
                   },
                   {
                     "parameterName": "report_date",
-                    "queryName": "param_ovd_last5_report_date"
+                    "queryName": "param_ovd_daily_trend_report_date"
                   },
                   {
                     "parameterName": "report_date",
-                    "queryName": "param_ovd_monthly_report_date"
+                    "queryName": "param_ovd_monthly_trend_report_date"
                   },
                   {
                     "parameterName": "report_date",
@@ -1283,11 +1689,19 @@
                   },
                   {
                     "parameterName": "report_date",
-                    "queryName": "param_ovd_product_amount_report_date"
+                    "queryName": "param_ovd_product_report_date"
                   },
                   {
                     "parameterName": "report_date",
-                    "queryName": "param_ovd_product_ratio_report_date"
+                    "queryName": "param_ovd_product_top5_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_ovd_branch_top5_report_date"
+                  },
+                  {
+                    "parameterName": "report_date",
+                    "queryName": "param_ovd_kpi_cards_report_date"
                   }
                 ]
               },
@@ -1306,7 +1720,7 @@
         },
         {
           "widget": {
-            "name": "filter_15",
+            "name": "filter_14",
             "queries": [
               {
                 "name": "options",
@@ -1322,9 +1736,9 @@
                 }
               },
               {
-                "name": "param_ovd_tickers_branch",
+                "name": "param_ovd_kpi_branch",
                 "query": {
-                  "datasetName": "ovd_tickers",
+                  "datasetName": "ovd_kpi",
                   "parameters": [
                     {
                       "name": "branch",
@@ -1348,9 +1762,9 @@
                 }
               },
               {
-                "name": "param_ovd_last5_branch",
+                "name": "param_ovd_daily_trend_branch",
                 "query": {
-                  "datasetName": "ovd_last5",
+                  "datasetName": "ovd_daily_trend",
                   "parameters": [
                     {
                       "name": "branch",
@@ -1361,9 +1775,9 @@
                 }
               },
               {
-                "name": "param_ovd_monthly_branch",
+                "name": "param_ovd_monthly_trend_branch",
                 "query": {
-                  "datasetName": "ovd_monthly",
+                  "datasetName": "ovd_monthly_trend",
                   "parameters": [
                     {
                       "name": "branch",
@@ -1387,9 +1801,9 @@
                 }
               },
               {
-                "name": "param_ovd_product_amount_branch",
+                "name": "param_ovd_product_branch",
                 "query": {
-                  "datasetName": "ovd_product_amount",
+                  "datasetName": "ovd_product",
                   "parameters": [
                     {
                       "name": "branch",
@@ -1400,9 +1814,35 @@
                 }
               },
               {
-                "name": "param_ovd_product_ratio_branch",
+                "name": "param_ovd_product_top5_branch",
                 "query": {
-                  "datasetName": "ovd_product_ratio",
+                  "datasetName": "ovd_product_top5",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_branch_top5_branch",
+                "query": {
+                  "datasetName": "ovd_branch_top5",
+                  "parameters": [
+                    {
+                      "name": "branch",
+                      "keyword": "branch"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "param_ovd_kpi_cards_branch",
+                "query": {
+                  "datasetName": "ovd_kpi_cards",
                   "parameters": [
                     {
                       "name": "branch",
@@ -1425,7 +1865,7 @@
                   },
                   {
                     "parameterName": "branch",
-                    "queryName": "param_ovd_tickers_branch"
+                    "queryName": "param_ovd_kpi_branch"
                   },
                   {
                     "parameterName": "branch",
@@ -1433,11 +1873,11 @@
                   },
                   {
                     "parameterName": "branch",
-                    "queryName": "param_ovd_last5_branch"
+                    "queryName": "param_ovd_daily_trend_branch"
                   },
                   {
                     "parameterName": "branch",
-                    "queryName": "param_ovd_monthly_branch"
+                    "queryName": "param_ovd_monthly_trend_branch"
                   },
                   {
                     "parameterName": "branch",
@@ -1445,11 +1885,19 @@
                   },
                   {
                     "parameterName": "branch",
-                    "queryName": "param_ovd_product_amount_branch"
+                    "queryName": "param_ovd_product_branch"
                   },
                   {
                     "parameterName": "branch",
-                    "queryName": "param_ovd_product_ratio_branch"
+                    "queryName": "param_ovd_product_top5_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_ovd_branch_top5_branch"
+                  },
+                  {
+                    "parameterName": "branch",
+                    "queryName": "param_ovd_kpi_cards_branch"
                   }
                 ]
               },

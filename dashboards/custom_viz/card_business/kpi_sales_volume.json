@@ -1,0 +1,188 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
+  "transform": [
+    {
+      "filter": "datum.kpi == 'sales_volume'"
+    }
+  ],
+  "layer": [
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "baseline": "top",
+        "fontSize": 11,
+        "fontWeight": "bold",
+        "color": "#666",
+        "x": 6,
+        "y": 4
+      },
+      "encoding": {
+        "text": {
+          "value": {
+            "expr": "upper(datum.title)"
+          }
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "baseline": "top",
+        "fontSize": 30,
+        "fontWeight": "bold",
+        "color": "#2f5597",
+        "x": 6,
+        "y": 24
+      },
+      "encoding": {
+        "text": {
+          "value": {
+            "expr": "isValid(datum.value) ? format(datum.value, datum.value_fmt) : 'N/A'"
+          }
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "baseline": "top",
+        "fontSize": 11.5,
+        "fontWeight": "bold",
+        "x": {
+          "expr": "6"
+        },
+        "y": 70
+      },
+      "encoding": {
+        "text": {
+          "value": {
+            "expr": "isValid(datum.cmp1_label) && datum.cmp1_label != '' ? (isValid(datum.cmp1) ? ((datum.cmp1) > 0 ? '▲ ' : (datum.cmp1) < 0 ? '▼ ' : '▪ ') + format(abs(datum.cmp1), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp1_label : ''"
+          }
+        },
+        "color": {
+          "condition": [
+            {
+              "test": "isValid(datum.cmp1) && datum.cmp1 > 0",
+              "value": "#16a34a"
+            },
+            {
+              "test": "isValid(datum.cmp1) && datum.cmp1 < 0",
+              "value": "#dc2626"
+            }
+          ],
+          "value": "#9e9e9e"
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "align": "right",
+        "baseline": "top",
+        "fontSize": 11.5,
+        "fontWeight": "bold",
+        "x": {
+          "expr": "width - 6"
+        },
+        "y": 70
+      },
+      "encoding": {
+        "text": {
+          "value": {
+            "expr": "isValid(datum.cmp2_label) && datum.cmp2_label != '' ? (isValid(datum.cmp2) ? ((datum.cmp2) > 0 ? '▲ ' : (datum.cmp2) < 0 ? '▼ ' : '▪ ') + format(abs(datum.cmp2), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp2_label : ''"
+          }
+        },
+        "color": {
+          "condition": [
+            {
+              "test": "isValid(datum.cmp2) && datum.cmp2 > 0",
+              "value": "#16a34a"
+            },
+            {
+              "test": "isValid(datum.cmp2) && datum.cmp2 < 0",
+              "value": "#dc2626"
+            }
+          ],
+          "value": "#9e9e9e"
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "baseline": "top",
+        "fontSize": 10,
+        "color": "#888",
+        "x": 6,
+        "y": 94
+      },
+      "encoding": {
+        "text": {
+          "field": "note1"
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "baseline": "top",
+        "fontSize": 10,
+        "color": "#888",
+        "x": 6,
+        "y": 109
+      },
+      "encoding": {
+        "text": {
+          "field": "note2"
+        }
+      }
+    }
+  ]
+}

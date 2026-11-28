@@ -44,12 +44,15 @@ SILVER  typed, standardised (MM/DD/YYYY, "1,234", "12.34%"), deduplicated
         DQ gate (FAIL → ops.dq_quarantine with reasons, WARN → logged)
         MERGE (idempotent), SCD2 for dim_customer
         ▼
-GOLD ─┬─ BI : Kimball star schema
-      │      loan_fact_daily, core_fact_transaction, fact_card_txn
-      │      dim_customer (SCD2), dim_account, dim_card, dim_branch, dim_product, dim_date
-      │      marts: loan overdue × branch × debt group + NPL, card KPIs, deposit balance,
-      │             customer_360  → Databricks SQL dashboards + alerts
-      │      reconciliation vs card_kpi / deposit_summary → ops.dq_results
+GOLD ─┬─ BI : Kimball star schema (conformed dims, docs/star_schema.md)
+      │      dims : dim_date, dim_branch, dim_product, dim_customer (SCD2), dim_card
+      │      facts: loan_fact_daily, core_fact_transaction, fact_deposit_daily,
+      │             fact_card_daily, fact_card_transaction, card_mart_overdue_daily (aggregate)
+      │      marts (built from facts): loan overdue + NPL, deposit trend / monthly / tenor /
+      │             CASA / new accounts, card KPI daily / monthly / spend mix, customer_360
+      │      gate: reconciliation vs card_kpi / bang1247 / overdue file → atomic batch publish
+      │      serving: gold_serving views + per-dashboard reporting calendars
+      │             → 3 AI/BI dashboards (+ Vega-Lite custom viz specs)
       └─ ML : customer × snapshot feature table (income, card grade, spend by MCC,
                cross-border ratio, revolving, DPD, product holding)
                label: buys insurance within N days → MLflow model
@@ -93,8 +96,14 @@ src/03_gold/            Star schema (dim/fact) and dashboard marts
 src/04_ml/              Insurance cross-sell: features, training, MLflow, scoring
 src/common/             Reusable logic: bronze, silver, gold, gold_cards, dq, scd2, banking, delta_io
 tests/                  pytest unit tests (local Spark)
-docs/decisions.md       Architecture decision records
-docs/gold_dashboards.md Gold BI spec (card, overdue, deposit dashboards)
+docs/decisions.md       Architecture decision records (ADR-001..017)
+docs/star_schema.md     Gold star schema: dims, facts, grain, keys
+docs/gold_dashboards.md Gold BI overview, links to the per-dashboard specs:
+docs/overdue_dashboard.md, docs/deposit_dashboard.md, docs/card_dashboard.md
+                        business rules, metric definitions, date logic, migration
+docs/custom_visualizations.md  Vega-Lite custom viz (Public Preview) and how to apply
+dashboards/custom_viz/  Generated Vega-Lite specs + field mapping
+tools/                  benchmark_dashboards.py (SQL Warehouse benchmark), compile_vega_specs.js
 ```
 
 ## Run it
@@ -131,5 +140,8 @@ databricks bundle deploy -t prod --var notification_email=you@example.com
 - [x] Unity Catalog governance as code: RBAC grants (readers only see `gold_serving` views), PII column masks + tags, branch row filter (dry-run on Free Edition)
 - [x] Atomic Gold publish: batch IDs + activation pointer (`ops.published_batches`), serving views, rollback only before activation, shared writer lock across jobs (ADR-012) — integration-tested on local Delta, ✅ ran on Databricks
 - [x] Performance tuning code: liquid clustering, OPTIMIZE/VACUUM weekly job, before/after benchmark notebook (numbers pending a Databricks run)
+- [x] Dashboard refactor (Overdue, Deposit, Card): reporting calendars, point-in-time date logic, stock vs flow + completeness flags, incremental monthly marts, Overdue Silver↔Gold recon, targets by customer type / growth targets (ADR-013..015)
+- [x] Star schema for deposit and card (dim_card, 3 new facts; marts read facts) (ADR-016)
+- [x] Vega-Lite specs for the original look (KPI cards, gauges, dual-axis, two-year stacks), compiled in CI (ADR-017) — to be pasted in the UI
 - [ ] Azure Databricks deployment (ADLS Gen2, Terraform, service principal)
 - [ ] Streaming AML alerts

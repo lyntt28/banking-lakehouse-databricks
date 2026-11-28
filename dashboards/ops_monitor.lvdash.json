@@ -475,7 +475,10 @@
                   "scale": {
                     "type": "categorical"
                   },
-                  "displayName": "Series"
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true
@@ -546,7 +549,10 @@
                   "scale": {
                     "type": "categorical"
                   },
-                  "displayName": "Series"
+                  "displayName": "Series",
+                  "legend": {
+                    "position": "bottom"
+                  }
                 },
                 "label": {
                   "show": true

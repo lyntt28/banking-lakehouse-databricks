@@ -1,0 +1,123 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
+  "transform": [
+    {
+      "calculate": "split(datum.series, ' ')[0]",
+      "as": "_class"
+    },
+    {
+      "calculate": "indexof(datum.series, 'this year') >= 0 ? 'This year' : 'Last year'",
+      "as": "_year"
+    }
+  ],
+  "mark": {
+    "type": "bar",
+    "tooltip": true
+  },
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "ordinal",
+      "sort": [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec"
+      ],
+      "title": null,
+      "axis": {
+        "labelAngle": 0
+      }
+    },
+    "xOffset": {
+      "field": "_year",
+      "type": "ordinal",
+      "sort": "ascending"
+    },
+    "y": {
+      "field": "ending_balance",
+      "type": "quantitative",
+      "aggregate": "sum",
+      "stack": "zero",
+      "title": "Ending Balance (K USD)"
+    },
+    "color": {
+      "field": "_class",
+      "type": "nominal",
+      "title": null,
+      "scale": {
+        "domain": [
+          "1-CASA",
+          "2-TD",
+          "3-ISA"
+        ],
+        "range": [
+          "#4472c4",
+          "#bf9000",
+          "#2f5597"
+        ]
+      }
+    },
+    "opacity": {
+      "field": "_year",
+      "type": "ordinal",
+      "title": "Year",
+      "scale": {
+        "range": [
+          0.45,
+          1.0
+        ]
+      }
+    }
+  }
+}

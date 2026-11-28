@@ -17,7 +17,7 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-from data_generator.common import BRANCH_BY_NBR, DEPOSIT_ALL, USD_RATE, write_csv
+from data_generator.common import BRANCH_BY_NBR, CARD_PRODUCTS, DEPOSIT_ALL, USD_RATE, write_csv
 
 KPI_FILES = ["01_member_eop", "02_member_usage", "03_new_consumer", "04_member_closed",
              "05_balance_eop", "06_spend_sector", "07_spend_location", "08_spend_channel",
@@ -71,7 +71,7 @@ def card_kpis(cards: list[dict], clean_txns: list[dict], statements: list[list],
                             ("Using_Corporate", _n(len(users["TC"]))),
                             ("Usage_Corporate_Rate", _pct(len(users["TC"]), eop["TC"]))],
         "03_new_consumer": [("New_Consumer", _n(new["CN"])), ("New_Corporate", _n(new["TC"])),
-                            ("New_Total", _n(new["CN"] + new["TC"]))],
+                            ("New_Member", _n(new["CN"] + new["TC"]))],
         "04_member_closed": [("Consumer_Closed", _n(closed["CN"])),
                              ("Corporate_Closed", _n(closed["TC"])),
                              ("Member_Closed", _n(closed["CN"] + closed["TC"])),
@@ -83,8 +83,8 @@ def card_kpis(cards: list[dict], clean_txns: list[dict], statements: list[list],
                             ("Cash_Advance_Amt", _n(amt["CASH_ADVANCE"])),
                             ("Installment_Amt", _n(amt["INSTALLMENT"])),
                             ("Flexi_Amt", _n(amt["FLEXI"])), ("Total_Spending_Amt", _n(total)),
-                            ("Avg_Spending_Per_Member",
-                             _n(total / max(1, len(users["CN"]) + len(users["TC"]))))],
+                            ("Avg_Spending_Per_Member",       # / thẻ hiện hữu (EOP)
+                             _n(total / n_active if n_active else 0))],
         "07_spend_location": [("Domestic_Spending_Amt", _n(amt["DOMESTIC"])),
                               ("XBorder_Spending_Amt", _n(amt["XBORDER"])),
                               ("Domestic_Rate", _pct(amt["DOMESTIC"], total)),
@@ -143,6 +143,30 @@ ONLINE_SALE_BRANCH = 1   # thẻ mở qua Smart Credit (online) ghi nhận cho C
 def del_grp(dpd: int) -> str:
     """Số ngày quá hạn -> nhóm nợ của file credit_card_overdue."""
     return next((g for limit, g in DEL_GROUPS if dpd <= limit), "361+")
+
+
+OVERDUE_PRODUCTS = {grade: prod for prod, grade, *_ in CARD_PRODUCTS}   # nhóm SP -> sản phẩm
+OVERDUE_DEL_GROUPS = {g for _, g in DEL_GROUPS} | {"361+"}
+
+
+def card_overdue_errors(rows: list[list]) -> list[str]:
+    """Kiểm tra quy tắc nghiệp vụ của file card_overdue HỢP LỆ (generator không cài lỗi vào file
+    này; dữ liệu lỗi để test DQ nằm riêng trong tests/test_silver.py). Rỗng = đạt."""
+    errs = []
+    for r in rows:
+        _, _, _, grp, name, mng, sal, dg, pacc, oacc, pbal, obal = r
+        pbal, obal = float(pbal), float(obal)
+        if not (0 <= obal <= pbal):
+            errs.append(f"OVD_BAL ngoài [0, PORT_BAL]: {r}")
+        if not (0 <= oacc <= pacc):
+            errs.append(f"OVD_ACC ngoài [0, PORT_ACC]: {r}")
+        if OVERDUE_PRODUCTS.get(grp) != name:
+            errs.append(f"PRODUCT_NAME không thuộc nhóm {grp}: {r}")
+        if mng not in BRANCH_BY_NBR or (sal not in BRANCH_BY_NBR and sal != ONLINE_SALE_BRANCH):
+            errs.append(f"Chi nhánh không hợp lệ: {r}")
+        if dg not in OVERDUE_DEL_GROUPS:
+            errs.append(f"DEL_GRP lạ: {r}")
+    return errs
 
 
 def card_overdue(cards: list[dict], as_of: date) -> list[list]:

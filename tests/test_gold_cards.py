@@ -8,7 +8,6 @@ from pyspark.sql import functions as F
 from common.gold import build_mart_deposit_daily
 from common.gold_cards import (
     build_mart_card_kpi_daily,
-    build_mart_card_kpi_monthly,
     build_mart_card_spend_mix,
     card_kpi_metrics,
     deposit_reconciliation,
@@ -49,7 +48,7 @@ def test_stock_metrics_match_exactly(recon):
     st = {r.metric_code: r.status for r in recon.collect()}
     for code in ["EOP_Total", "EOP_Consumer", "Total_Outstanding_Balance", "Revolving_Balance",
                  "DPD_1P_Balance", "DPD_30P_Member", "NPL_90P_Balance", "NPL_90P_Rate",
-                 "New_Total", "Member_Closed"]:
+                 "New_Member", "Member_Closed"]:
         assert st[code] == "MATCH", code
 
 
@@ -84,41 +83,3 @@ def test_deposit_reconciles_with_bang1247(results):
                                {p[0]: p[1] for p in DEPOSIT_ALL})
     st = r.groupBy("status").count().collect()
     assert {x.status for x in st} == {"MATCH"}, r.filter("status <> 'MATCH'").limit(5).collect()
-
-
-def test_monthly_stock_flow_mom_and_targets(spark):
-    cols = ["eop_members", "balance", "revolving_balance", "revolving_members", "credit_limit",
-            "dpd_1p_members", "dpd_1p_balance", "dpd_10p_members", "dpd_10p_balance",
-            "dpd_30p_members", "dpd_30p_balance", "npl_90p_members", "npl_90p_balance",
-            "new_members", "closed_members", "spend_amt", "txn_count", "purchase_amt",
-            "cash_advance_amt", "installment_amt", "flexi_amt", "domestic_amt", "xborder_amt",
-            "pos_amt", "online_amt", "using_members"]
-
-    def row(d, eop, new, spend):
-        v = dict.fromkeys(cols, 0)
-        v.update(eop_members=eop, new_members=new, spend_amt=spend, balance=eop * 10)
-        return (d, "1", "CN", "BRANCH", *[v[c] for c in cols])
-
-    daily = spark.createDataFrame(
-        [row(date(2026, 10, 31), 100, 5, 1000), row(date(2026, 11, 1), 110, 3, 500),
-         row(date(2026, 11, 2), 120, 2, 700)],
-        "as_of_date date, branchnbr string, cust_type string, acquisition_channel string, "
-        + ", ".join(f"{c} long" for c in cols))
-    targets = spark.createDataFrame(
-        [("CARD_NEW_ACQ", "MONTH", "2026-11", "1", 10.0),
-         ("CARD_SALES_VOLUME", "MONTH", "2026-11", "1", 2400.0),
-         ("CARD_NEW_ACQ", "YEAR", "2026", "1", 100.0),
-         ("CARD_SALES_VOLUME", "YEAR", "2026", "1", 10000.0)],
-        "metric_code string, period_type string, period string, branchnbr string, "
-        "target_value double")
-    m = {r.year_month: r for r in build_mart_card_kpi_monthly(daily, targets).collect()}
-    nov = m["2026-11"]
-    assert nov.eop_members == 120 and nov.last_date == date(2026, 11, 2)   # tồn: ngày cuối
-    assert nov.new_members == 5 and nov.spend_amt == 1200                  # luỹ kế: cộng
-    assert nov.eop_members_mom_pct == pytest.approx(20.0)                  # 120 vs 100
-    assert nov.eop_members_yoy_pct is None                                 # chưa có 2025-11
-    assert nov.new_vs_month_target_pct == pytest.approx(50.0)
-    assert nov.sales_vs_month_target_pct == pytest.approx(50.0)
-    assert nov.new_vs_year_target_pct == pytest.approx(10.0)               # YTD 5+5 / 100
-    assert m["2026-10"].target_new_month is None
-

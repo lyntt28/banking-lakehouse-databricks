@@ -1,0 +1,118 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6,
+      "grid": false
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
+  "transform": [
+    {
+      "fold": [
+        "dpd_1p",
+        "dpd_10p",
+        "dpd_30p",
+        "npl"
+      ],
+      "as": [
+        "_col",
+        "_val"
+      ]
+    },
+    {
+      "calculate": "{'dpd_1p': 'DPD 1+', 'dpd_10p': 'DPD 10+', 'dpd_30p': 'DPD 30+', 'npl': 'NPL'}[datum._col]",
+      "as": "_title"
+    }
+  ],
+  "mark": {
+    "type": "text",
+    "fontSize": 12,
+    "fontWeight": "bold"
+  },
+  "encoding": {
+    "y": {
+      "field": "compare",
+      "type": "nominal",
+      "title": null,
+      "sort": null,
+      "axis": {
+        "labelFontSize": 12,
+        "labelLimit": 320,
+        "domain": false,
+        "ticks": false
+      }
+    },
+    "x": {
+      "field": "_title",
+      "type": "nominal",
+      "title": null,
+      "sort": [
+        "DPD 1+",
+        "DPD 10+",
+        "DPD 30+",
+        "NPL"
+      ],
+      "axis": {
+        "orient": "top",
+        "labelAngle": 0,
+        "domain": false,
+        "ticks": false
+      }
+    },
+    "text": {
+      "value": {
+        "expr": "(isValid(datum._val) ? ((datum._val) > 0 ? '▲ ' : (datum._val) < 0 ? '▼ ' : '▪ ') + format(abs(datum._val), ',.2f') + ' pp' : 'N/A')"
+      }
+    },
+    "color": {
+      "condition": [
+        {
+          "test": "isValid(datum._val) && datum._val > 0",
+          "value": "#dc2626"
+        },
+        {
+          "test": "isValid(datum._val) && datum._val < 0",
+          "value": "#16a34a"
+        }
+      ],
+      "value": "#9e9e9e"
+    }
+  }
+}
