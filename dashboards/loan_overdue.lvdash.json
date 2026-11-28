@@ -822,6 +822,9 @@
                         "color": "#E67E22"
                       }
                     ]
+                  },
+                  "legend": {
+                    "position": "bottom"
                   }
                 },
                 "label": {
@@ -912,6 +915,9 @@
                         "color": "#E67E22"
                       }
                     ]
+                  },
+                  "legend": {
+                    "position": "bottom"
                   }
                 },
                 "label": {
@@ -1002,6 +1008,9 @@
                         "color": "#E67E22"
                       }
                     ]
+                  },
+                  "legend": {
+                    "position": "bottom"
                   }
                 },
                 "label": {

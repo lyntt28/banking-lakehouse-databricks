@@ -121,7 +121,8 @@ class Dash:
                   "secondary": {"fields": [{"fieldName": fl, "displayName": line_title}]}},
             "color": {"scale": {"type": "categorical", "mappings": [
                 {"value": bar_title, "color": bar_color},
-                {"value": line_title, "color": line_color}]}},
+                {"value": line_title, "color": line_color}]},
+                "legend": {"position": "bottom"}},
             "label": {"show": True}},
             "frame": {"showTitle": True, "title": title}}
         self.place({"name": self._wid("combo"), "queries": self._query(ds, fields, agg=True),
