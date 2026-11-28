@@ -105,6 +105,25 @@ databricks bundle run banking_lakehouse_daily -t dev
 databricks bundle deploy -t prod --var notification_email=you@example.com
 ```
 
+## Status (honest)
+| Area | Status |
+|---|---|
+| Daily pipeline Bronze → Silver → Gold (DQ gate, recon, atomic publish) | **Running** on Databricks Free Edition (dev), 40 business days loaded |
+| 4 AI/BI dashboards (Card, Card Overdue, Deposit, Operations Monitor) | **Running** on the dev workspace, deployed by the bundle |
+| Dashboard query cost | **Measured** — warm runs ~250–300 ms per dataset ([benchmark](docs/benchmark.md)); cold first runs are warehouse start-up / cache, not SQL |
+| CI (ruff, pytest, bundle validate, Vega-Lite compile) | **Running** on GitHub Actions |
+| CD test → approval → prod | Code only — not yet run against a workspace |
+| Unity Catalog governance (grants, masks, row filters) | Dry-run only (Free Edition limits) |
+| MLflow cross-sell model | Code + unit tests — no tracked run yet |
+| Liquid clustering / OPTIMIZE | Code only — no before/after numbers yet |
+| Parallel Gold publish | Code, off by default (`GoldConfig.parallel=False`) |
+| Azure ADLS + Terraform, Streaming AML | Planned |
+
+**Known limit:** atomic publish is atomic per table: a reader sees the whole old or the
+whole new batch of each table. It is **not** multi-table ACID; a query that joins several
+serving views while a batch is being activated may, in a narrow window, mix batches
+(ADR-012, consequences).
+
 ## Roadmap
 - [x] Project skeleton, bundle config, CI
 - [x] Reusable DQ, SCD2 and debt-classification logic with unit tests
