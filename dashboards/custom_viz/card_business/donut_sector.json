@@ -51,10 +51,10 @@
               "Flexi"
             ],
             "range": [
-              "#2a9d8f",
-              "#8b6fd6",
-              "#e0659a",
-              "#d4a017"
+              "#1e88e5",
+              "#fb8c00",
+              "#7e57c2",
+              "#43a047"
             ]
           },
           "legend": {
@@ -79,7 +79,7 @@
         "type": "text",
         "fontSize": 16,
         "fontWeight": "bold",
-        "color": "#2a9d8f"
+        "color": "#1e88e5"
       },
       "encoding": {
         "text": {
