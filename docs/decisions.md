@@ -64,3 +64,28 @@ Each decision: context → decision → alternatives considered → consequences
 - **Known limitations (accepted for this project):**
   - *Cross-table consistency:* Delta guarantees atomicity per table, not across tables. A single query that joins several `gold_serving` views while a batch is being activated may combine the new batch of one table with the previous batch of another for the same day. The concurrent-reader test covers one table only. Options if this matters: read a pinned `batch_id` from `ops.published_batches` once and filter every table by it, put the dashboard's tables into one wide table, or use Unity Catalog multi-table transactions where available.
   - *Lock fencing:* the lease is checked and renewed before the commits that change what readers see (Silver publish, Gold activation), not before every write. Between two checks a job whose lease expired could still append invisible Gold rows or write Silver staging/ops tables. These are cleaned up or overwritten by the next run, but a strict guarantee would need a fencing token checked inside every write (e.g. a conditional commit on the lock version), which is out of scope.
+
+## ADR-013: Reporting calendar per dashboard (resolve dates first, then read snapshots)
+- **Context:** Every dashboard dataset found its own report date with `max(as_of_date)` / `DISTINCT as_of_date` over the full mart history, then aggregated all history before picking D-1 / M-1 / Y-1. Each visual could also fall back to a different date.
+- **Decision:** `gold_serving.<dashboard>_report_calendar` views (Overdue, Deposit, Card) list only dates whose batch is activated and present in the Gold table, with the actual previous / previous-month / previous-year dates (NULL when that period has no data). Every dataset resolves one report date from the calendar, filters exactly the snapshots it needs, then aggregates.
+- **Consequences:** One consistent published date for all visuals; comparisons show the real date and `N/A` instead of 0. M-1 is "last date inside the previous month" (no silent fall-back to older months). The calendar self-joins only the small list of dates.
+
+## ADR-014: Overdue source grain is not unique - keep and sum, do not quarantine
+- **Context:** The original sample (2,000 rows) has 711 rows sharing the assumed business key but none fully identical. Quarantining them as duplicates would silently drop balances.
+- **Decision:** No key-uniqueness rule for `card_overdue_source` until the source contract confirms the grain; Silver writes the day with `replace_day`; Gold sums by grain; exact Silver = Gold reconciliation of the four measures (Decimal / BIGINT) is part of the publish gate.
+- **Consequences:** Re-deliveries / corrections are still handled by `latest_delivery`, exact duplicates by `drop_exact_duplicates`. When the contract confirms a unique grain, add the FAIL rule back.
+
+## ADR-015: Stock vs flow, completeness flags, incremental monthly marts
+- **Context:** Deposit "monthly average" was computed from whatever days existed (month-end history gave a fake average); Card "using members" was `max` of daily distinct counts; history generated as month-end snapshots has no intra-month flows.
+- **Decision:** Deposit MTD average is incremental (`avg_T = (avg_{T-1}(n-1) + bal_T)/n`) and only valid with a continuous daily chain (`monthly_avg_complete`). Card monthly flows are summed over every day of the period and carry `flow_complete` / `ytd_complete`; using members are exact distinct cards from transactions MTD. `dep_mart_monthly` and `card_mart_kpi_monthly` are stored per report date and recompute only the current month (closed months copied from the previous publish date).
+- **Consequences:** Incomplete periods show `N/A` instead of misleading numbers; selecting a mid-month date never reads later data. First run after an upgrade rebuilds the monthly marts from history.
+
+## ADR-016: Star schema with conformed dimensions; marts read facts
+- **Context:** Only loans and account transactions had facts; Deposit and Card marts read Silver directly, so each mart re-derived keys and attributes.
+- **Decision:** Add `dim_card` (SCD1) and facts `fact_deposit_daily`, `fact_card_daily` (periodic snapshots) and `fact_card_transaction` (transaction, insert-only), all keyed to `dim_date`, `dim_branch`, `dim_customer` (SCD2, as-of the fact date) and `dim_product` / `dim_card`. Marts are built from the facts. `card_mart_overdue_daily` is an aggregate fact at the source grain.
+- **Consequences:** One place for keys and attributes; facts keep Silver column names so mart logic is unchanged (tests prove mart-from-fact = mart-from-Silver). `customer_sk` is NULL only for customers quarantined in Silver (an "unknown member" row is a possible follow-up).
+
+## ADR-017: Dashboard look via Vega-Lite specs, not hand-written widget JSON
+- **Context:** The original dashboards were custom HTML / Chart.js (KPI cards, gauges, two-year grouped stacks). AI/BI native widgets cannot reproduce them; Custom Visualizations (Vega-Lite) are Public Preview and their serialized widget format in `.lvdash.json` is not documented.
+- **Decision:** Keep AI/BI dashboards (no Databricks Apps, no new infrastructure). Generate Vega-Lite specs + helper datasets (`*_kpi_cards`) and a mapping README; specs are pasted in the UI. Do not emit undocumented widget JSON. Treemap stays a ranked bar (Vega-Lite has no treemap).
+- **Consequences:** One manual step per widget until a UI-created widget is exported and its real format is known; then the generator can emit them. Specs are compiled in CI and checked against dataset columns in tests.

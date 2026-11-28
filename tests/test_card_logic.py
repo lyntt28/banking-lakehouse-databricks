@@ -8,10 +8,10 @@
   vs Last Year-end (tháng 12 năm trước), rủi ro so sánh bằng pp"""
 
 import json
-import re
 from datetime import date
 
 import pytest
+from dashboard_sql import literals, localize
 from pyspark.sql import functions as F
 
 from common import gold_cards as gc
@@ -127,11 +127,7 @@ def views(spark, daily, txns):
 
 
 def run(spark, name, report_date, customer_type="consumer"):
-    sql = card_sql("")[name]
-    sql = re.sub(r"\bgold_serving\.", "gold_", sql)
-    sql = re.sub(r"\bsilver\.", "silver_", sql)
-    sql = sql.replace(":report_date", f"DATE'{report_date}'") \
-        .replace(":customer_type", f"'{customer_type}'")
+    sql = localize(card_sql("")[name], literals(report_date, customer_type=customer_type))
     return spark.sql(sql).collect()
 
 

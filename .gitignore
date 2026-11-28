@@ -232,3 +232,7 @@ spark-warehouse/
 metastore_db/
 derby.log
 data/landing/
+
+# node (CI compile Vega-Lite specs)
+node_modules/
+package-lock.json

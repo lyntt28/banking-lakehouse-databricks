@@ -4,6 +4,7 @@ và mọi cột widget dùng đều có trong kết quả dataset."""
 import re
 
 import pytest
+from dashboard_sql import localize
 from pyspark.sql import functions as F
 
 from common import gold as g
@@ -96,14 +97,7 @@ def tables(spark, results):
 
 
 def _local_sql(ds: dict, params: dict) -> str:
-    sql = "".join(ds["queryLines"])
-    sql = re.sub(r"\bgold_serving\.", "gold_", sql)
-    sql = re.sub(r"\bgold\.", "gold_", sql)
-    sql = re.sub(r"\bsilver\.", "silver_", sql)
-    sql = re.sub(r"\bops\.", "ops_", sql)
-    for k, v in params.items():
-        sql = re.sub(r":" + k + r"\b", v, sql)
-    return sql
+    return localize("".join(ds["queryLines"]), params)
 
 
 PARAMS = [{"report_date": "DATE'2026-11-01'", "customer_type": "'consumer'", "branch": "'all'",

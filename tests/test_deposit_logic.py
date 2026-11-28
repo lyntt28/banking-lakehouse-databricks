@@ -4,11 +4,11 @@ Gold: D-1 / M-1 / Y-1 bằng snapshot + equality join, khoản đã tất toán,
 average, mart tháng, lãi suất bình quân gia quyền, CASA theo KH hiệu lực, TK mở mới.
 Dashboard: chạy SQL dataset thật (common.lakeview.deposit.deposit_sql) trên temp view."""
 
-import re
 from datetime import date
 from decimal import Decimal
 
 import pytest
+from dashboard_sql import literals, localize
 
 from common import gold_deposit as gd
 from common import serving as sv
@@ -225,13 +225,7 @@ def views(spark, ref, trend):
 def run(spark, name, report_date, **p):
     params = {"region": "all", "branch": "all", "product": "all", "currency": "all",
               "nationality": "all", **p}
-    sql = deposit_sql("")[name]
-    sql = re.sub(r"\bgold_serving\.", "gold_", sql)
-    sql = re.sub(r"\bsilver\.", "silver_", sql)
-    sql = sql.replace(":report_date", f"DATE'{report_date}'")
-    for k, v in params.items():
-        sql = re.sub(r":" + k + r"\b", f"'{v}'", sql)
-    return spark.sql(sql).collect()
+    return spark.sql(localize(deposit_sql("")[name], literals(report_date, **params))).collect()
 
 
 def test_tickers_use_resolved_date_and_mtd_avg(spark, views):

@@ -3,11 +3,11 @@
 Chạy SQL dataset thật của dashboard (common.lakeview.overdue.overdue_sql) trên temp view.
 Số liệu VND, tỷ giá cố định 25.000 -> USD dễ tính tay."""
 
-import re
 from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
+from dashboard_sql import literals, localize
 
 from common import gold_cards as gc
 from common import serving as sv
@@ -60,11 +60,8 @@ def views(spark):
 
 
 def run(spark, name: str, report_date: str, branch: str = "all") -> list:
-    sql = overdue_sql("")[name]
-    sql = re.sub(r"\bgold_serving\.", "gold_", sql)
-    sql = re.sub(r"\bsilver\.", "silver_", sql)
-    sql = sql.replace(":report_date", f"DATE'{report_date}'").replace(":branch", f"'{branch}'")
-    return spark.sql(sql).collect()
+    return spark.sql(localize(overdue_sql("")[name], literals(report_date, branch=branch))) \
+        .collect()
 
 
 def _ovd(i: int) -> int:     # tổng quá hạn VND của ngày thứ i (mọi CN)
