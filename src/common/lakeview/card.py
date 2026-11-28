@@ -88,8 +88,20 @@ six AS (SELECT m.* FROM m CROSS JOIN cur
 SELECT cur.d AS report_date, m.new_m AS new_acquisition, m.eop AS customer_base,
        m.usg AS using_customer, m.spend {k} AS sales_volume_k_usd, m.bal {k} AS balance_k_usd,
        m.dpd1 / nullif(m.bal, 0) * 100 AS dpd_1p, m.dpd10 / nullif(m.bal, 0) * 100 AS dpd_10p,
-       m.dpd30 / nullif(m.bal, 0) * 100 AS dpd_30p, m.npl / nullif(m.bal, 0) * 100 AS npl
-FROM cur LEFT JOIN m ON m.year_month = cur.cm""",
+       m.dpd30 / nullif(m.bal, 0) * 100 AS dpd_30p, m.npl / nullif(m.bal, 0) * 100 AS npl,
+       -- tỷ lệ của ngày có dữ liệu liền trước (ô Comparison của counter rủi ro)
+       p.dpd_1p_prev, p.dpd_10p_prev, p.dpd_30p_prev, p.npl_prev,
+       -- tháng trước (ô Comparison của 5 KPI; luỹ kế tháng thiếu ngày -> NULL)
+       lm.new_m AS new_acquisition_lm, lm.eop AS customer_base_lm, lm.usg AS using_customer_lm,
+       lm.spend {k} AS sales_volume_k_usd_lm, lm.bal {k} AS balance_k_usd_lm
+FROM cur LEFT JOIN m ON m.year_month = cur.cm
+LEFT JOIN m lm ON lm.year_month = cur.lm
+LEFT JOIN (
+  SELECT sum(f.dpd_1p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_1p_prev,
+         sum(f.dpd_10p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_10p_prev,
+         sum(f.dpd_30p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_30p_prev,
+         sum(f.npl_90p_balance) / nullif(sum(f.balance), 0) * 100 AS npl_prev
+  FROM {D} f JOIN cur c2 ON f.as_of_date = c2.previous_date WHERE {cust}) p ON true""",
         # % thay đổi tương đối (số) + % hoàn thành chỉ tiêu; thiếu dữ liệu -> NULL
         "card_kpi_compare": month + f"""
 , t AS (SELECT substr(f.metric_code, 1, length(f.metric_code) - 3) AS code, f.period_type,
@@ -234,27 +246,19 @@ def card_dashboard(catalog: str) -> dict:
             ("using_customer", "Using Customer", "int"),
             ("sales_volume_k_usd", "Sales Volume (K USD)", "int"),
             ("balance_k_usd", "Balance (K USD)", "int")]):
-        d.counter(ds["card_kpi"], col, title, i, 3, color=c["kpi"][i], fmt=fmt)
+        d.counter(ds["card_kpi"], col, title, i, 3, color=c["kpi"][i], fmt=fmt,
+                  compare=(f"{col}_lm", "vs Last Month"))
     d.text("**Report scope**\n\nNew / Using / Sales = MTD; Base / Balance = tại ngày báo cáo. "
-           "Using = số thẻ có giao dịch (card-level).", 5, 3, 1, 3)
-    d.table(ds["card_kpi_compare"], "", [
-        ("compare", "", "text"), ("new_acquisition", "New Acquisition (%)", "num"),
-        ("customer_base", "Customer Base (%)", "num"),
-        ("using_customer", "Using Customer (%)", "num"),
-        ("sales_volume", "Sales Volume (%)", "num"), ("balance", "Balance (%)", "num")],
-        0, 6, 6, 3)
+           "Using = số thẻ có giao dịch (card-level). So sánh trong ô = tháng trước.", 5, 3, 1, 3)
 
-    y = 9   # Delinquency ngay dưới Overview
+    y = 6   # Delinquency ngay dưới Overview
     d.text("### 🟧 Delinquency", 0, y)
     for i, (col, title) in enumerate([("dpd_1p", "DPD 1+ (%)"), ("dpd_10p", "DPD 10+ (%)"),
                                       ("dpd_30p", "DPD 30+ (%)"), ("npl", "NPL (%)")]):
-        d.counter(ds["card_kpi"], col, title, 1 + i, y + 1, color=c["risk"], fmt="pct")
-    d.table(ds["card_risk_compare"], "", [
-        ("compare", "Compare", "text"), ("dpd_1p", "DPD 1+ (pp)", "num"),
-        ("dpd_10p", "DPD 10+ (pp)", "num"), ("dpd_30p", "DPD 30+ (pp)", "num"),
-        ("npl", "NPL (pp)", "num")], 1, y + 4, 4, 3)
+        d.counter(ds["card_kpi"], col, title, 1 + i, y + 1, color=c["risk"], fmt="pct",
+                  compare=(f"{col}_prev", "vs Last Day"))
 
-    y = 16
+    y = 10
     d.text("### 🟧 New Issuance vs. Termination", 0, y)
     d.chart("bar", ds["card_new_acq"], "New Acquisition", 0, y + 1, 3, 7, cat="month",
             series="channel", val="cards", layout="stack",
@@ -263,7 +267,7 @@ def card_dashboard(catalog: str) -> dict:
             val="cards", layout="group",
             colors={"New Issuance": c["new_issuance"], "Termination": c["termination"]})
 
-    y = 24
+    y = 18
     d.text("### 🟧 Sales Performance", 0, y)
     d.chart("bar", ds["card_base_using"], "Customer Base & Using Mem", 0, y + 1, 3, 7,
             cat="month", series="series", val="members", layout="group", labels=False,
@@ -276,7 +280,7 @@ def card_dashboard(catalog: str) -> dict:
     d.chart("line", ds["card_ticket"], "Spend per Member (USD)", 3, y + 8, 3, 7, cat="month",
             val="spend_per_member", single_color=c["ticket"], labels=False)
 
-    y = 40
+    y = 34
     d.text("### 🟧 Spending Distribution (MTD)", 0, y)
     for i, (donut, title) in enumerate([("sector", "By Sectors"), ("location", "By Locations"),
                                         ("channel", "By Channels")]):

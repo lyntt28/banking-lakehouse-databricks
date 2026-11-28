@@ -59,16 +59,23 @@ class Dash:
             "disaggregated": not agg}}]
 
     def counter(self, ds: str, col: str, title: str, x: int, y: int, w: int = 1, h: int = 3,
-                color: str | None = None, fmt: str | None = None) -> None:
+                color: str | None = None, fmt: str | None = None,
+                compare: tuple[str, str] | None = None) -> None:
+        """compare = (cột giá trị so sánh, nhãn): ô Comparison của counter (so với kỳ trước)."""
         enc = {"fieldName": col, "displayName": title}
         if fmt:
             enc["format"] = _number_format(fmt)
         if color:
             enc["style"] = {"color": color}
+        encodings = {"value": enc}
+        fields = [(col, f"`{col}`")]
+        if compare:
+            encodings["target"] = {"fieldName": compare[0], "displayName": compare[1]}
+            fields.append((compare[0], f"`{compare[0]}`"))
         self.place({"name": self._wid("counter"),
-                    "queries": self._query(ds, [(col, f"`{col}`")], agg=False),
+                    "queries": self._query(ds, fields, agg=False),
                     "spec": {"version": 2, "widgetType": "counter",
-                             "encodings": {"value": enc},
+                             "encodings": encodings,
                              "frame": {"showTitle": True, "title": title}}}, x, y, w, h)
 
     def chart(self, kind: str, ds: str, title: str, x: int, y: int, w: int, h: int, *,

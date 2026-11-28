@@ -331,8 +331,11 @@ def build_and_publish(spark: SparkSession, cfg: GoldConfig, day_s: str,
                 .withColumn("as_of_date", day), "dep_mart_new_accounts")
 
 
+        # lần đầu (bảng Gold chưa có): chạy tuần tự - tạo bảng đồng thời trên metastore dễ
+        # đụng nhau (bảng vừa tạo với schema rỗng); từ ngày thứ 2 mới song song
+        all_exist = all(spark.catalog.tableExists(G(t)) for t in PUBLISHED_TABLES)
         run_branches({"loan": loan_branch, "card": card_branch, "deposit": deposit_branch},
-                     parallel=cfg.parallel)
+                     parallel=cfg.parallel and all_exist)
 
         s.rows_out = fact_loan_day.count()
         ensure_held(spark, cfg.catalog)   # mất khoá giữa chừng -> KHÔNG kích hoạt (rollback)

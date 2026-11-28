@@ -182,7 +182,7 @@ def test_section_order_matches_original():
              "In & Out", "Customer Base & Using Mem", "Balance (K USD)",
              "Sales Volume (K USD)", "Spend per Member (USD)", "By Sectors", "By Locations",
              "By Channels"]
-    assert [t for t in card[6:] if t in order] == order
+    assert [t for t in card[5:] if t in order] == order
     ovd = titles("loan_overdue.lvdash.json")
     assert ovd == ["FX (VND/USD)", "Overdue Ratio", "Overdue Balance (USD)",
                    "Ending Balance (USD)", "Overdue Ratio vs Last Day / Month / Year",

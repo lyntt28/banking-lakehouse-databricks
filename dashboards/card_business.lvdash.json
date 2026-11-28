@@ -34,8 +34,20 @@
         "SELECT cur.d AS report_date, m.new_m AS new_acquisition, m.eop AS customer_base,\n",
         "       m.usg AS using_customer, m.spend / cur.usd / 1000 AS sales_volume_k_usd, m.bal / cur.usd / 1000 AS balance_k_usd,\n",
         "       m.dpd1 / nullif(m.bal, 0) * 100 AS dpd_1p, m.dpd10 / nullif(m.bal, 0) * 100 AS dpd_10p,\n",
-        "       m.dpd30 / nullif(m.bal, 0) * 100 AS dpd_30p, m.npl / nullif(m.bal, 0) * 100 AS npl\n",
-        "FROM cur LEFT JOIN m ON m.year_month = cur.cm\n"
+        "       m.dpd30 / nullif(m.bal, 0) * 100 AS dpd_30p, m.npl / nullif(m.bal, 0) * 100 AS npl,\n",
+        "       -- tỷ lệ của ngày có dữ liệu liền trước (ô Comparison của counter rủi ro)\n",
+        "       p.dpd_1p_prev, p.dpd_10p_prev, p.dpd_30p_prev, p.npl_prev,\n",
+        "       -- tháng trước (ô Comparison của 5 KPI; luỹ kế tháng thiếu ngày -> NULL)\n",
+        "       lm.new_m AS new_acquisition_lm, lm.eop AS customer_base_lm, lm.usg AS using_customer_lm,\n",
+        "       lm.spend / cur.usd / 1000 AS sales_volume_k_usd_lm, lm.bal / cur.usd / 1000 AS balance_k_usd_lm\n",
+        "FROM cur LEFT JOIN m ON m.year_month = cur.cm\n",
+        "LEFT JOIN m lm ON lm.year_month = cur.lm\n",
+        "LEFT JOIN (\n",
+        "  SELECT sum(f.dpd_1p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_1p_prev,\n",
+        "         sum(f.dpd_10p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_10p_prev,\n",
+        "         sum(f.dpd_30p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_30p_prev,\n",
+        "         sum(f.npl_90p_balance) / nullif(sum(f.balance), 0) * 100 AS npl_prev\n",
+        "  FROM gold_serving.card_mart_kpi_daily f JOIN cur c2 ON f.as_of_date = c2.previous_date WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)) p ON true\n"
       ],
       "parameters": [
         {
@@ -877,8 +889,20 @@
         "SELECT cur.d AS report_date, m.new_m AS new_acquisition, m.eop AS customer_base,\n",
         "       m.usg AS using_customer, m.spend / cur.usd / 1000 AS sales_volume_k_usd, m.bal / cur.usd / 1000 AS balance_k_usd,\n",
         "       m.dpd1 / nullif(m.bal, 0) * 100 AS dpd_1p, m.dpd10 / nullif(m.bal, 0) * 100 AS dpd_10p,\n",
-        "       m.dpd30 / nullif(m.bal, 0) * 100 AS dpd_30p, m.npl / nullif(m.bal, 0) * 100 AS npl\n",
-        "FROM cur LEFT JOIN m ON m.year_month = cur.cm) k CROSS JOIN (SELECT max(CASE WHEN line = 1 THEN new_acquisition END) AS new_acquisition_1, max(CASE WHEN line = 2 THEN new_acquisition END) AS new_acquisition_2, max(CASE WHEN line = 3 THEN new_acquisition END) AS new_acquisition_3, max(CASE WHEN line = 4 THEN new_acquisition END) AS new_acquisition_4, max(CASE WHEN line = 1 THEN customer_base END) AS customer_base_1, max(CASE WHEN line = 2 THEN customer_base END) AS customer_base_2, max(CASE WHEN line = 3 THEN customer_base END) AS customer_base_3, max(CASE WHEN line = 4 THEN customer_base END) AS customer_base_4, max(CASE WHEN line = 1 THEN using_customer END) AS using_customer_1, max(CASE WHEN line = 2 THEN using_customer END) AS using_customer_2, max(CASE WHEN line = 3 THEN using_customer END) AS using_customer_3, max(CASE WHEN line = 4 THEN using_customer END) AS using_customer_4, max(CASE WHEN line = 1 THEN sales_volume END) AS sales_volume_1, max(CASE WHEN line = 2 THEN sales_volume END) AS sales_volume_2, max(CASE WHEN line = 3 THEN sales_volume END) AS sales_volume_3, max(CASE WHEN line = 4 THEN sales_volume END) AS sales_volume_4, max(CASE WHEN line = 1 THEN balance END) AS balance_1, max(CASE WHEN line = 2 THEN balance END) AS balance_2, max(CASE WHEN line = 3 THEN balance END) AS balance_3, max(CASE WHEN line = 4 THEN balance END) AS balance_4 FROM (\n",
+        "       m.dpd30 / nullif(m.bal, 0) * 100 AS dpd_30p, m.npl / nullif(m.bal, 0) * 100 AS npl,\n",
+        "       -- tỷ lệ của ngày có dữ liệu liền trước (ô Comparison của counter rủi ro)\n",
+        "       p.dpd_1p_prev, p.dpd_10p_prev, p.dpd_30p_prev, p.npl_prev,\n",
+        "       -- tháng trước (ô Comparison của 5 KPI; luỹ kế tháng thiếu ngày -> NULL)\n",
+        "       lm.new_m AS new_acquisition_lm, lm.eop AS customer_base_lm, lm.usg AS using_customer_lm,\n",
+        "       lm.spend / cur.usd / 1000 AS sales_volume_k_usd_lm, lm.bal / cur.usd / 1000 AS balance_k_usd_lm\n",
+        "FROM cur LEFT JOIN m ON m.year_month = cur.cm\n",
+        "LEFT JOIN m lm ON lm.year_month = cur.lm\n",
+        "LEFT JOIN (\n",
+        "  SELECT sum(f.dpd_1p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_1p_prev,\n",
+        "         sum(f.dpd_10p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_10p_prev,\n",
+        "         sum(f.dpd_30p_balance) / nullif(sum(f.balance), 0) * 100 AS dpd_30p_prev,\n",
+        "         sum(f.npl_90p_balance) / nullif(sum(f.balance), 0) * 100 AS npl_prev\n",
+        "  FROM gold_serving.card_mart_kpi_daily f JOIN cur c2 ON f.as_of_date = c2.previous_date WHERE (:customer_type = 'all' OR f.cust_type = CASE :customer_type WHEN 'consumer' THEN 'CN' ELSE 'TC' END)) p ON true) k CROSS JOIN (SELECT max(CASE WHEN line = 1 THEN new_acquisition END) AS new_acquisition_1, max(CASE WHEN line = 2 THEN new_acquisition END) AS new_acquisition_2, max(CASE WHEN line = 3 THEN new_acquisition END) AS new_acquisition_3, max(CASE WHEN line = 4 THEN new_acquisition END) AS new_acquisition_4, max(CASE WHEN line = 1 THEN customer_base END) AS customer_base_1, max(CASE WHEN line = 2 THEN customer_base END) AS customer_base_2, max(CASE WHEN line = 3 THEN customer_base END) AS customer_base_3, max(CASE WHEN line = 4 THEN customer_base END) AS customer_base_4, max(CASE WHEN line = 1 THEN using_customer END) AS using_customer_1, max(CASE WHEN line = 2 THEN using_customer END) AS using_customer_2, max(CASE WHEN line = 3 THEN using_customer END) AS using_customer_3, max(CASE WHEN line = 4 THEN using_customer END) AS using_customer_4, max(CASE WHEN line = 1 THEN sales_volume END) AS sales_volume_1, max(CASE WHEN line = 2 THEN sales_volume END) AS sales_volume_2, max(CASE WHEN line = 3 THEN sales_volume END) AS sales_volume_3, max(CASE WHEN line = 4 THEN sales_volume END) AS sales_volume_4, max(CASE WHEN line = 1 THEN balance END) AS balance_1, max(CASE WHEN line = 2 THEN balance END) AS balance_2, max(CASE WHEN line = 3 THEN balance END) AS balance_3, max(CASE WHEN line = 4 THEN balance END) AS balance_4 FROM (\n",
         "WITH cur AS (\n",
         "  SELECT c.report_date AS d, c.previous_date, c.previous_month_date,\n",
         "         date_format(c.report_date, 'yyyy-MM') AS cm,\n",
@@ -1046,6 +1070,10 @@
                     {
                       "name": "new_acquisition",
                       "expression": "`new_acquisition`"
+                    },
+                    {
+                      "name": "new_acquisition_lm",
+                      "expression": "`new_acquisition_lm`"
                     }
                   ],
                   "disaggregated": true
@@ -1069,6 +1097,10 @@
                   "style": {
                     "color": "#1F2937"
                   }
+                },
+                "target": {
+                  "fieldName": "new_acquisition_lm",
+                  "displayName": "vs Last Month"
                 }
               },
               "frame": {
@@ -1096,6 +1128,10 @@
                     {
                       "name": "customer_base",
                       "expression": "`customer_base`"
+                    },
+                    {
+                      "name": "customer_base_lm",
+                      "expression": "`customer_base_lm`"
                     }
                   ],
                   "disaggregated": true
@@ -1119,6 +1155,10 @@
                   "style": {
                     "color": "#2F5597"
                   }
+                },
+                "target": {
+                  "fieldName": "customer_base_lm",
+                  "displayName": "vs Last Month"
                 }
               },
               "frame": {
@@ -1146,6 +1186,10 @@
                     {
                       "name": "using_customer",
                       "expression": "`using_customer`"
+                    },
+                    {
+                      "name": "using_customer_lm",
+                      "expression": "`using_customer_lm`"
                     }
                   ],
                   "disaggregated": true
@@ -1169,6 +1213,10 @@
                   "style": {
                     "color": "#C55A11"
                   }
+                },
+                "target": {
+                  "fieldName": "using_customer_lm",
+                  "displayName": "vs Last Month"
                 }
               },
               "frame": {
@@ -1196,6 +1244,10 @@
                     {
                       "name": "sales_volume_k_usd",
                       "expression": "`sales_volume_k_usd`"
+                    },
+                    {
+                      "name": "sales_volume_k_usd_lm",
+                      "expression": "`sales_volume_k_usd_lm`"
                     }
                   ],
                   "disaggregated": true
@@ -1219,6 +1271,10 @@
                   "style": {
                     "color": "#2F5597"
                   }
+                },
+                "target": {
+                  "fieldName": "sales_volume_k_usd_lm",
+                  "displayName": "vs Last Month"
                 }
               },
               "frame": {
@@ -1246,6 +1302,10 @@
                     {
                       "name": "balance_k_usd",
                       "expression": "`balance_k_usd`"
+                    },
+                    {
+                      "name": "balance_k_usd_lm",
+                      "expression": "`balance_k_usd_lm`"
                     }
                   ],
                   "disaggregated": true
@@ -1269,6 +1329,10 @@
                   "style": {
                     "color": "#5B9BD5"
                   }
+                },
+                "target": {
+                  "fieldName": "balance_k_usd_lm",
+                  "displayName": "vs Last Month"
                 }
               },
               "frame": {
@@ -1289,7 +1353,7 @@
             "name": "text_08",
             "multilineTextboxSpec": {
               "lines": [
-                "**Report scope**\n\nNew / Using / Sales = MTD; Base / Balance = tại ngày báo cáo. Using = số thẻ có giao dịch (card-level)."
+                "**Report scope**\n\nNew / Using / Sales = MTD; Base / Balance = tại ngày báo cáo. Using = số thẻ có giao dịch (card-level). So sánh trong ô = tháng trước."
               ]
             }
           },
@@ -1302,89 +1366,7 @@
         },
         {
           "widget": {
-            "name": "table_09",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_kpi_compare",
-                  "fields": [
-                    {
-                      "name": "compare",
-                      "expression": "`compare`"
-                    },
-                    {
-                      "name": "new_acquisition",
-                      "expression": "`new_acquisition`"
-                    },
-                    {
-                      "name": "customer_base",
-                      "expression": "`customer_base`"
-                    },
-                    {
-                      "name": "using_customer",
-                      "expression": "`using_customer`"
-                    },
-                    {
-                      "name": "sales_volume",
-                      "expression": "`sales_volume`"
-                    },
-                    {
-                      "name": "balance",
-                      "expression": "`balance`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "compare",
-                    "displayName": "compare"
-                  },
-                  {
-                    "fieldName": "new_acquisition",
-                    "displayName": "New Acquisition (%)"
-                  },
-                  {
-                    "fieldName": "customer_base",
-                    "displayName": "Customer Base (%)"
-                  },
-                  {
-                    "fieldName": "using_customer",
-                    "displayName": "Using Customer (%)"
-                  },
-                  {
-                    "fieldName": "sales_volume",
-                    "displayName": "Sales Volume (%)"
-                  },
-                  {
-                    "fieldName": "balance",
-                    "displayName": "Balance (%)"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": false,
-                "title": ""
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 6,
-            "width": 6,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "text_10",
+            "name": "text_09",
             "multilineTextboxSpec": {
               "lines": [
                 "### 🟧 Delinquency"
@@ -1393,14 +1375,14 @@
           },
           "position": {
             "x": 0,
-            "y": 9,
+            "y": 6,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "counter_11",
+            "name": "counter_10",
             "queries": [
               {
                 "name": "main_query",
@@ -1410,6 +1392,10 @@
                     {
                       "name": "dpd_1p",
                       "expression": "`dpd_1p`"
+                    },
+                    {
+                      "name": "dpd_1p_prev",
+                      "expression": "`dpd_1p_prev`"
                     }
                   ],
                   "disaggregated": true
@@ -1434,6 +1420,10 @@
                   "style": {
                     "color": "#2F5597"
                   }
+                },
+                "target": {
+                  "fieldName": "dpd_1p_prev",
+                  "displayName": "vs Last Day"
                 }
               },
               "frame": {
@@ -1444,14 +1434,14 @@
           },
           "position": {
             "x": 1,
-            "y": 10,
+            "y": 7,
             "width": 1,
             "height": 3
           }
         },
         {
           "widget": {
-            "name": "counter_12",
+            "name": "counter_11",
             "queries": [
               {
                 "name": "main_query",
@@ -1461,6 +1451,10 @@
                     {
                       "name": "dpd_10p",
                       "expression": "`dpd_10p`"
+                    },
+                    {
+                      "name": "dpd_10p_prev",
+                      "expression": "`dpd_10p_prev`"
                     }
                   ],
                   "disaggregated": true
@@ -1485,6 +1479,10 @@
                   "style": {
                     "color": "#2F5597"
                   }
+                },
+                "target": {
+                  "fieldName": "dpd_10p_prev",
+                  "displayName": "vs Last Day"
                 }
               },
               "frame": {
@@ -1495,14 +1493,14 @@
           },
           "position": {
             "x": 2,
-            "y": 10,
+            "y": 7,
             "width": 1,
             "height": 3
           }
         },
         {
           "widget": {
-            "name": "counter_13",
+            "name": "counter_12",
             "queries": [
               {
                 "name": "main_query",
@@ -1512,6 +1510,10 @@
                     {
                       "name": "dpd_30p",
                       "expression": "`dpd_30p`"
+                    },
+                    {
+                      "name": "dpd_30p_prev",
+                      "expression": "`dpd_30p_prev`"
                     }
                   ],
                   "disaggregated": true
@@ -1536,6 +1538,10 @@
                   "style": {
                     "color": "#2F5597"
                   }
+                },
+                "target": {
+                  "fieldName": "dpd_30p_prev",
+                  "displayName": "vs Last Day"
                 }
               },
               "frame": {
@@ -1546,14 +1552,14 @@
           },
           "position": {
             "x": 3,
-            "y": 10,
+            "y": 7,
             "width": 1,
             "height": 3
           }
         },
         {
           "widget": {
-            "name": "counter_14",
+            "name": "counter_13",
             "queries": [
               {
                 "name": "main_query",
@@ -1563,6 +1569,10 @@
                     {
                       "name": "npl",
                       "expression": "`npl`"
+                    },
+                    {
+                      "name": "npl_prev",
+                      "expression": "`npl_prev`"
                     }
                   ],
                   "disaggregated": true
@@ -1587,6 +1597,10 @@
                   "style": {
                     "color": "#2F5597"
                   }
+                },
+                "target": {
+                  "fieldName": "npl_prev",
+                  "displayName": "vs Last Day"
                 }
               },
               "frame": {
@@ -1597,88 +1611,14 @@
           },
           "position": {
             "x": 4,
-            "y": 10,
+            "y": 7,
             "width": 1,
             "height": 3
           }
         },
         {
           "widget": {
-            "name": "table_15",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_risk_compare",
-                  "fields": [
-                    {
-                      "name": "compare",
-                      "expression": "`compare`"
-                    },
-                    {
-                      "name": "dpd_1p",
-                      "expression": "`dpd_1p`"
-                    },
-                    {
-                      "name": "dpd_10p",
-                      "expression": "`dpd_10p`"
-                    },
-                    {
-                      "name": "dpd_30p",
-                      "expression": "`dpd_30p`"
-                    },
-                    {
-                      "name": "npl",
-                      "expression": "`npl`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "compare",
-                    "displayName": "Compare"
-                  },
-                  {
-                    "fieldName": "dpd_1p",
-                    "displayName": "DPD 1+ (pp)"
-                  },
-                  {
-                    "fieldName": "dpd_10p",
-                    "displayName": "DPD 10+ (pp)"
-                  },
-                  {
-                    "fieldName": "dpd_30p",
-                    "displayName": "DPD 30+ (pp)"
-                  },
-                  {
-                    "fieldName": "npl",
-                    "displayName": "NPL (pp)"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": false,
-                "title": ""
-              }
-            }
-          },
-          "position": {
-            "x": 1,
-            "y": 13,
-            "width": 4,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "text_16",
+            "name": "text_14",
             "multilineTextboxSpec": {
               "lines": [
                 "### 🟧 New Issuance vs. Termination"
@@ -1687,14 +1627,14 @@
           },
           "position": {
             "x": 0,
-            "y": 16,
+            "y": 10,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "bar_17",
+            "name": "bar_15",
             "queries": [
               {
                 "name": "main_query",
@@ -1768,14 +1708,14 @@
           },
           "position": {
             "x": 0,
-            "y": 17,
+            "y": 11,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_18",
+            "name": "bar_16",
             "queries": [
               {
                 "name": "main_query",
@@ -1849,14 +1789,14 @@
           },
           "position": {
             "x": 3,
-            "y": 17,
+            "y": 11,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "text_19",
+            "name": "text_17",
             "multilineTextboxSpec": {
               "lines": [
                 "### 🟧 Sales Performance"
@@ -1865,14 +1805,14 @@
           },
           "position": {
             "x": 0,
-            "y": 24,
+            "y": 18,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "bar_20",
+            "name": "bar_18",
             "queries": [
               {
                 "name": "main_query",
@@ -1943,14 +1883,14 @@
           },
           "position": {
             "x": 0,
-            "y": 25,
+            "y": 19,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_21",
+            "name": "bar_19",
             "queries": [
               {
                 "name": "main_query",
@@ -2021,14 +1961,14 @@
           },
           "position": {
             "x": 3,
-            "y": 25,
+            "y": 19,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_22",
+            "name": "bar_20",
             "queries": [
               {
                 "name": "main_query",
@@ -2080,14 +2020,14 @@
           },
           "position": {
             "x": 0,
-            "y": 32,
+            "y": 26,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "line_23",
+            "name": "line_21",
             "queries": [
               {
                 "name": "main_query",
@@ -2139,14 +2079,14 @@
           },
           "position": {
             "x": 3,
-            "y": 32,
+            "y": 26,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "text_24",
+            "name": "text_22",
             "multilineTextboxSpec": {
               "lines": [
                 "### 🟧 Spending Distribution (MTD)"
@@ -2155,14 +2095,14 @@
           },
           "position": {
             "x": 0,
-            "y": 40,
+            "y": 34,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "pie_25",
+            "name": "pie_23",
             "queries": [
               {
                 "name": "main_query",
@@ -2230,14 +2170,14 @@
           },
           "position": {
             "x": 0,
-            "y": 41,
+            "y": 35,
             "width": 2,
             "height": 6
           }
         },
         {
           "widget": {
-            "name": "pie_26",
+            "name": "pie_24",
             "queries": [
               {
                 "name": "main_query",
@@ -2297,14 +2237,14 @@
           },
           "position": {
             "x": 2,
-            "y": 41,
+            "y": 35,
             "width": 2,
             "height": 6
           }
         },
         {
           "widget": {
-            "name": "pie_27",
+            "name": "pie_25",
             "queries": [
               {
                 "name": "main_query",
@@ -2364,14 +2304,14 @@
           },
           "position": {
             "x": 4,
-            "y": 41,
+            "y": 35,
             "width": 2,
             "height": 6
           }
         },
         {
           "widget": {
-            "name": "filter_28",
+            "name": "filter_26",
             "queries": [
               {
                 "name": "param_card_kpi_report_date",
@@ -2617,7 +2557,7 @@
         },
         {
           "widget": {
-            "name": "filter_29",
+            "name": "filter_27",
             "queries": [
               {
                 "name": "options",
