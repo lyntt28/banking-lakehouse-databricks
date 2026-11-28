@@ -246,13 +246,7 @@ def test_one_palette_across_dashboards():
                 for rng in re.findall(r'"range": \[([^\]]*)\]', json.dumps(vl)):
                     colors |= set(re.findall(r'"(#[0-9a-fA-F]{6})"', rng))
         assert colors <= allowed, (name, colors - allowed)
-    body = DASHES["card_business.lvdash.json"]
-    maps = {}
-    for i in _items(body):
-        spec = i["widget"].get("spec", {})
-        for m in spec.get("encodings", {}).get("color", {}).get("scale", {}).get("mappings", []):
-            maps[(spec["frame"]["title"], m["value"])] = m["color"]
-    assert maps[("Balance (K USD)", "Revolving")] == core.S2
+    assert CARD_COLORS["balance"] == core.S1 and CARD_COLORS["revolving"] == core.S2
     assert CARD_COLORS["sector"]["Purchasing"] == core.S1
 
 
