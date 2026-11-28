@@ -177,9 +177,11 @@ def test_section_order_matches_original():
     card = titles("card_business.lvdash.json")
     assert card[:5] == ["New Acquisition", "Customer Base", "Using Customer",
                         "Sales Volume (K USD)", "Balance (K USD)"]
-    order = ["New Acquisition", "In & Out", "Customer Base & Using Mem", "Balance (K USD)",
+    # Delinquency đưa lên ngay dưới Overview (theo yêu cầu)
+    order = ["DPD 1+ (%)", "DPD 10+ (%)", "DPD 30+ (%)", "NPL (%)", "New Acquisition",
+             "In & Out", "Customer Base & Using Mem", "Balance (K USD)",
              "Sales Volume (K USD)", "Spend per Member (USD)", "By Sectors", "By Locations",
-             "By Channels", "DPD 1+ (%)", "DPD 10+ (%)", "DPD 30+ (%)", "NPL (%)"]
+             "By Channels"]
     assert [t for t in card[6:] if t in order] == order
     ovd = titles("loan_overdue.lvdash.json")
     assert ovd == ["FX (VND/USD)", "Overdue Ratio", "Overdue Balance (USD)",

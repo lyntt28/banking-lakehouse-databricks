@@ -1387,7 +1387,7 @@
             "name": "text_10",
             "multilineTextboxSpec": {
               "lines": [
-                "### 🟧 New Issuance vs. Termination"
+                "### 🟧 Delinquency"
               ]
             }
           },
@@ -1400,7 +1400,301 @@
         },
         {
           "widget": {
-            "name": "bar_11",
+            "name": "counter_11",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "dpd_1p",
+                      "expression": "`dpd_1p`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "dpd_1p",
+                  "displayName": "DPD 1+ (%)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
+                  },
+                  "style": {
+                    "color": "#2F5597"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "DPD 1+ (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 10,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_12",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "dpd_10p",
+                      "expression": "`dpd_10p`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "dpd_10p",
+                  "displayName": "DPD 10+ (%)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
+                  },
+                  "style": {
+                    "color": "#2F5597"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "DPD 10+ (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 10,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_13",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "dpd_30p",
+                      "expression": "`dpd_30p`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "dpd_30p",
+                  "displayName": "DPD 30+ (%)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
+                  },
+                  "style": {
+                    "color": "#2F5597"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "DPD 30+ (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 10,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_14",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_kpi",
+                  "fields": [
+                    {
+                      "name": "npl",
+                      "expression": "`npl`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "npl",
+                  "displayName": "NPL (%)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    },
+                    "suffix": "%"
+                  },
+                  "style": {
+                    "color": "#2F5597"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "NPL (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 10,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "table_15",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "card_risk_compare",
+                  "fields": [
+                    {
+                      "name": "compare",
+                      "expression": "`compare`"
+                    },
+                    {
+                      "name": "dpd_1p",
+                      "expression": "`dpd_1p`"
+                    },
+                    {
+                      "name": "dpd_10p",
+                      "expression": "`dpd_10p`"
+                    },
+                    {
+                      "name": "dpd_30p",
+                      "expression": "`dpd_30p`"
+                    },
+                    {
+                      "name": "npl",
+                      "expression": "`npl`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "compare",
+                    "displayName": "Compare"
+                  },
+                  {
+                    "fieldName": "dpd_1p",
+                    "displayName": "DPD 1+ (pp)"
+                  },
+                  {
+                    "fieldName": "dpd_10p",
+                    "displayName": "DPD 10+ (pp)"
+                  },
+                  {
+                    "fieldName": "dpd_30p",
+                    "displayName": "DPD 30+ (pp)"
+                  },
+                  {
+                    "fieldName": "npl",
+                    "displayName": "NPL (pp)"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": false,
+                "title": ""
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 13,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "text_16",
+            "multilineTextboxSpec": {
+              "lines": [
+                "### 🟧 New Issuance vs. Termination"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 16,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_17",
             "queries": [
               {
                 "name": "main_query",
@@ -1474,14 +1768,14 @@
           },
           "position": {
             "x": 0,
-            "y": 10,
+            "y": 17,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_12",
+            "name": "bar_18",
             "queries": [
               {
                 "name": "main_query",
@@ -1555,14 +1849,14 @@
           },
           "position": {
             "x": 3,
-            "y": 10,
+            "y": 17,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "text_13",
+            "name": "text_19",
             "multilineTextboxSpec": {
               "lines": [
                 "### 🟧 Sales Performance"
@@ -1571,14 +1865,14 @@
           },
           "position": {
             "x": 0,
-            "y": 17,
+            "y": 24,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "bar_14",
+            "name": "bar_20",
             "queries": [
               {
                 "name": "main_query",
@@ -1649,14 +1943,14 @@
           },
           "position": {
             "x": 0,
-            "y": 18,
+            "y": 25,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_15",
+            "name": "bar_21",
             "queries": [
               {
                 "name": "main_query",
@@ -1727,14 +2021,14 @@
           },
           "position": {
             "x": 3,
-            "y": 18,
+            "y": 25,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "bar_16",
+            "name": "bar_22",
             "queries": [
               {
                 "name": "main_query",
@@ -1786,14 +2080,14 @@
           },
           "position": {
             "x": 0,
-            "y": 25,
+            "y": 32,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "line_17",
+            "name": "line_23",
             "queries": [
               {
                 "name": "main_query",
@@ -1845,14 +2139,14 @@
           },
           "position": {
             "x": 3,
-            "y": 25,
+            "y": 32,
             "width": 3,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "text_18",
+            "name": "text_24",
             "multilineTextboxSpec": {
               "lines": [
                 "### 🟧 Spending Distribution (MTD)"
@@ -1861,14 +2155,14 @@
           },
           "position": {
             "x": 0,
-            "y": 33,
+            "y": 40,
             "width": 6,
             "height": 1
           }
         },
         {
           "widget": {
-            "name": "pie_19",
+            "name": "pie_25",
             "queries": [
               {
                 "name": "main_query",
@@ -1936,14 +2230,14 @@
           },
           "position": {
             "x": 0,
-            "y": 34,
+            "y": 41,
             "width": 2,
             "height": 6
           }
         },
         {
           "widget": {
-            "name": "pie_20",
+            "name": "pie_26",
             "queries": [
               {
                 "name": "main_query",
@@ -2003,14 +2297,14 @@
           },
           "position": {
             "x": 2,
-            "y": 34,
+            "y": 41,
             "width": 2,
             "height": 6
           }
         },
         {
           "widget": {
-            "name": "pie_21",
+            "name": "pie_27",
             "queries": [
               {
                 "name": "main_query",
@@ -2070,303 +2364,9 @@
           },
           "position": {
             "x": 4,
-            "y": 34,
+            "y": 41,
             "width": 2,
             "height": 6
-          }
-        },
-        {
-          "widget": {
-            "name": "text_22",
-            "multilineTextboxSpec": {
-              "lines": [
-                "### 🟧 Delinquency"
-              ]
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 40,
-            "width": 6,
-            "height": 1
-          }
-        },
-        {
-          "widget": {
-            "name": "counter_23",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_kpi",
-                  "fields": [
-                    {
-                      "name": "dpd_1p",
-                      "expression": "`dpd_1p`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "dpd_1p",
-                  "displayName": "DPD 1+ (%)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#2F5597"
-                  }
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "DPD 1+ (%)"
-              }
-            }
-          },
-          "position": {
-            "x": 1,
-            "y": 41,
-            "width": 1,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "counter_24",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_kpi",
-                  "fields": [
-                    {
-                      "name": "dpd_10p",
-                      "expression": "`dpd_10p`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "dpd_10p",
-                  "displayName": "DPD 10+ (%)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#2F5597"
-                  }
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "DPD 10+ (%)"
-              }
-            }
-          },
-          "position": {
-            "x": 2,
-            "y": 41,
-            "width": 1,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "counter_25",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_kpi",
-                  "fields": [
-                    {
-                      "name": "dpd_30p",
-                      "expression": "`dpd_30p`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "dpd_30p",
-                  "displayName": "DPD 30+ (%)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#2F5597"
-                  }
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "DPD 30+ (%)"
-              }
-            }
-          },
-          "position": {
-            "x": 3,
-            "y": 41,
-            "width": 1,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "counter_26",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_kpi",
-                  "fields": [
-                    {
-                      "name": "npl",
-                      "expression": "`npl`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "counter",
-              "encodings": {
-                "value": {
-                  "fieldName": "npl",
-                  "displayName": "NPL (%)",
-                  "format": {
-                    "type": "number-plain",
-                    "decimalPlaces": {
-                      "type": "exact",
-                      "places": 2
-                    },
-                    "suffix": "%"
-                  },
-                  "style": {
-                    "color": "#2F5597"
-                  }
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "NPL (%)"
-              }
-            }
-          },
-          "position": {
-            "x": 4,
-            "y": 41,
-            "width": 1,
-            "height": 3
-          }
-        },
-        {
-          "widget": {
-            "name": "table_27",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "card_risk_compare",
-                  "fields": [
-                    {
-                      "name": "compare",
-                      "expression": "`compare`"
-                    },
-                    {
-                      "name": "dpd_1p",
-                      "expression": "`dpd_1p`"
-                    },
-                    {
-                      "name": "dpd_10p",
-                      "expression": "`dpd_10p`"
-                    },
-                    {
-                      "name": "dpd_30p",
-                      "expression": "`dpd_30p`"
-                    },
-                    {
-                      "name": "npl",
-                      "expression": "`npl`"
-                    }
-                  ],
-                  "disaggregated": true
-                }
-              }
-            ],
-            "spec": {
-              "version": 2,
-              "widgetType": "table",
-              "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "compare",
-                    "displayName": "compare"
-                  },
-                  {
-                    "fieldName": "dpd_1p",
-                    "displayName": "DPD 1+ (pp)"
-                  },
-                  {
-                    "fieldName": "dpd_10p",
-                    "displayName": "DPD 10+ (pp)"
-                  },
-                  {
-                    "fieldName": "dpd_30p",
-                    "displayName": "DPD 30+ (pp)"
-                  },
-                  {
-                    "fieldName": "npl",
-                    "displayName": "NPL (pp)"
-                  }
-                ]
-              },
-              "frame": {
-                "showTitle": false,
-                "title": ""
-              }
-            }
-          },
-          "position": {
-            "x": 1,
-            "y": 44,
-            "width": 4,
-            "height": 2
           }
         },
         {

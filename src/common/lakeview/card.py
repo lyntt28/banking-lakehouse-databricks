@@ -244,7 +244,17 @@ def card_dashboard(catalog: str) -> dict:
         ("sales_volume", "Sales Volume (%)", "num"), ("balance", "Balance (%)", "num")],
         0, 6, 6, 3)
 
-    y = 9
+    y = 9   # Delinquency ngay dưới Overview
+    d.text("### 🟧 Delinquency", 0, y)
+    for i, (col, title) in enumerate([("dpd_1p", "DPD 1+ (%)"), ("dpd_10p", "DPD 10+ (%)"),
+                                      ("dpd_30p", "DPD 30+ (%)"), ("npl", "NPL (%)")]):
+        d.counter(ds["card_kpi"], col, title, 1 + i, y + 1, color=c["risk"], fmt="pct")
+    d.table(ds["card_risk_compare"], "", [
+        ("compare", "Compare", "text"), ("dpd_1p", "DPD 1+ (pp)", "num"),
+        ("dpd_10p", "DPD 10+ (pp)", "num"), ("dpd_30p", "DPD 30+ (pp)", "num"),
+        ("npl", "NPL (pp)", "num")], 1, y + 4, 4, 3)
+
+    y = 16
     d.text("### 🟧 New Issuance vs. Termination", 0, y)
     d.chart("bar", ds["card_new_acq"], "New Acquisition", 0, y + 1, 3, 7, cat="month",
             series="channel", val="cards", layout="stack",
@@ -253,7 +263,7 @@ def card_dashboard(catalog: str) -> dict:
             val="cards", layout="group",
             colors={"New Issuance": c["new_issuance"], "Termination": c["termination"]})
 
-    y = 17
+    y = 24
     d.text("### 🟧 Sales Performance", 0, y)
     d.chart("bar", ds["card_base_using"], "Customer Base & Using Mem", 0, y + 1, 3, 7,
             cat="month", series="series", val="members", layout="group", labels=False,
@@ -266,22 +276,13 @@ def card_dashboard(catalog: str) -> dict:
     d.chart("line", ds["card_ticket"], "Spend per Member (USD)", 3, y + 8, 3, 7, cat="month",
             val="spend_per_member", single_color=c["ticket"], labels=False)
 
-    y = 33
+    y = 40
     d.text("### 🟧 Spending Distribution (MTD)", 0, y)
     for i, (donut, title) in enumerate([("sector", "By Sectors"), ("location", "By Locations"),
                                         ("channel", "By Channels")]):
         d.chart("pie", ds[f"card_mix_{donut}"], title, 2 * i, y + 1, 2, 6, cat="slice",
                 val="amount", colors=c[donut])
 
-    y = 40
-    d.text("### 🟧 Delinquency", 0, y)
-    for i, (col, title) in enumerate([("dpd_1p", "DPD 1+ (%)"), ("dpd_10p", "DPD 10+ (%)"),
-                                      ("dpd_30p", "DPD 30+ (%)"), ("npl", "NPL (%)")]):
-        d.counter(ds["card_kpi"], col, title, 1 + i, y + 1, color=c["risk"], fmt="pct")
-    d.table(ds["card_risk_compare"], "", [
-        ("compare", "", "text"), ("dpd_1p", "DPD 1+ (pp)", "num"),
-        ("dpd_10p", "DPD 10+ (pp)", "num"), ("dpd_30p", "DPD 30+ (pp)", "num"),
-        ("npl", "NPL (pp)", "num")], 1, y + 4, 4, 2)
     d.param_filter("report_date", "Report date", "filter-date-picker", 4, 0)
     d.param_filter("customer_type", "Customer type", "filter-single-select", 5, 0,
                    options_ds=ds_ct, options_col="customer_type")
