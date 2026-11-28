@@ -72,9 +72,11 @@ six AS (SELECT m.* FROM m CROSS JOIN cur
         WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))"""
     k = "/ cur.usd / 1000"
     tg_cols = ",\n".join(
-        f"  sum(CASE WHEN t.code = '{code}' AND t.period_type = 'MONTH' THEN t.target_value END)"
+        f"  sum(CASE WHEN t.code = 'CARD_{code}' AND t.period_type = 'MONTH' "
+        f"THEN t.target_value END)"
         f" AS {col}_tm,\n"
-        f"  sum(CASE WHEN t.code = '{code}' AND t.period_type = 'YEAR' THEN t.target_value END)"
+        f"  sum(CASE WHEN t.code = 'CARD_{code}' AND t.period_type = 'YEAR' "
+        f"THEN t.target_value END)"
         f" AS {col}_ty" for col, code, _ in KPI_CODES)
     mix_rows = {
         "sector": [("Purchasing", "purchase"), ("Installment", "installment"),
@@ -176,9 +178,10 @@ ORDER BY l.line""",
 SELECT explode(array('consumer', 'corporate', 'all')) AS customer_type""",
     }
     for donut, rows in mix_rows.items():
-        out[f"card_mix_{donut}"] = month + "\n" + "\nUNION ALL ".join(
-            f"SELECT '{label}' AS slice, m.{col} AS amount FROM m CROSS JOIN cur "
-            f"WHERE m.year_month = cur.cm" for label, col in rows)
+        pairs = ", ".join(f"'{label}', m.{col}" for label, col in rows)
+        out[f"card_mix_{donut}"] = month + f"""
+SELECT stack({len(rows)}, {pairs}) AS (slice, amount)
+FROM m CROSS JOIN cur WHERE m.year_month = cur.cm"""
     return out
 
 

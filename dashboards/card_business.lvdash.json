@@ -109,16 +109,16 @@
         "          AND ((f.period_type = 'MONTH' AND f.period = cur.cm)\n",
         "               OR (f.period_type = 'YEAR' AND f.period = CAST(year(cur.d) AS STRING)))),\n",
         "tg AS (SELECT\n",
-        "  sum(CASE WHEN t.code = 'NEW_ACQ' AND t.period_type = 'MONTH' THEN t.target_value END) AS new_acquisition_tm,\n",
-        "  sum(CASE WHEN t.code = 'NEW_ACQ' AND t.period_type = 'YEAR' THEN t.target_value END) AS new_acquisition_ty,\n",
-        "  sum(CASE WHEN t.code = 'CUSTOMER_BASE' AND t.period_type = 'MONTH' THEN t.target_value END) AS customer_base_tm,\n",
-        "  sum(CASE WHEN t.code = 'CUSTOMER_BASE' AND t.period_type = 'YEAR' THEN t.target_value END) AS customer_base_ty,\n",
-        "  sum(CASE WHEN t.code = 'USING' AND t.period_type = 'MONTH' THEN t.target_value END) AS using_customer_tm,\n",
-        "  sum(CASE WHEN t.code = 'USING' AND t.period_type = 'YEAR' THEN t.target_value END) AS using_customer_ty,\n",
-        "  sum(CASE WHEN t.code = 'SALES_VOLUME' AND t.period_type = 'MONTH' THEN t.target_value END) AS sales_volume_tm,\n",
-        "  sum(CASE WHEN t.code = 'SALES_VOLUME' AND t.period_type = 'YEAR' THEN t.target_value END) AS sales_volume_ty,\n",
-        "  sum(CASE WHEN t.code = 'BALANCE' AND t.period_type = 'MONTH' THEN t.target_value END) AS balance_tm,\n",
-        "  sum(CASE WHEN t.code = 'BALANCE' AND t.period_type = 'YEAR' THEN t.target_value END) AS balance_ty\n",
+        "  sum(CASE WHEN t.code = 'CARD_NEW_ACQ' AND t.period_type = 'MONTH' THEN t.target_value END) AS new_acquisition_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_NEW_ACQ' AND t.period_type = 'YEAR' THEN t.target_value END) AS new_acquisition_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_CUSTOMER_BASE' AND t.period_type = 'MONTH' THEN t.target_value END) AS customer_base_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_CUSTOMER_BASE' AND t.period_type = 'YEAR' THEN t.target_value END) AS customer_base_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_USING' AND t.period_type = 'MONTH' THEN t.target_value END) AS using_customer_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_USING' AND t.period_type = 'YEAR' THEN t.target_value END) AS using_customer_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_SALES_VOLUME' AND t.period_type = 'MONTH' THEN t.target_value END) AS sales_volume_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_SALES_VOLUME' AND t.period_type = 'YEAR' THEN t.target_value END) AS sales_volume_ty,\n",
+        "  sum(CASE WHEN t.code = 'CARD_BALANCE' AND t.period_type = 'MONTH' THEN t.target_value END) AS balance_tm,\n",
+        "  sum(CASE WHEN t.code = 'CARD_BALANCE' AND t.period_type = 'YEAR' THEN t.target_value END) AS balance_ty\n",
         "  FROM t),\n",
         "c AS (SELECT * FROM m CROSS JOIN cur WHERE m.year_month = cur.cm),\n",
         "p AS (SELECT m.*, 1 AS line FROM m CROSS JOIN cur WHERE m.year_month = cur.lm\n",
@@ -603,10 +603,8 @@
         "  GROUP BY f.year_month),\n",
         "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
         "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
-        "SELECT 'Purchasing' AS slice, m.purchase AS amount FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n",
-        "UNION ALL SELECT 'Installment' AS slice, m.installment AS amount FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n",
-        "UNION ALL SELECT 'Cash Advance' AS slice, m.cash AS amount FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n",
-        "UNION ALL SELECT 'Flexi' AS slice, m.flexi AS amount FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n"
+        "SELECT stack(4, 'Purchasing', m.purchase, 'Installment', m.installment, 'Cash Advance', m.cash, 'Flexi', m.flexi) AS (slice, amount)\n",
+        "FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n"
       ],
       "parameters": [
         {
@@ -672,8 +670,8 @@
         "  GROUP BY f.year_month),\n",
         "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
         "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
-        "SELECT 'Domestic' AS slice, m.domestic AS amount FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n",
-        "UNION ALL SELECT 'X-Border' AS slice, m.xborder AS amount FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n"
+        "SELECT stack(2, 'Domestic', m.domestic, 'X-Border', m.xborder) AS (slice, amount)\n",
+        "FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n"
       ],
       "parameters": [
         {
@@ -739,8 +737,8 @@
         "  GROUP BY f.year_month),\n",
         "six AS (SELECT m.* FROM m CROSS JOIN cur\n",
         "        WHERE m.year_month > date_format(add_months(cur.d, -6), 'yyyy-MM'))\n",
-        "SELECT 'POS (Offline)' AS slice, m.pos AS amount FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n",
-        "UNION ALL SELECT 'Online' AS slice, m.online AS amount FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n"
+        "SELECT stack(2, 'POS (Offline)', m.pos, 'Online', m.online) AS (slice, amount)\n",
+        "FROM m CROSS JOIN cur WHERE m.year_month = cur.cm\n"
       ],
       "parameters": [
         {

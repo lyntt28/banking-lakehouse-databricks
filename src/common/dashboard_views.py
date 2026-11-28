@@ -296,7 +296,6 @@ _v("deposit", 8, "v_edusave_new_accounts",
    "Edu-Save new open accounts, cumulative by month",
    f"""
 SELECT open_month, sum(new_accounts) AS new_accounts,
-       -- luỹ kế sau khi cộng chi nhánh (CN không mở TK tháng đó vẫn được tính đúng)
        sum(sum(new_accounts)) OVER (PARTITION BY substr(open_month, 1, 4)
                                     ORDER BY open_month) AS cumulative_ytd
 FROM {G}.dep_mart_new_accounts WHERE product_type = 'EDUSAVE' AND as_of_date = {PUB}
