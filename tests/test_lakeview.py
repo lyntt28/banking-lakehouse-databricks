@@ -215,19 +215,35 @@ def test_bundle_files_up_to_date():
                                  "PYTHONPATH=src python -m common.lakeview dashboards")
 
 
-def test_card_colors_from_original_palette():
-    """Màu theo card_dashboard_final.html (Dashboard_CARD_v4): xanh navy / xanh nhạt / vàng."""
+def test_one_palette_across_dashboards():
+    """Một bảng màu chung (core): mọi màu trong mọi dashboard thuộc bảng màu đã kiểm tra;
+    cùng thực thể cùng màu (vd Smart Credit / CASA / Overdue amount = S1)."""
+    from common.lakeview import core
+
+    allowed = set(core.SERIES) | {core.NEUTRAL, core.TEXT, core.S1_LIGHT, core.S2_LIGHT,
+                                  core.S3_LIGHT} | set(core.SEVERITY)
+    for name, body in DASHES.items():
+        if name == "ops_monitor.lvdash.json":
+            continue
+        colors = set()
+        for i in _items(body):
+            spec = i["widget"].get("spec", {})
+            enc = spec.get("encodings", {})
+            colors |= {m["color"] for m in enc.get("color", {}).get("scale", {})
+                       .get("mappings", [])}
+            colors |= set(spec.get("mark", {}).get("colors", []))
+            if "style" in enc.get("value", {}):
+                colors.add(enc["value"]["style"]["color"])
+        assert colors <= allowed, (name, colors - allowed)
     body = DASHES["card_business.lvdash.json"]
     maps = {}
     for i in _items(body):
         spec = i["widget"].get("spec", {})
         for m in spec.get("encodings", {}).get("color", {}).get("scale", {}).get("mappings", []):
             maps[(spec["frame"]["title"], m["value"])] = m["color"]
-    assert maps[("New Acquisition", "Smart Credit")] == "#4472C4"
-    assert maps[("New Acquisition", "Branches")] == "#B4C7E7"
-    assert maps[("In & Out", "New Issuance")] == "#2F5597"
-    assert maps[("Balance (K USD)", "Revolving")] == "#BF9000"
-    assert maps[("By Sectors", "Purchasing")] == CARD_COLORS["sector"]["Purchasing"] == "#2F5597"
+    assert maps[("New Acquisition", "Smart Credit")] == core.S1
+    assert maps[("Balance (K USD)", "Revolving")] == core.S2
+    assert maps[("By Sectors", "Purchasing")] == CARD_COLORS["sector"]["Purchasing"] == core.S1
 
 
 def test_filters_bound_on_every_page():
