@@ -68,11 +68,11 @@
       "condition": [
         {
           "test": "isValid(datum._val) && datum._val > 0",
-          "value": "#c62828"
+          "value": "#dc2626"
         },
         {
           "test": "isValid(datum._val) && datum._val < 0",
-          "value": "#2e7d32"
+          "value": "#16a34a"
         }
       ],
       "value": "#9e9e9e"
