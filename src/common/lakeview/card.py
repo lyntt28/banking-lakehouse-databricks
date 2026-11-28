@@ -259,22 +259,23 @@ def card_dashboard(catalog: str) -> dict:
     d.custom_viz(ds["card_new_acq"], "New Acquisition", vega.stacked_with_total(
         "month", "channel", "cards", {"Smart Credit": c["smart_credit"],
                                       "Branches": c["branches"]}), 0, y + 1, 3, 7)
-    d.chart("bar", ds["card_in_out"], "In & Out", 3, y + 1, 3, 7, cat="month", series="series",
-            val="cards", layout="group",
-            colors={"New Issuance": c["new_issuance"], "Termination": c["termination"]})
+    d.custom_viz(ds["card_in_out"], "In & Out", vega.bars(
+        "month", "cards", "series", {"New Issuance": c["new_issuance"],
+                                     "Termination": c["termination"]}, labels=True),
+        3, y + 1, 3, 7)
 
     y = 19
     d.text("### 🟧 Sales Performance", 0, y)
-    d.chart("bar", ds["card_base_using"], "Customer Base & Using Mem", 0, y + 1, 3, 7,
-            cat="month", series="series", val="members", layout="group", labels=False,
-            colors={"Customer Base": c["base"], "Using Mem": c["using"]})
-    d.chart("bar", ds["card_balance"], "Balance (K USD)", 3, y + 1, 3, 7, cat="month",
-            series="series", val="k_usd", layout="group", labels=False,
-            colors={"Balance": c["balance"], "Revolving": c["revolving"]})
-    d.chart("bar", ds["card_volume"], "Sales Volume (K USD)", 0, y + 8, 3, 7, cat="month",
-            val="k_usd", single_color=c["volume"], labels=False)
-    d.chart("line", ds["card_ticket"], "Spend per Member (USD)", 3, y + 8, 3, 7, cat="month",
-            val="spend_per_member", single_color=c["ticket"], labels=False)
+    d.custom_viz(ds["card_base_using"], "Customer Base & Using Mem", vega.bars(
+        "month", "members", "series", {"Customer Base": c["base"], "Using Mem": c["using"]}),
+        0, y + 1, 3, 7)
+    d.custom_viz(ds["card_balance"], "Balance (K USD)", vega.bars(
+        "month", "k_usd", "series", {"Balance": c["balance"], "Revolving": c["revolving"]}),
+        3, y + 1, 3, 7)
+    d.custom_viz(ds["card_volume"], "Sales Volume (K USD)", vega.bars(
+        "month", "k_usd", color=c["volume"], labels=True), 0, y + 8, 3, 7)
+    d.custom_viz(ds["card_ticket"], "Spend per Member (USD)", vega.line(
+        "month", "spend_per_member", c["ticket"]), 3, y + 8, 3, 7)
 
     y = 35
     d.text("### 🟧 Spending Distribution (MTD)", 0, y)

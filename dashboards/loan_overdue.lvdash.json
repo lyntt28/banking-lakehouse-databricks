@@ -1191,7 +1191,7 @@
         },
         {
           "widget": {
-            "name": "bar_08",
+            "name": "viz_08",
             "queries": [
               {
                 "name": "main_query",
@@ -1199,82 +1199,51 @@
                   "datasetName": "ovd_debt_groups",
                   "fields": [
                     {
-                      "name": "month",
-                      "expression": "`month`"
-                    },
-                    {
                       "name": "del_grp",
                       "expression": "`del_grp`"
                     },
                     {
-                      "name": "sum(overdue_k_usd)",
-                      "expression": "SUM(`overdue_k_usd`)"
+                      "name": "month",
+                      "expression": "`month`"
+                    },
+                    {
+                      "name": "overdue_k_usd",
+                      "expression": "`overdue_k_usd`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "month"
-                },
-                "y": {
-                  "fieldName": "sum(overdue_k_usd)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "Overdue Amount (1000 USD)"
-                },
-                "color": {
-                  "fieldName": "del_grp",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "1-10",
-                        "color": "#f3e3b0"
-                      },
-                      {
-                        "value": "11-90",
-                        "color": "#e2c66b"
-                      },
-                      {
-                        "value": "91-180",
-                        "color": "#bf9000"
-                      },
-                      {
-                        "value": "181-360",
-                        "color": "#c55a11"
-                      },
-                      {
-                        "value": "361+",
-                        "color": "#843c0c"
-                      }
-                    ]
-                  },
-                  "displayName": "Series",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Overdue Amount by Debt Groups"
+                "title": {
+                  "value": "Overdue Amount by Debt Groups",
+                  "fields": []
+                }
               },
-              "mark": {
-                "layout": "stack"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"month\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": null,\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"y\": {\n     \"field\": \"overdue_k_usd\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": \"Overdue Amount (1000 USD)\",\n     \"stack\": \"zero\"\n    },\n    \"color\": {\n     \"field\": \"del_grp\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"1-10\",\n       \"11-90\",\n       \"91-180\",\n       \"181-360\",\n       \"361+\"\n      ],\n      \"range\": [\n       \"#f3e3b0\",\n       \"#e2c66b\",\n       \"#bf9000\",\n       \"#c55a11\",\n       \"#843c0c\"\n      ]\n     }\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "del_grp"
+                  },
+                  {
+                    "fieldName": "month"
+                  },
+                  {
+                    "fieldName": "overdue_k_usd"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1287,7 +1256,7 @@
         },
         {
           "widget": {
-            "name": "pie_09",
+            "name": "viz_09",
             "queries": [
               {
                 "name": "main_query",
@@ -1295,46 +1264,44 @@
                   "datasetName": "ovd_product",
                   "fields": [
                     {
-                      "name": "product_group",
-                      "expression": "`product_group`"
+                      "name": "overdue_k_usd",
+                      "expression": "`overdue_k_usd`"
                     },
                     {
-                      "name": "sum(overdue_k_usd)",
-                      "expression": "SUM(`overdue_k_usd`)"
+                      "name": "product_group",
+                      "expression": "`product_group`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "pie",
-              "encodings": {
-                "angle": {
-                  "fieldName": "sum(overdue_k_usd)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "1000 USD"
-                },
-                "color": {
-                  "fieldName": "product_group",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "product_group",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Overdue Amount by Product Groups"
+                "title": {
+                  "value": "Overdue Amount by Product Groups",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"joinaggregate\": [\n    {\n     \"op\": \"sum\",\n     \"field\": \"overdue_k_usd\",\n     \"as\": \"_tot\"\n    }\n   ]\n  },\n  {\n   \"calculate\": \"datum.overdue_k_usd / datum._tot\",\n   \"as\": \"_share\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height) * 0.30\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height) * 0.42\"\n    },\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"theta\": {\n     \"field\": \"overdue_k_usd\",\n     \"type\": \"quantitative\",\n     \"stack\": true\n    },\n    \"color\": {\n     \"field\": \"product_group\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\",\n       \"#2f5597\",\n       \"#70ad47\",\n       \"#c55a11\",\n       \"#5b9bd5\"\n      ]\n     },\n     \"legend\": {\n      \"orient\": \"bottom\",\n      \"columns\": 2,\n      \"labelLimit\": 120\n     }\n    },\n    \"order\": {\n     \"field\": \"product_group\",\n     \"sort\": \"ascending\"\n    }\n   }\n  },\n  {\n   \"transform\": [\n    {\n     \"window\": [\n      {\n       \"op\": \"row_number\",\n       \"as\": \"_rk\"\n      }\n     ],\n     \"sort\": [\n      {\n       \"field\": \"overdue_k_usd\",\n       \"order\": \"descending\"\n      }\n     ]\n    },\n    {\n     \"filter\": \"datum._rk == 1\"\n    }\n   ],\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 16,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#333\"\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"_share\",\n     \"format\": \".1%\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "overdue_k_usd"
+                  },
+                  {
+                    "fieldName": "product_group"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1347,7 +1314,7 @@
         },
         {
           "widget": {
-            "name": "bar_10",
+            "name": "viz_10",
             "queries": [
               {
                 "name": "main_query",
@@ -1355,51 +1322,44 @@
                   "datasetName": "ovd_product_top5",
                   "fields": [
                     {
-                      "name": "product_group",
-                      "expression": "`product_group`"
+                      "name": "overdue_ratio",
+                      "expression": "`overdue_ratio`"
                     },
                     {
-                      "name": "sum(overdue_ratio)",
-                      "expression": "SUM(`overdue_ratio`)"
+                      "name": "product_group",
+                      "expression": "`product_group`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "sum(overdue_ratio)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "Overdue Ratio (%)"
-                },
-                "y": {
-                  "fieldName": "product_group",
-                  "scale": {
-                    "type": "categorical",
-                    "sort": {
-                      "by": "x-reversed"
-                    }
-                  },
-                  "displayName": "product_group"
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Overdue Ratio by Product Groups"
+                "title": {
+                  "value": "Overdue Ratio by Product Groups",
+                  "fields": []
+                }
               },
-              "mark": {
-                "colors": [
-                  "#4472c4"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"tooltip\": true,\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"y\": {\n     \"field\": \"product_group\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": \"-x\",\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"x\": {\n     \"field\": \"overdue_ratio\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": \"Overdue Ratio (%)\",\n     \"stack\": null\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#444\",\n    \"align\": \"left\",\n    \"dx\": 3\n   },\n   \"encoding\": {\n    \"y\": {\n     \"field\": \"product_group\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": \"-x\",\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"x\": {\n     \"field\": \"overdue_ratio\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": \"Overdue Ratio (%)\",\n     \"stack\": null\n    },\n    \"text\": {\n     \"field\": \"overdue_ratio\",\n     \"aggregate\": \"sum\",\n     \"format\": \".2f\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "overdue_ratio"
+                  },
+                  {
+                    "fieldName": "product_group"
+                  }
                 ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1412,7 +1372,7 @@
         },
         {
           "widget": {
-            "name": "bar_11",
+            "name": "viz_11",
             "queries": [
               {
                 "name": "main_query",
@@ -1424,47 +1384,40 @@
                       "expression": "`branch`"
                     },
                     {
-                      "name": "sum(overdue_ratio)",
-                      "expression": "SUM(`overdue_ratio`)"
+                      "name": "overdue_ratio",
+                      "expression": "`overdue_ratio`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "sum(overdue_ratio)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "Overdue Ratio (%)"
-                },
-                "y": {
-                  "fieldName": "branch",
-                  "scale": {
-                    "type": "categorical",
-                    "sort": {
-                      "by": "x-reversed"
-                    }
-                  },
-                  "displayName": "branch"
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Top 5 Branches by Overdue Ratio"
+                "title": {
+                  "value": "Top 5 Branches by Overdue Ratio",
+                  "fields": []
+                }
               },
-              "mark": {
-                "colors": [
-                  "#bf9000"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"tooltip\": true,\n    \"color\": \"#bf9000\"\n   },\n   \"encoding\": {\n    \"y\": {\n     \"field\": \"branch\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": \"-x\",\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"x\": {\n     \"field\": \"overdue_ratio\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": \"Overdue Ratio (%)\",\n     \"stack\": null\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#444\",\n    \"align\": \"left\",\n    \"dx\": 3\n   },\n   \"encoding\": {\n    \"y\": {\n     \"field\": \"branch\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": \"-x\",\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"x\": {\n     \"field\": \"overdue_ratio\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": \"Overdue Ratio (%)\",\n     \"stack\": null\n    },\n    \"text\": {\n     \"field\": \"overdue_ratio\",\n     \"aggregate\": \"sum\",\n     \"format\": \".2f\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "branch"
+                  },
+                  {
+                    "fieldName": "overdue_ratio"
+                  }
                 ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1477,7 +1430,7 @@
         },
         {
           "widget": {
-            "name": "bar_12",
+            "name": "viz_12",
             "queries": [
               {
                 "name": "main_query",
@@ -1489,47 +1442,40 @@
                       "expression": "`branch`"
                     },
                     {
-                      "name": "sum(overdue_k_usd)",
-                      "expression": "SUM(`overdue_k_usd`)"
+                      "name": "overdue_k_usd",
+                      "expression": "`overdue_k_usd`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "sum(overdue_k_usd)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "Overdue Amount (1000 USD)"
-                },
-                "y": {
-                  "fieldName": "branch",
-                  "scale": {
-                    "type": "categorical",
-                    "sort": {
-                      "by": "x-reversed"
-                    }
-                  },
-                  "displayName": "branch"
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Top 5 Branches - Overdue Amount"
+                "title": {
+                  "value": "Top 5 Branches - Overdue Amount",
+                  "fields": []
+                }
               },
-              "mark": {
-                "colors": [
-                  "#4472c4"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"tooltip\": true,\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"y\": {\n     \"field\": \"branch\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": \"-x\",\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"x\": {\n     \"field\": \"overdue_k_usd\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": \"Overdue Amount (1000 USD)\",\n     \"stack\": null\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#444\",\n    \"align\": \"left\",\n    \"dx\": 3\n   },\n   \"encoding\": {\n    \"y\": {\n     \"field\": \"branch\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": \"-x\",\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"x\": {\n     \"field\": \"overdue_k_usd\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": \"Overdue Amount (1000 USD)\",\n     \"stack\": null\n    },\n    \"text\": {\n     \"field\": \"overdue_k_usd\",\n     \"aggregate\": \"sum\",\n     \"format\": \",.0f\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "branch"
+                  },
+                  {
+                    "fieldName": "overdue_k_usd"
+                  }
                 ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },

@@ -1,0 +1,110 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
+  "layer": [
+    {
+      "mark": {
+        "type": "line",
+        "color": "#bf9000",
+        "strokeWidth": 2.5,
+        "tooltip": true,
+        "point": {
+          "filled": true,
+          "size": 45,
+          "color": "#bf9000"
+        }
+      },
+      "encoding": {
+        "x": {
+          "field": "month",
+          "type": "ordinal",
+          "title": null,
+          "axis": {
+            "labelAngle": 0
+          }
+        },
+        "y": {
+          "field": "spend_per_member",
+          "type": "quantitative",
+          "title": null,
+          "scale": {
+            "zero": false,
+            "padding": 20
+          }
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "dy": -10,
+        "fontSize": 10,
+        "color": "#bf9000"
+      },
+      "encoding": {
+        "x": {
+          "field": "month",
+          "type": "ordinal",
+          "title": null,
+          "axis": {
+            "labelAngle": 0
+          }
+        },
+        "y": {
+          "field": "spend_per_member",
+          "type": "quantitative",
+          "title": null,
+          "scale": {
+            "zero": false,
+            "padding": 20
+          }
+        },
+        "text": {
+          "field": "spend_per_member",
+          "format": ",.0f"
+        }
+      }
+    }
+  ]
+}

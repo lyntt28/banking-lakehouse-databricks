@@ -278,27 +278,24 @@ def deposit_dashboard(catalog: str) -> dict:
         d.custom_viz(ds["dep_gauges"], title, vega.gauge(c["gauge"][key], col),
                      2 * i, 8 + Y, 2, 4)
     d.text("### Balance Trend", 0, 12 + Y)
-    d.chart("bar", ds["dep_daily30"], "Ending Balance - Last 30 Days", 0, 13 + Y, 6, 7,
-            cat="day", val="balance", single_color=c["daily"], labels=False,
-            cat_title="Date", val_title="Balance (K USD)")
+    d.custom_viz(ds["dep_daily30"], "Ending Balance - Last 30 Days", vega.bars(
+        "day", "balance", color=c["daily"], y_title="Balance (K USD)"), 0, 13 + Y, 6, 7)
     d.custom_viz(ds["dep_monthly"], MONTHLY_TITLE, vega.grouped_stacked_years(
         "month", "_year", "_class", "ending_balance",
         {"1-CASA": c["mom"]["1-CASA this year"], "2-TD": c["mom"]["2-TD this year"],
          "3-ISA": c["mom"]["3-ISA this year"]}, series="series"), 0, 20 + Y, 6, 8)
     d.text("### Deposit Mix", 0, 28 + Y)
-    d.chart("pie", ds["dep_region"], "Regional Deposit Distribution", 0, 29 + Y, 2, 7,
-            cat="region", val="balance", colors=c["region"], cat_title="Region",
-            val_title="Balance (K USD)")
+    d.custom_viz(ds["dep_region"], "Regional Deposit Distribution", vega.donut(
+        "region", "balance", c["region"]), 0, 29 + Y, 2, 7)
     d.custom_viz(ds["dep_term"], "Deposit by Term and IR (in Month)", vega.dual_axis_combo(
         "tenor", "balance", "avg_interest", "Balance (K USD)", "Avg Interest (%)",
         c["term_bar"], c["term_line"], x_sort=None, line_fmt=".2f"), 2, 29 + Y, 4, 7)
     d.text("### Customer & Product Insights", 0, 36 + Y)
-    d.chart("pie", ds["dep_casa_customer"], "CASA Customer Distribution", 0, 37 + Y, 2, 7,
-            cat="segment", val="customers", colors=c["casa"], cat_title="Segment",
-            val_title="Customers")
-    d.chart("bar", ds["dep_edusave"], "Edu-Save New open Account_ Accumulate by Month",
-            2, 37 + Y, 4, 7, cat="month", val="cumulative_accounts",
-            single_color=c["edusave"], cat_title="Month", val_title="Accounts")
+    d.custom_viz(ds["dep_casa_customer"], "CASA Customer Distribution", vega.donut(
+        "segment", "customers", c["casa"]), 0, 37 + Y, 2, 7)
+    d.custom_viz(ds["dep_edusave"], "Edu-Save New open Account_ Accumulate by Month",
+                 vega.bars("month", "cumulative_accounts", color=c["edusave"], labels=True,
+                           y_title="Accounts"), 2, 37 + Y, 4, 7)
     d.table(ds["dep_by_product"], "Balance by Product (K USD)", [
         ("product", "Balance by Product", "text"), ("ending_balance", "Ending Balance", "num"),
         ("portion", "Portion (%)", "num"), ("diff_last_day", "+/- Last Day", "num"),

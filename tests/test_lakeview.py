@@ -276,11 +276,9 @@ def test_custom_viz_fields_exist_in_datasets(spark, tables):
     """Spec Vega-Lite chỉ đọc cột có thật trong dataset tương ứng; thẻ KPI có đủ dòng."""
     from common.lakeview.custom_viz import catalog
 
-    files = {"card_business": "card_business.lvdash.json",
-             "retail_deposit": "retail_deposit.lvdash.json",
-             "loan_overdue": "loan_overdue.lvdash.json"}
     for w in catalog():
-        ds = next(d for d in DASHES[files[w.dashboard]]["datasets"] if d["name"] == w.dataset)
+        ds = next(d for d in DASHES[f"{w.dashboard}.lvdash.json"]["datasets"]
+                  if d["name"] == w.dataset)
         cols = set(spark.sql(_local_sql(ds, PARAMS[0])).columns)
         assert set(w.fields) <= cols, (w.name, set(w.fields) - cols)
     for name, n in (("card_kpi_cards", 5), ("dep_kpi_cards", 3), ("ovd_kpi_cards", 3)):

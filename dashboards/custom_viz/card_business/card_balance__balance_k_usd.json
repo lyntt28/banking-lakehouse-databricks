@@ -1,0 +1,90 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
+  "layer": [
+    {
+      "mark": {
+        "type": "bar",
+        "tooltip": true
+      },
+      "encoding": {
+        "x": {
+          "field": "month",
+          "type": "ordinal",
+          "title": null,
+          "sort": null,
+          "axis": {
+            "labelAngle": 0,
+            "labelLimit": 140
+          }
+        },
+        "y": {
+          "field": "k_usd",
+          "type": "quantitative",
+          "aggregate": "sum",
+          "title": null,
+          "stack": null
+        },
+        "color": {
+          "field": "series",
+          "type": "nominal",
+          "title": null,
+          "scale": {
+            "domain": [
+              "Balance",
+              "Revolving"
+            ],
+            "range": [
+              "#4472c4",
+              "#bf9000"
+            ]
+          }
+        },
+        "xOffset": {
+          "field": "series"
+        }
+      }
+    }
+  ]
+}

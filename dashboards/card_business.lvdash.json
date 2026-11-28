@@ -2049,7 +2049,7 @@
         },
         {
           "widget": {
-            "name": "bar_16",
+            "name": "viz_16",
             "queries": [
               {
                 "name": "main_query",
@@ -2057,70 +2057,51 @@
                   "datasetName": "card_in_out",
                   "fields": [
                     {
+                      "name": "cards",
+                      "expression": "`cards`"
+                    },
+                    {
                       "name": "month",
                       "expression": "`month`"
                     },
                     {
                       "name": "series",
                       "expression": "`series`"
-                    },
-                    {
-                      "name": "sum(cards)",
-                      "expression": "SUM(`cards`)"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "month"
-                },
-                "y": {
-                  "fieldName": "sum(cards)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "cards"
-                },
-                "color": {
-                  "fieldName": "series",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "New Issuance",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "Termination",
-                        "color": "#9e9e9e"
-                      }
-                    ]
-                  },
-                  "displayName": "Series",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "In & Out"
+                "title": {
+                  "value": "In & Out",
+                  "fields": []
+                }
               },
-              "mark": {
-                "layout": "group"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"month\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": null,\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"y\": {\n     \"field\": \"cards\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": null,\n     \"stack\": null\n    },\n    \"color\": {\n     \"field\": \"series\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"New Issuance\",\n       \"Termination\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#9e9e9e\"\n      ]\n     }\n    },\n    \"xOffset\": {\n     \"field\": \"series\"\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#444\",\n    \"baseline\": \"bottom\",\n    \"dy\": -3\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"month\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": null,\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"y\": {\n     \"field\": \"cards\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": null,\n     \"stack\": null\n    },\n    \"xOffset\": {\n     \"field\": \"series\"\n    },\n    \"text\": {\n     \"field\": \"cards\",\n     \"aggregate\": \"sum\",\n     \"format\": \",.0f\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cards"
+                  },
+                  {
+                    "fieldName": "month"
+                  },
+                  {
+                    "fieldName": "series"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -2149,7 +2130,7 @@
         },
         {
           "widget": {
-            "name": "bar_18",
+            "name": "viz_18",
             "queries": [
               {
                 "name": "main_query",
@@ -2157,67 +2138,51 @@
                   "datasetName": "card_base_using",
                   "fields": [
                     {
+                      "name": "members",
+                      "expression": "`members`"
+                    },
+                    {
                       "name": "month",
                       "expression": "`month`"
                     },
                     {
                       "name": "series",
                       "expression": "`series`"
-                    },
-                    {
-                      "name": "sum(members)",
-                      "expression": "SUM(`members`)"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "month"
-                },
-                "y": {
-                  "fieldName": "sum(members)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "members"
-                },
-                "color": {
-                  "fieldName": "series",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Customer Base",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "Using Mem",
-                        "color": "#bf9000"
-                      }
-                    ]
-                  },
-                  "displayName": "Series",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Customer Base & Using Mem"
+                "title": {
+                  "value": "Customer Base & Using Mem",
+                  "fields": []
+                }
               },
-              "mark": {
-                "layout": "group"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"month\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": null,\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"y\": {\n     \"field\": \"members\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": null,\n     \"stack\": null\n    },\n    \"color\": {\n     \"field\": \"series\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"Customer Base\",\n       \"Using Mem\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\"\n      ]\n     }\n    },\n    \"xOffset\": {\n     \"field\": \"series\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "members"
+                  },
+                  {
+                    "fieldName": "month"
+                  },
+                  {
+                    "fieldName": "series"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -2230,7 +2195,7 @@
         },
         {
           "widget": {
-            "name": "bar_19",
+            "name": "viz_19",
             "queries": [
               {
                 "name": "main_query",
@@ -2238,67 +2203,51 @@
                   "datasetName": "card_balance",
                   "fields": [
                     {
+                      "name": "k_usd",
+                      "expression": "`k_usd`"
+                    },
+                    {
                       "name": "month",
                       "expression": "`month`"
                     },
                     {
                       "name": "series",
                       "expression": "`series`"
-                    },
-                    {
-                      "name": "sum(k_usd)",
-                      "expression": "SUM(`k_usd`)"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "month"
-                },
-                "y": {
-                  "fieldName": "sum(k_usd)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "k_usd"
-                },
-                "color": {
-                  "fieldName": "series",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Balance",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "Revolving",
-                        "color": "#bf9000"
-                      }
-                    ]
-                  },
-                  "displayName": "Series",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Balance (K USD)"
+                "title": {
+                  "value": "Balance (K USD)",
+                  "fields": []
+                }
               },
-              "mark": {
-                "layout": "group"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"month\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": null,\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"y\": {\n     \"field\": \"k_usd\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": null,\n     \"stack\": null\n    },\n    \"color\": {\n     \"field\": \"series\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"Balance\",\n       \"Revolving\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\"\n      ]\n     }\n    },\n    \"xOffset\": {\n     \"field\": \"series\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "k_usd"
+                  },
+                  {
+                    "fieldName": "month"
+                  },
+                  {
+                    "fieldName": "series"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -2311,7 +2260,7 @@
         },
         {
           "widget": {
-            "name": "bar_20",
+            "name": "viz_20",
             "queries": [
               {
                 "name": "main_query",
@@ -2319,45 +2268,44 @@
                   "datasetName": "card_volume",
                   "fields": [
                     {
-                      "name": "month",
-                      "expression": "`month`"
+                      "name": "k_usd",
+                      "expression": "`k_usd`"
                     },
                     {
-                      "name": "sum(k_usd)",
-                      "expression": "SUM(`k_usd`)"
+                      "name": "month",
+                      "expression": "`month`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "month"
-                },
-                "y": {
-                  "fieldName": "sum(k_usd)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "k_usd"
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Sales Volume (K USD)"
+                "title": {
+                  "value": "Sales Volume (K USD)",
+                  "fields": []
+                }
               },
-              "mark": {
-                "colors": [
-                  "#4472c4"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"tooltip\": true,\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"month\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": null,\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"y\": {\n     \"field\": \"k_usd\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": null,\n     \"stack\": null\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#444\",\n    \"baseline\": \"bottom\",\n    \"dy\": -3\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"month\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": null,\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"y\": {\n     \"field\": \"k_usd\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": null,\n     \"stack\": null\n    },\n    \"text\": {\n     \"field\": \"k_usd\",\n     \"aggregate\": \"sum\",\n     \"format\": \",.0f\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "k_usd"
+                  },
+                  {
+                    "fieldName": "month"
+                  }
                 ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -2370,7 +2318,7 @@
         },
         {
           "widget": {
-            "name": "line_21",
+            "name": "viz_21",
             "queries": [
               {
                 "name": "main_query",
@@ -2382,41 +2330,40 @@
                       "expression": "`month`"
                     },
                     {
-                      "name": "sum(spend_per_member)",
-                      "expression": "SUM(`spend_per_member`)"
+                      "name": "spend_per_member",
+                      "expression": "`spend_per_member`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "line",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "month"
-                },
-                "y": {
-                  "fieldName": "sum(spend_per_member)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "spend_per_member"
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Spend per Member (USD)"
+                "title": {
+                  "value": "Spend per Member (USD)",
+                  "fields": []
+                }
               },
-              "mark": {
-                "colors": [
-                  "#bf9000"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"line\",\n    \"color\": \"#bf9000\",\n    \"strokeWidth\": 2.5,\n    \"tooltip\": true,\n    \"point\": {\n     \"filled\": true,\n     \"size\": 45,\n     \"color\": \"#bf9000\"\n    }\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"month\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"axis\": {\n      \"labelAngle\": 0\n     }\n    },\n    \"y\": {\n     \"field\": \"spend_per_member\",\n     \"type\": \"quantitative\",\n     \"title\": null,\n     \"scale\": {\n      \"zero\": false,\n      \"padding\": 20\n     }\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"dy\": -10,\n    \"fontSize\": 10,\n    \"color\": \"#bf9000\"\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"month\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"axis\": {\n      \"labelAngle\": 0\n     }\n    },\n    \"y\": {\n     \"field\": \"spend_per_member\",\n     \"type\": \"quantitative\",\n     \"title\": null,\n     \"scale\": {\n      \"zero\": false,\n      \"padding\": 20\n     }\n    },\n    \"text\": {\n     \"field\": \"spend_per_member\",\n     \"format\": \",.0f\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "month"
+                  },
+                  {
+                    "fieldName": "spend_per_member"
+                  }
                 ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },

@@ -17,6 +17,8 @@ from __future__ import annotations
 
 SCHEMA = "https://vega.github.io/schema/vega-lite/v5.json"
 GREEN, RED, GREY = "#16a34a", "#dc2626", "#9e9e9e"
+# bảng màu chung (= core.SERIES, tông Card gốc)
+SERIES = ["#4472c4", "#bf9000", "#2f5597", "#70ad47", "#c55a11", "#5b9bd5"]
 
 
 # Style chung theo bản HTML gốc (card_dashboard_final.html): font Calibri, không viền khung,
@@ -227,10 +229,67 @@ def grouped_stacked_years(month: str, year: str, stack: str, value: str,
         )
 
 
+# ---------------------------------------------------------------- cột / đường đơn giản
+def bars(x: str, value: str, series: str | None = None, colors: dict[str, str] | None = None,
+         color: str = "#4472c4", layout: str = "group", horizontal: bool = False,
+         labels: bool = False, fmt: str = ",.0f", sort_desc: bool = False,
+         x_title: str | None = None, y_title: str | None = None) -> dict:
+    """Cột thường / nhóm (xOffset) / xếp chồng theo `series`, tuỳ chọn ngang + nhãn số.
+    Thay widget bar native để cùng style (Calibri, lưới nhạt, legend dưới)."""
+    cat = {"field": x, "type": "ordinal", "title": x_title,
+           "sort": "-y" if sort_desc and not horizontal else ("-x" if sort_desc else None),
+           "axis": {"labelAngle": 0, "labelLimit": 140}}
+    val = {"field": value, "type": "quantitative", "aggregate": "sum", "title": y_title,
+           "stack": "zero" if layout == "stack" else None}
+    enc = {"y": cat, "x": val} if horizontal else {"x": cat, "y": val}
+    mark = {"type": "bar", "tooltip": True}
+    if series:
+        sc = ({"domain": list(colors), "range": list(colors.values())} if colors
+              else {"range": SERIES})
+        enc["color"] = {"field": series, "type": "nominal", "title": None, "scale": sc}
+        if layout == "group":
+            enc["yOffset" if horizontal else "xOffset"] = {"field": series}
+    else:
+        mark["color"] = color
+    layers = [{"mark": mark, "encoding": enc}]
+    if labels and (not series or layout == "group"):
+        lab = {"type": "text", "fontSize": 10, "color": "#444"}
+        lab.update({"align": "left", "dx": 3} if horizontal else {"baseline": "bottom", "dy": -3})
+        lenc = {k: v for k, v in enc.items() if k != "color"}
+        lenc["text"] = {"field": value, "aggregate": "sum", "format": fmt}
+        layers.append({"mark": lab, "encoding": lenc})
+    return _base(layer=layers)
+
+
+def line(x: str, value: str, color: str = "#4472c4", y_title: str | None = None,
+         labels: bool = True, fmt: str = ",.0f") -> dict:
+    """Đường có điểm + nhãn số (thay widget line native)."""
+    enc = {"x": {"field": x, "type": "ordinal", "title": None, "axis": {"labelAngle": 0}},
+           "y": {"field": value, "type": "quantitative", "title": y_title,
+                 "scale": {"zero": False, "padding": 20}}}
+    layers = [{"mark": {"type": "line", "color": color, "strokeWidth": 2.5, "tooltip": True,
+                        "point": {"filled": True, "size": 45, "color": color}},
+               "encoding": enc}]
+    if labels:
+        layers.append({"mark": {"type": "text", "dy": -10, "fontSize": 10, "color": color},
+                       "encoding": {**enc, "text": {"field": value, "format": fmt}}})
+    return _base(layer=layers)
+
+
 # ---------------------------------------------------------------- donut
-def donut(category: str, value: str, colors: dict[str, str], center: str | None = None) -> dict:
-    """Donut có % ở giữa = tỷ trọng lát `center` (mặc định lát đầu tiên trong `colors`)."""
-    first = center or next(iter(colors))
+def donut(category: str, value: str, colors: dict[str, str] | None = None,
+          center: str | None = None) -> dict:
+    """Donut có % ở giữa = tỷ trọng lát `center` (mặc định lát đầu tiên trong `colors`).
+    Không truyền `colors` -> bảng màu chung SERIES, % giữa là lát lớn nhất."""
+    if colors:
+        first = center or next(iter(colors))
+        sc = {"domain": list(colors), "range": list(colors.values())}
+        pick = [{"filter": f"datum.{category} == '{first}'"}]
+    else:
+        first, sc = None, {"range": SERIES}
+        pick = [{"window": [{"op": "row_number", "as": "_rk"}],
+                 "sort": [{"field": value, "order": "descending"}]},
+                {"filter": "datum._rk == 1"}]
     return _base(
         transform=[{"joinaggregate": [{"op": "sum", "field": value, "as": "_tot"}]},
                    {"calculate": f"datum.{value} / datum._tot", "as": "_share"}],
@@ -239,14 +298,13 @@ def donut(category: str, value: str, colors: dict[str, str], center: str | None 
                       "outerRadius": {"expr": "min(width, height) * 0.42"}, "tooltip": True},
              "encoding": {"theta": {"field": value, "type": "quantitative", "stack": True},
                           "color": {"field": category, "type": "nominal", "title": None,
-                                    "scale": {"domain": list(colors),
-                                              "range": list(colors.values())},
+                                    "scale": sc,
                                     "legend": {"orient": "bottom", "columns": 2,
                                                "labelLimit": 120}},
                           "order": {"field": category, "sort": "ascending"}}},
-            {"transform": [{"filter": f"datum.{category} == '{first}'"}],
+            {"transform": pick,
              "mark": {"type": "text", "fontSize": 16, "fontWeight": "bold",
-                      "color": colors[first]},
+                      "color": colors[first] if colors else "#333"},
              "encoding": {"text": {"field": "_share", "format": ".1%"}}},
         ],
         )

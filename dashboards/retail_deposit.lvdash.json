@@ -1530,7 +1530,7 @@
         },
         {
           "widget": {
-            "name": "bar_10",
+            "name": "viz_10",
             "queries": [
               {
                 "name": "main_query",
@@ -1538,45 +1538,44 @@
                   "datasetName": "dep_daily30",
                   "fields": [
                     {
-                      "name": "day",
-                      "expression": "`day`"
+                      "name": "balance",
+                      "expression": "`balance`"
                     },
                     {
-                      "name": "sum(balance)",
-                      "expression": "SUM(`balance`)"
+                      "name": "day",
+                      "expression": "`day`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "day",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "Date"
-                },
-                "y": {
-                  "fieldName": "sum(balance)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "Balance (K USD)"
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Ending Balance - Last 30 Days"
+                "title": {
+                  "value": "Ending Balance - Last 30 Days",
+                  "fields": []
+                }
               },
-              "mark": {
-                "colors": [
-                  "#4472c4"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"tooltip\": true,\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"day\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": null,\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"y\": {\n     \"field\": \"balance\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": \"Balance (K USD)\",\n     \"stack\": null\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "balance"
+                  },
+                  {
+                    "fieldName": "day"
+                  }
                 ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1670,7 +1669,7 @@
         },
         {
           "widget": {
-            "name": "pie_13",
+            "name": "viz_13",
             "queries": [
               {
                 "name": "main_query",
@@ -1678,80 +1677,44 @@
                   "datasetName": "dep_region",
                   "fields": [
                     {
-                      "name": "region",
-                      "expression": "`region`"
+                      "name": "balance",
+                      "expression": "`balance`"
                     },
                     {
-                      "name": "sum(balance)",
-                      "expression": "SUM(`balance`)"
+                      "name": "region",
+                      "expression": "`region`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "pie",
-              "encodings": {
-                "angle": {
-                  "fieldName": "sum(balance)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "Balance (K USD)"
-                },
-                "color": {
-                  "fieldName": "region",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "North",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "Central",
-                        "color": "#bf9000"
-                      },
-                      {
-                        "value": "South 1",
-                        "color": "#2f5597"
-                      },
-                      {
-                        "value": "South 2",
-                        "color": "#70ad47"
-                      },
-                      {
-                        "value": "South 3",
-                        "color": "#c55a11"
-                      },
-                      {
-                        "value": "North 1",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "North 2",
-                        "color": "#5b9bd5"
-                      },
-                      {
-                        "value": "Others",
-                        "color": "#9e9e9e"
-                      }
-                    ]
-                  },
-                  "displayName": "Region",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Regional Deposit Distribution"
+                "title": {
+                  "value": "Regional Deposit Distribution",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"joinaggregate\": [\n    {\n     \"op\": \"sum\",\n     \"field\": \"balance\",\n     \"as\": \"_tot\"\n    }\n   ]\n  },\n  {\n   \"calculate\": \"datum.balance / datum._tot\",\n   \"as\": \"_share\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height) * 0.30\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height) * 0.42\"\n    },\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"theta\": {\n     \"field\": \"balance\",\n     \"type\": \"quantitative\",\n     \"stack\": true\n    },\n    \"color\": {\n     \"field\": \"region\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"North\",\n       \"Central\",\n       \"South 1\",\n       \"South 2\",\n       \"South 3\",\n       \"North 1\",\n       \"North 2\",\n       \"Others\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\",\n       \"#2f5597\",\n       \"#70ad47\",\n       \"#c55a11\",\n       \"#4472c4\",\n       \"#5b9bd5\",\n       \"#9e9e9e\"\n      ]\n     },\n     \"legend\": {\n      \"orient\": \"bottom\",\n      \"columns\": 2,\n      \"labelLimit\": 120\n     }\n    },\n    \"order\": {\n     \"field\": \"region\",\n     \"sort\": \"ascending\"\n    }\n   }\n  },\n  {\n   \"transform\": [\n    {\n     \"filter\": \"datum.region == 'North'\"\n    }\n   ],\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 16,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"_share\",\n     \"format\": \".1%\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "balance"
+                  },
+                  {
+                    "fieldName": "region"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1845,7 +1808,7 @@
         },
         {
           "widget": {
-            "name": "pie_16",
+            "name": "viz_16",
             "queries": [
               {
                 "name": "main_query",
@@ -1853,60 +1816,44 @@
                   "datasetName": "dep_casa_customer",
                   "fields": [
                     {
-                      "name": "segment",
-                      "expression": "`segment`"
+                      "name": "customers",
+                      "expression": "`customers`"
                     },
                     {
-                      "name": "sum(customers)",
-                      "expression": "SUM(`customers`)"
+                      "name": "segment",
+                      "expression": "`segment`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "pie",
-              "encodings": {
-                "angle": {
-                  "fieldName": "sum(customers)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "Customers"
-                },
-                "color": {
-                  "fieldName": "segment",
-                  "scale": {
-                    "type": "categorical",
-                    "mappings": [
-                      {
-                        "value": "Active",
-                        "color": "#4472c4"
-                      },
-                      {
-                        "value": "Non-CASA",
-                        "color": "#bf9000"
-                      },
-                      {
-                        "value": "Dormant",
-                        "color": "#9e9e9e"
-                      }
-                    ]
-                  },
-                  "displayName": "Segment",
-                  "legend": {
-                    "position": "bottom"
-                  }
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "CASA Customer Distribution"
+                "title": {
+                  "value": "CASA Customer Distribution",
+                  "fields": []
+                }
+              },
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"transform\": [\n  {\n   \"joinaggregate\": [\n    {\n     \"op\": \"sum\",\n     \"field\": \"customers\",\n     \"as\": \"_tot\"\n    }\n   ]\n  },\n  {\n   \"calculate\": \"datum.customers / datum._tot\",\n   \"as\": \"_share\"\n  }\n ],\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"arc\",\n    \"innerRadius\": {\n     \"expr\": \"min(width, height) * 0.30\"\n    },\n    \"outerRadius\": {\n     \"expr\": \"min(width, height) * 0.42\"\n    },\n    \"tooltip\": true\n   },\n   \"encoding\": {\n    \"theta\": {\n     \"field\": \"customers\",\n     \"type\": \"quantitative\",\n     \"stack\": true\n    },\n    \"color\": {\n     \"field\": \"segment\",\n     \"type\": \"nominal\",\n     \"title\": null,\n     \"scale\": {\n      \"domain\": [\n       \"Active\",\n       \"Non-CASA\",\n       \"Dormant\"\n      ],\n      \"range\": [\n       \"#4472c4\",\n       \"#bf9000\",\n       \"#9e9e9e\"\n      ]\n     },\n     \"legend\": {\n      \"orient\": \"bottom\",\n      \"columns\": 2,\n      \"labelLimit\": 120\n     }\n    },\n    \"order\": {\n     \"field\": \"segment\",\n     \"sort\": \"ascending\"\n    }\n   }\n  },\n  {\n   \"transform\": [\n    {\n     \"filter\": \"datum.segment == 'Active'\"\n    }\n   ],\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 16,\n    \"fontWeight\": \"bold\",\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"text\": {\n     \"field\": \"_share\",\n     \"format\": \".1%\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "customers"
+                  },
+                  {
+                    "fieldName": "segment"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },
@@ -1919,7 +1866,7 @@
         },
         {
           "widget": {
-            "name": "bar_17",
+            "name": "viz_17",
             "queries": [
               {
                 "name": "main_query",
@@ -1927,48 +1874,44 @@
                   "datasetName": "dep_edusave",
                   "fields": [
                     {
-                      "name": "month",
-                      "expression": "`month`"
+                      "name": "cumulative_accounts",
+                      "expression": "`cumulative_accounts`"
                     },
                     {
-                      "name": "sum(cumulative_accounts)",
-                      "expression": "SUM(`cumulative_accounts`)"
+                      "name": "month",
+                      "expression": "`month`"
                     }
                   ],
-                  "disaggregated": false
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "version": 3,
-              "widgetType": "bar",
-              "encodings": {
-                "x": {
-                  "fieldName": "month",
-                  "scale": {
-                    "type": "categorical"
-                  },
-                  "displayName": "Month"
-                },
-                "y": {
-                  "fieldName": "sum(cumulative_accounts)",
-                  "scale": {
-                    "type": "quantitative"
-                  },
-                  "displayName": "Accounts"
-                },
-                "label": {
-                  "show": true
-                }
-              },
+              "version": 1,
+              "widgetType": "custom-vega-viz",
               "frame": {
                 "showTitle": true,
-                "title": "Edu-Save New open Account_ Accumulate by Month"
+                "title": {
+                  "value": "Edu-Save New open Account_ Accumulate by Month",
+                  "fields": []
+                }
               },
-              "mark": {
-                "colors": [
-                  "#4472c4"
+              "jsonSpec": {
+                "type": "vega-lite",
+                "spec": "{\n \"$schema\": \"https://vega.github.io/schema/vega-lite/v5.json\",\n \"width\": \"container\",\n \"height\": \"container\",\n \"autosize\": {\n  \"type\": \"fit\",\n  \"contains\": \"padding\"\n },\n \"config\": {\n  \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\",\n  \"view\": {\n   \"stroke\": null\n  },\n  \"axis\": {\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#666\",\n   \"titleFontSize\": 10,\n   \"titleColor\": \"#888\",\n   \"titleFontWeight\": \"normal\",\n   \"domain\": false,\n   \"ticks\": false,\n   \"gridColor\": \"#f0f0f0\",\n   \"labelPadding\": 6\n  },\n  \"axisX\": {\n   \"grid\": false\n  },\n  \"legend\": {\n   \"orient\": \"bottom\",\n   \"direction\": \"horizontal\",\n   \"title\": null,\n   \"labelFontSize\": 10,\n   \"labelColor\": \"#555\",\n   \"symbolType\": \"square\",\n   \"symbolSize\": 70,\n   \"columnPadding\": 14\n  },\n  \"bar\": {\n   \"cornerRadiusEnd\": 2\n  },\n  \"text\": {\n   \"font\": \"Calibri, 'Segoe UI', Arial, sans-serif\"\n  }\n },\n \"layer\": [\n  {\n   \"mark\": {\n    \"type\": \"bar\",\n    \"tooltip\": true,\n    \"color\": \"#4472c4\"\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"month\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": null,\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"y\": {\n     \"field\": \"cumulative_accounts\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": \"Accounts\",\n     \"stack\": null\n    }\n   }\n  },\n  {\n   \"mark\": {\n    \"type\": \"text\",\n    \"fontSize\": 10,\n    \"color\": \"#444\",\n    \"baseline\": \"bottom\",\n    \"dy\": -3\n   },\n   \"encoding\": {\n    \"x\": {\n     \"field\": \"month\",\n     \"type\": \"ordinal\",\n     \"title\": null,\n     \"sort\": null,\n     \"axis\": {\n      \"labelAngle\": 0,\n      \"labelLimit\": 140\n     }\n    },\n    \"y\": {\n     \"field\": \"cumulative_accounts\",\n     \"type\": \"quantitative\",\n     \"aggregate\": \"sum\",\n     \"title\": \"Accounts\",\n     \"stack\": null\n    },\n    \"text\": {\n     \"field\": \"cumulative_accounts\",\n     \"aggregate\": \"sum\",\n     \"format\": \",.0f\"\n    }\n   }\n  }\n ],\n \"data\": {\n  \"name\": \"databricks_query\"\n }\n}"
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "cumulative_accounts"
+                  },
+                  {
+                    "fieldName": "month"
+                  }
                 ]
+              },
+              "data": {
+                "queryName": "main_query"
               }
             }
           },

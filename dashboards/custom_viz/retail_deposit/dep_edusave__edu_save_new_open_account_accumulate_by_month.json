@@ -1,0 +1,106 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
+  "layer": [
+    {
+      "mark": {
+        "type": "bar",
+        "tooltip": true,
+        "color": "#4472c4"
+      },
+      "encoding": {
+        "x": {
+          "field": "month",
+          "type": "ordinal",
+          "title": null,
+          "sort": null,
+          "axis": {
+            "labelAngle": 0,
+            "labelLimit": 140
+          }
+        },
+        "y": {
+          "field": "cumulative_accounts",
+          "type": "quantitative",
+          "aggregate": "sum",
+          "title": "Accounts",
+          "stack": null
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "fontSize": 10,
+        "color": "#444",
+        "baseline": "bottom",
+        "dy": -3
+      },
+      "encoding": {
+        "x": {
+          "field": "month",
+          "type": "ordinal",
+          "title": null,
+          "sort": null,
+          "axis": {
+            "labelAngle": 0,
+            "labelLimit": 140
+          }
+        },
+        "y": {
+          "field": "cumulative_accounts",
+          "type": "quantitative",
+          "aggregate": "sum",
+          "title": "Accounts",
+          "stack": null
+        },
+        "text": {
+          "field": "cumulative_accounts",
+          "aggregate": "sum",
+          "format": ",.0f"
+        }
+      }
+    }
+  ]
+}

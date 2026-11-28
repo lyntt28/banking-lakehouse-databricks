@@ -217,22 +217,22 @@ def overdue_dashboard(catalog: str) -> dict:
         d.custom_viz(ds[name], title, vega.dual_axis_combo(
             cat, "overdue_k_usd", "overdue_ratio", "Overdue Amount (1000 USD)",
             "Overdue Ratio (%)", c["amount"], c["ratio"]), 3 * i, 6, 3, 7)
-    d.chart("bar", ds["ovd_debt_groups"], "Overdue Amount by Debt Groups", 0, 13, 6, 7,
-            cat="month", series="del_grp", val="overdue_k_usd", colors=DEBT_COLORS,
-            layout="stack", val_title="Overdue Amount (1000 USD)")
+    d.custom_viz(ds["ovd_debt_groups"], "Overdue Amount by Debt Groups", vega.bars(
+        "month", "overdue_k_usd", "del_grp", DEBT_COLORS, layout="stack",
+        y_title="Overdue Amount (1000 USD)"), 0, 13, 6, 7)
     # product-groups-grid 1fr 1fr
-    d.chart("pie", ds["ovd_product"], "Overdue Amount by Product Groups", 0, 20, 3, 7,
-            cat="product_group", val="overdue_k_usd", val_title="1000 USD")
-    d.chart("bar", ds["ovd_product_top5"], "Overdue Ratio by Product Groups", 3, 20, 3, 7,
-            cat="product_group", val="overdue_ratio", horizontal=True,
-            single_color=c["amount"], sort_desc=True, val_title="Overdue Ratio (%)")
+    d.custom_viz(ds["ovd_product"], "Overdue Amount by Product Groups", vega.donut(
+        "product_group", "overdue_k_usd"), 0, 20, 3, 7)
+    d.custom_viz(ds["ovd_product_top5"], "Overdue Ratio by Product Groups", vega.bars(
+        "product_group", "overdue_ratio", color=c["amount"], horizontal=True, labels=True,
+        fmt=".2f", sort_desc=True, y_title="Overdue Ratio (%)"), 3, 20, 3, 7)
     # Treemap gốc -> bar ngang Top 5 (Lakeview: giữ nguyên quy tắc nghiệp vụ, xem overdue_sql)
-    d.chart("bar", ds["ovd_branch_top5"], "Top 5 Branches by Overdue Ratio", 0, 27, 3, 7,
-            cat="branch", val="overdue_ratio", horizontal=True, single_color=c["ratio"],
-            sort_desc=True, val_title="Overdue Ratio (%)")
-    d.chart("bar", ds["ovd_branch_top5"], "Top 5 Branches - Overdue Amount", 3, 27, 3, 7,
-            cat="branch", val="overdue_k_usd", horizontal=True, single_color=c["amount"],
-            sort_desc=True, val_title="Overdue Amount (1000 USD)")
+    d.custom_viz(ds["ovd_branch_top5"], "Top 5 Branches by Overdue Ratio", vega.bars(
+        "branch", "overdue_ratio", color=c["ratio"], horizontal=True, labels=True, fmt=".2f",
+        sort_desc=True, y_title="Overdue Ratio (%)"), 0, 27, 3, 7)
+    d.custom_viz(ds["ovd_branch_top5"], "Top 5 Branches - Overdue Amount", vega.bars(
+        "branch", "overdue_k_usd", color=c["amount"], horizontal=True, labels=True,
+        sort_desc=True, y_title="Overdue Amount (1000 USD)"), 3, 27, 3, 7)
     d.param_filter("report_date", "Report date", "filter-date-picker", 4, 0)
     d.param_filter("branch", "Branch", "filter-single-select", 5, 0,
                    options_ds=ds_br, options_col="branch")

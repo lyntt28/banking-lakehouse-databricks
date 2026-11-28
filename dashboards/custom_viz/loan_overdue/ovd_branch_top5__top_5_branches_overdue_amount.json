@@ -1,0 +1,106 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": "container",
+  "height": "container",
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
+  "layer": [
+    {
+      "mark": {
+        "type": "bar",
+        "tooltip": true,
+        "color": "#4472c4"
+      },
+      "encoding": {
+        "y": {
+          "field": "branch",
+          "type": "ordinal",
+          "title": null,
+          "sort": "-x",
+          "axis": {
+            "labelAngle": 0,
+            "labelLimit": 140
+          }
+        },
+        "x": {
+          "field": "overdue_k_usd",
+          "type": "quantitative",
+          "aggregate": "sum",
+          "title": "Overdue Amount (1000 USD)",
+          "stack": null
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "fontSize": 10,
+        "color": "#444",
+        "align": "left",
+        "dx": 3
+      },
+      "encoding": {
+        "y": {
+          "field": "branch",
+          "type": "ordinal",
+          "title": null,
+          "sort": "-x",
+          "axis": {
+            "labelAngle": 0,
+            "labelLimit": 140
+          }
+        },
+        "x": {
+          "field": "overdue_k_usd",
+          "type": "quantitative",
+          "aggregate": "sum",
+          "title": "Overdue Amount (1000 USD)",
+          "stack": null
+        },
+        "text": {
+          "field": "overdue_k_usd",
+          "aggregate": "sum",
+          "format": ",.0f"
+        }
+      }
+    }
+  ]
+}
