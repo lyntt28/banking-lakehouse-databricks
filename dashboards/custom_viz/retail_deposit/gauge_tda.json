@@ -6,57 +6,98 @@
     "type": "fit",
     "contains": "padding"
   },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
   "layer": [
     {
       "mark": {
         "type": "arc",
         "innerRadius": {
-          "expr": "min(width, height * 2) * 0.32"
+          "expr": "min(width / 2 - 10, height - 34) * 0.70"
         },
         "outerRadius": {
-          "expr": "min(width, height * 2) * 0.45"
+          "expr": "min(width / 2 - 10, height - 34)"
         },
         "theta": {
           "expr": "-PI / 2"
         },
+        "y": {
+          "expr": "height - 22"
+        },
+        "cornerRadius": 3,
         "theta2": {
           "expr": "PI / 2"
         },
-        "color": "#e5e7eb",
-        "y": {
-          "expr": "height * 0.9"
-        }
+        "color": "#eceff3"
       }
     },
     {
       "mark": {
         "type": "arc",
         "innerRadius": {
-          "expr": "min(width, height * 2) * 0.32"
+          "expr": "min(width / 2 - 10, height - 34) * 0.70"
         },
         "outerRadius": {
-          "expr": "min(width, height * 2) * 0.45"
+          "expr": "min(width / 2 - 10, height - 34)"
         },
         "theta": {
           "expr": "-PI / 2"
         },
+        "y": {
+          "expr": "height - 22"
+        },
+        "cornerRadius": 3,
         "theta2": {
           "expr": "-PI / 2 + PI * clamp(isValid(datum.tda_pct) ? datum.tda_pct : 0, 0, 120) / 120"
         },
-        "color": "#bf9000",
-        "y": {
-          "expr": "height * 0.9"
-        }
+        "color": "#bf9000"
       }
     },
     {
       "mark": {
         "type": "text",
-        "fontSize": 26,
         "fontWeight": "bold",
         "color": "#bf9000",
+        "baseline": "alphabetic",
+        "fontSize": {
+          "expr": "max(14, min(width / 2 - 10, height - 34) * 0.34)"
+        },
         "y": {
-          "expr": "height * 0.78"
+          "expr": "height - 22 - 4"
         }
       },
       "encoding": {
@@ -71,12 +112,13 @@
       "mark": {
         "type": "text",
         "fontSize": 10,
-        "color": "#888",
+        "color": "#999",
+        "baseline": "top",
         "y": {
-          "expr": "height * 0.97"
+          "expr": "height - 22 + 6"
         },
         "x": {
-          "expr": "width / 2 - min(width, height * 2) * 0.385"
+          "expr": "width / 2 - min(width / 2 - 10, height - 34) * 0.85"
         },
         "text": "0%"
       }
@@ -85,20 +127,16 @@
       "mark": {
         "type": "text",
         "fontSize": 10,
-        "color": "#888",
+        "color": "#999",
+        "baseline": "top",
         "y": {
-          "expr": "height * 0.97"
+          "expr": "height - 22 + 6"
         },
         "x": {
-          "expr": "width / 2 + min(width, height * 2) * 0.385"
+          "expr": "width / 2 + min(width / 2 - 10, height - 34) * 0.85"
         },
         "text": "120%"
       }
     }
-  ],
-  "config": {
-    "view": {
-      "stroke": null
-    }
-  }
+  ]
 }

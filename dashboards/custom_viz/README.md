@@ -2,11 +2,11 @@
 
 | Dashboard | Page | Spec file | Replaces | Dataset | Fields |
 |---|---|---|---|---|---|
-| card_business | main | `card_business/kpi_new_acquisition.json` | New Acquisition | `card_kpi_cards` | cmp1, cmp1_label, cmp2, cmp2_label, cmp3, cmp3_label, cmp_fmt, cmp_unit, kpi, note1, note2, title, value, value_fmt |
-| card_business | main | `card_business/kpi_customer_base.json` | Customer Base | `card_kpi_cards` | cmp1, cmp1_label, cmp2, cmp2_label, cmp3, cmp3_label, cmp_fmt, cmp_unit, kpi, note1, note2, title, value, value_fmt |
-| card_business | main | `card_business/kpi_using_customer.json` | Using Customer | `card_kpi_cards` | cmp1, cmp1_label, cmp2, cmp2_label, cmp3, cmp3_label, cmp_fmt, cmp_unit, kpi, note1, note2, title, value, value_fmt |
-| card_business | main | `card_business/kpi_sales_volume.json` | Sales Volume (K USD) | `card_kpi_cards` | cmp1, cmp1_label, cmp2, cmp2_label, cmp3, cmp3_label, cmp_fmt, cmp_unit, kpi, note1, note2, title, value, value_fmt |
-| card_business | main | `card_business/kpi_balance.json` | Balance (K USD) | `card_kpi_cards` | cmp1, cmp1_label, cmp2, cmp2_label, cmp3, cmp3_label, cmp_fmt, cmp_unit, kpi, note1, note2, title, value, value_fmt |
+| card_business | main | `card_business/kpi_new_acquisition.json` | New Acquisition | `card_kpi_cards` | cmp1, cmp1_label, cmp2, cmp2_label, cmp_fmt, cmp_unit, kpi, note1, note2, title, value, value_fmt |
+| card_business | main | `card_business/kpi_customer_base.json` | Customer Base | `card_kpi_cards` | cmp1, cmp1_label, cmp2, cmp2_label, cmp_fmt, cmp_unit, kpi, note1, note2, title, value, value_fmt |
+| card_business | main | `card_business/kpi_using_customer.json` | Using Customer | `card_kpi_cards` | cmp1, cmp1_label, cmp2, cmp2_label, cmp_fmt, cmp_unit, kpi, note1, note2, title, value, value_fmt |
+| card_business | main | `card_business/kpi_sales_volume.json` | Sales Volume (K USD) | `card_kpi_cards` | cmp1, cmp1_label, cmp2, cmp2_label, cmp_fmt, cmp_unit, kpi, note1, note2, title, value, value_fmt |
+| card_business | main | `card_business/kpi_balance.json` | Balance (K USD) | `card_kpi_cards` | cmp1, cmp1_label, cmp2, cmp2_label, cmp_fmt, cmp_unit, kpi, note1, note2, title, value, value_fmt |
 | card_business | main | `card_business/new_acquisition.json` | New Acquisition | `card_new_acq` | cards, channel, month |
 | card_business | main | `card_business/donut_sector.json` | By Sectors | `card_mix_sector` | amount, slice |
 | card_business | main | `card_business/donut_location.json` | By Locations | `card_mix_location` | amount, slice |

@@ -242,7 +242,8 @@ def card_dashboard(catalog: str) -> dict:
     # Thẻ KPI (Custom Viz): giá trị + MoM / vs YE xanh-đỏ + 2 dòng % chỉ tiêu (như bản gốc)
     for i, kpi in enumerate(["new_acquisition", "customer_base", "using_customer",
                              "sales_volume", "balance"]):
-        d.custom_viz(ds["card_kpi_cards"], "", vega.kpi_card(kpi, c["kpi"][i]), i, 3, 1, 4)
+        d.custom_viz(ds["card_kpi_cards"], "", vega.kpi_card(kpi, c["kpi"][i], n_cmp=2),
+                     i, 3, 1, 4)
     d.text("**Report scope**\n\nNew / Using / Sales = MTD; Base / Balance = tại ngày báo cáo. "
            "Using = số thẻ có giao dịch (card-level).", 5, 3, 1, 4)
 

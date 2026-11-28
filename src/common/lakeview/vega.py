@@ -19,9 +19,28 @@ SCHEMA = "https://vega.github.io/schema/vega-lite/v5.json"
 GREEN, RED, GREY = "#16a34a", "#dc2626", "#9e9e9e"
 
 
-def _base(**kw) -> dict:
+# Style chung theo bản HTML gốc (card_dashboard_final.html): font Calibri, không viền khung,
+# lưới rất nhạt, không vạch trục, chữ trục nhỏ màu xám, legend gọn ở dưới.
+FONT = "Calibri, 'Segoe UI', Arial, sans-serif"
+STYLE = {
+    "font": FONT,
+    "view": {"stroke": None},
+    "axis": {"labelFontSize": 10, "labelColor": "#666", "titleFontSize": 10,
+             "titleColor": "#888", "titleFontWeight": "normal", "domain": False,
+             "ticks": False, "gridColor": "#f0f0f0", "labelPadding": 6},
+    "axisX": {"grid": False},
+    "legend": {"orient": "bottom", "direction": "horizontal", "title": None,
+               "labelFontSize": 10, "labelColor": "#555", "symbolType": "square",
+               "symbolSize": 70, "columnPadding": 14},
+    "bar": {"cornerRadiusEnd": 2},
+    "text": {"font": FONT},
+}
+
+
+def _base(config: dict | None = None, **kw) -> dict:
+    cfg = {**STYLE, **(config or {})}
     return {"$schema": SCHEMA, "width": "container", "height": "container",
-            "autosize": {"type": "fit", "contains": "padding"}, **kw}
+            "autosize": {"type": "fit", "contains": "padding"}, "config": cfg, **kw}
 
 
 def _signed(expr: str, unit: str = "", digits: int = 1) -> str:
@@ -35,21 +54,24 @@ KPI_FIELDS = ["kpi", "title", "value", "value_fmt", "cmp1", "cmp1_label", "cmp2"
               "cmp3", "cmp3_label", "cmp_unit", "cmp_fmt", "note1", "note2"]
 
 
-def kpi_card(kpi: str, color: str = "#2f5597", lower_is_better: bool = False) -> dict:
-    """Thẻ KPI như HTML gốc: tiêu đề, số lớn, tối đa 3 so sánh xanh / đỏ, 2 dòng ghi chú.
+def kpi_card(kpi: str, color: str = "#2f5597", lower_is_better: bool = False,
+             n_cmp: int = 3) -> dict:
+    """Thẻ KPI như HTML gốc: tiêu đề in hoa xám, số lớn có màu, dòng so sánh ▲▼ xanh / đỏ,
+    2 dòng ghi chú nhỏ. n_cmp = 2: so sánh 1 bên trái, so sánh 2 căn phải (MoM | YoY như bản
+    gốc); n_cmp = 3: 3 cột đều nhau.
 
     Dataset dạng dài *_kpi_cards (1 dòng / KPI, cột = KPI_FIELDS); spec lọc dòng `kpi`.
-    value_fmt / cmp_fmt: định dạng d3 (vd ',.0f', '.2f'); cmp_unit: '%', ' pp' hoặc ''.
-    So sánh NULL -> 'N/A' xám; nhãn so sánh rỗng -> ẩn. `lower_is_better` (tỷ lệ quá hạn,
-    nợ xấu): tăng -> đỏ."""
+    value_fmt / cmp_fmt: định dạng d3; cmp_unit: '%', ' pp' hoặc ''. So sánh NULL -> 'N/A'
+    xám. `lower_is_better` (tỷ lệ quá hạn, nợ xấu): tăng -> đỏ."""
     up, down = (RED, GREEN) if lower_is_better else (GREEN, RED)
+    size = 11 if n_cmp == 3 else 11.5
 
-    def cmp_text(n: int, x: float) -> dict:
+    def cmp_text(n: int, x: str, align: str) -> dict:
         f = f"datum.cmp{n}"
         signed = (f"(isValid({f}) ? (({f}) > 0 ? '▲ ' : ({f}) < 0 ? '▼ ' : '▪ ') + "
                   f"format(abs({f}), datum.cmp_fmt) + datum.cmp_unit : 'N/A')")
-        return {"mark": {"type": "text", "align": "left", "fontSize": 12, "fontWeight": "bold",
-                         "x": {"expr": f"width * {x}"}, "y": 80},
+        return {"mark": {"type": "text", "align": align, "baseline": "top", "fontSize": size,
+                         "fontWeight": "bold", "x": {"expr": x}, "y": 70},
                 "encoding": {
                     "text": {"value": {"expr": f"isValid(datum.cmp{n}_label) && "
                                                f"datum.cmp{n}_label != '' ? {signed} + ' ' + "
@@ -58,50 +80,54 @@ def kpi_card(kpi: str, color: str = "#2f5597", lower_is_better: bool = False) ->
                                             {"test": f"isValid({f}) && {f} < 0", "value": down}],
                               "value": GREY}}}
 
-    note = lambda field, y: {  # noqa: E731
-        "mark": {"type": "text", "align": "left", "fontSize": 10, "color": "#888", "x": 4,
-                 "y": y}, "encoding": {"text": {"field": field}}}
+    cmps = ([cmp_text(1, "6", "left"), cmp_text(2, "width - 6", "right")] if n_cmp == 2 else
+            [cmp_text(1, "6", "left"), cmp_text(2, "width * 0.36", "left"),
+             cmp_text(3, "width * 0.68", "left")])
+
+    def note(field: str, y: int) -> dict:
+        return {"mark": {"type": "text", "align": "left", "baseline": "top", "fontSize": 10,
+                         "color": "#888", "x": 6, "y": y},
+                "encoding": {"text": {"field": field}}}
+
     return _base(
         transform=[{"filter": f"datum.kpi == '{kpi}'"}],
         layer=[
-            {"mark": {"type": "text", "align": "left", "baseline": "top", "fontSize": 12,
-                      "fontWeight": "bold", "color": "#666", "x": 4, "y": 4},
-             "encoding": {"text": {"field": "title"}}},
-            {"mark": {"type": "text", "align": "left", "baseline": "top", "fontSize": 32,
-                      "fontWeight": "bold", "color": color, "x": 4, "y": 26},
+            {"mark": {"type": "text", "align": "left", "baseline": "top", "fontSize": 11,
+                      "fontWeight": "bold", "color": "#666", "x": 6, "y": 4},
+             "encoding": {"text": {"value": {"expr": "upper(datum.title)"}}}},
+            {"mark": {"type": "text", "align": "left", "baseline": "top", "fontSize": 30,
+                      "fontWeight": "bold", "color": color, "x": 6, "y": 24},
              "encoding": {"text": {"value": {"expr": "isValid(datum.value) ? "
                                                      "format(datum.value, datum.value_fmt) "
                                                      ": 'N/A'"}}}},
-            cmp_text(1, 0.02), cmp_text(2, 0.35), cmp_text(3, 0.68),
-            note("note1", 104), note("note2", 120),
-        ], config={"view": {"stroke": None}})
+            *cmps, note("note1", 94), note("note2", 109),
+        ])
 
 
 # ---------------------------------------------------------------- gauge (Deposit)
 def gauge(color: str, field: str = "pct") -> dict:
-    """Đồng hồ bán nguyệt % hoàn thành chỉ tiêu (1 cột `field`). Cung kẹp trong [0, 120]%,
-    số ở giữa là giá trị thật (có thể âm / > 100). NULL -> 'N/A'."""
+    """Đồng hồ bán nguyệt % hoàn thành chỉ tiêu (1 cột `field`), co giãn theo ô widget.
+    Cung kẹp trong [0, 120]%, số ở giữa là giá trị thật (có thể âm / > 100). NULL -> 'N/A'."""
+    r = "min(width / 2 - 10, height - 34)"          # bán kính
+    cy = "height - 22"                               # tâm (đáy cung)
     clamp = f"clamp(isValid(datum.{field}) ? datum.{field} : 0, 0, 120)"
-    theta = f"-PI / 2 + PI * {clamp} / 120"
+    arc = {"type": "arc", "innerRadius": {"expr": f"{r} * 0.70"}, "outerRadius": {"expr": r},
+           "theta": {"expr": "-PI / 2"}, "y": {"expr": cy}, "cornerRadius": 3}
     return _base(layer=[
-        {"mark": {"type": "arc", "innerRadius": {"expr": "min(width, height * 2) * 0.32"},
-                  "outerRadius": {"expr": "min(width, height * 2) * 0.45"},
-                  "theta": {"expr": "-PI / 2"}, "theta2": {"expr": "PI / 2"},
-                  "color": "#e5e7eb", "y": {"expr": "height * 0.9"}}},
-        {"mark": {"type": "arc", "innerRadius": {"expr": "min(width, height * 2) * 0.32"},
-                  "outerRadius": {"expr": "min(width, height * 2) * 0.45"},
-                  "theta": {"expr": "-PI / 2"}, "theta2": {"expr": theta},
-                  "color": color, "y": {"expr": "height * 0.9"}}},
-        {"mark": {"type": "text", "fontSize": 26, "fontWeight": "bold", "color": color,
-                  "y": {"expr": "height * 0.78"}},
+        {"mark": {**arc, "theta2": {"expr": "PI / 2"}, "color": "#eceff3"}},
+        {"mark": {**arc, "theta2": {"expr": f"-PI / 2 + PI * {clamp} / 120"}, "color": color}},
+        {"mark": {"type": "text", "fontWeight": "bold", "color": color, "baseline": "alphabetic",
+                  "fontSize": {"expr": f"max(14, {r} * 0.34)"}, "y": {"expr": f"{cy} - 4"}},
          "encoding": {"text": {"value": {"expr": f"isValid(datum.{field}) ? "
                                                  f"format(datum.{field}, '.1f') + '%' "
                                                  ": 'N/A'"}}}},
-        {"mark": {"type": "text", "fontSize": 10, "color": "#888", "y": {"expr": "height * 0.97"},
-                  "x": {"expr": "width / 2 - min(width, height * 2) * 0.385"}, "text": "0%"}},
-        {"mark": {"type": "text", "fontSize": 10, "color": "#888", "y": {"expr": "height * 0.97"},
-                  "x": {"expr": "width / 2 + min(width, height * 2) * 0.385"}, "text": "120%"}},
-    ], config={"view": {"stroke": None}})
+        {"mark": {"type": "text", "fontSize": 10, "color": "#999", "baseline": "top",
+                  "y": {"expr": f"{cy} + 6"}, "x": {"expr": f"width / 2 - {r} * 0.85"},
+                  "text": "0%"}},
+        {"mark": {"type": "text", "fontSize": 10, "color": "#999", "baseline": "top",
+                  "y": {"expr": f"{cy} + 6"}, "x": {"expr": f"width / 2 + {r} * 0.85"},
+                  "text": "120%"}},
+    ])
 
 
 # ---------------------------------------------------------------- combo 2 trục
@@ -120,9 +146,10 @@ def dual_axis_combo(x: str, bar: str, line: str, bar_title: str, line_title: str
                           "width": {"band": 0.6}, "tooltip": True},
                  "encoding": {"y": {"field": bar, "type": "quantitative", "title": bar_title,
                                     "axis": {"titleColor": bar_color}}}},
-                {"mark": {"type": "text", "baseline": "top", "dy": 4, "fontSize": 10,
+                # nhãn số ở chân cột (không đè nhãn của đường tỷ lệ phía trên)
+                {"mark": {"type": "text", "baseline": "bottom", "dy": -6, "fontSize": 10,
                           "color": "white", "fontWeight": "bold"},
-                 "encoding": {"y": {"field": bar, "type": "quantitative"},
+                 "encoding": {"y": {"datum": 0, "type": "quantitative"},
                               "text": {"field": bar, "format": bar_fmt}}}]},
             {"layer": [
                 {"mark": {"type": "line", "color": line_color, "strokeWidth": 2.5,
@@ -139,7 +166,7 @@ def dual_axis_combo(x: str, bar: str, line: str, bar_title: str, line_title: str
                               "text": {"field": line, "format": line_fmt}}}]},
         ],
         resolve={"scale": {"y": "independent"}},
-        config={"legend": {"orient": "bottom"}})
+        )
 
 
 # ---------------------------------------------------------------- stacked + total line
@@ -166,7 +193,7 @@ def stacked_with_total(x: str, series: str, value: str, colors: dict[str, str],
                   "encoding": {"y": {"field": "_total", "type": "quantitative"},
                                "text": {"field": "_total", "format": ",.0f"}}}]},
         ],
-        config={"legend": {"orient": "bottom"}})
+        )
 
 
 # ---------------------------------------------------------------- 2 năm x xếp chồng
@@ -197,7 +224,7 @@ def grouped_stacked_years(month: str, year: str, stack: str, value: str,
             "opacity": {"field": year, "type": "ordinal", "title": "Year",
                         "scale": {"range": [0.45, 1.0]}},
         },
-        config={"legend": {"orient": "bottom"}})
+        )
 
 
 # ---------------------------------------------------------------- donut
@@ -222,7 +249,7 @@ def donut(category: str, value: str, colors: dict[str, str], center: str | None 
                       "color": colors[first]},
              "encoding": {"text": {"field": "_share", "format": ".1%"}}},
         ],
-        config={"view": {"stroke": None}})
+        )
 
 
 # ---------------------------------------------------------------- bảng có màu xanh / đỏ
@@ -251,4 +278,4 @@ def signed_table(label: str, columns: list[tuple[str, str]], unit: str = "",
                                     {"test": "isValid(datum._val) && datum._val < 0",
                                      "value": down}], "value": GREY},
         },
-        config={"view": {"stroke": None}, "axis": {"grid": False}})
+        config={"axis": {**STYLE["axis"], "grid": False}})

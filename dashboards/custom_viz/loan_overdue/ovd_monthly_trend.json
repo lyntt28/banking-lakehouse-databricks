@@ -6,6 +6,42 @@
     "type": "fit",
     "contains": "padding"
   },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
   "encoding": {
     "x": {
       "field": "month",
@@ -44,15 +80,15 @@
         {
           "mark": {
             "type": "text",
-            "baseline": "top",
-            "dy": 4,
+            "baseline": "bottom",
+            "dy": -6,
             "fontSize": 10,
             "color": "white",
             "fontWeight": "bold"
           },
           "encoding": {
             "y": {
-              "field": "overdue_k_usd",
+              "datum": 0,
               "type": "quantitative"
             },
             "text": {
@@ -125,11 +161,6 @@
   "resolve": {
     "scale": {
       "y": "independent"
-    }
-  },
-  "config": {
-    "legend": {
-      "orient": "bottom"
     }
   }
 }

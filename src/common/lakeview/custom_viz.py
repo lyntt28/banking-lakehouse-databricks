@@ -61,7 +61,7 @@ def catalog() -> list[CustomViz]:
             ("using_customer", "Using Customer"), ("sales_volume", "Sales Volume (K USD)"),
             ("balance", "Balance (K USD)")]):
         out.append(CustomViz(CARD, "main", f"kpi_{kpi}", title, "card_kpi_cards",
-                             v.kpi_card(kpi, c["kpi"][i])))
+                             v.kpi_card(kpi, c["kpi"][i], n_cmp=2)))
     out.append(CustomViz(CARD, "main", "new_acquisition", "New Acquisition", "card_new_acq",
                          v.stacked_with_total("month", "channel", "cards",
                                               {"Smart Credit": c["smart_credit"],

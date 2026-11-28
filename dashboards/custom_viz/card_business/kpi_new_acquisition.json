@@ -6,6 +6,42 @@
     "type": "fit",
     "contains": "padding"
   },
+  "config": {
+    "font": "Calibri, 'Segoe UI', Arial, sans-serif",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "labelFontSize": 10,
+      "labelColor": "#666",
+      "titleFontSize": 10,
+      "titleColor": "#888",
+      "titleFontWeight": "normal",
+      "domain": false,
+      "ticks": false,
+      "gridColor": "#f0f0f0",
+      "labelPadding": 6
+    },
+    "axisX": {
+      "grid": false
+    },
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "title": null,
+      "labelFontSize": 10,
+      "labelColor": "#555",
+      "symbolType": "square",
+      "symbolSize": 70,
+      "columnPadding": 14
+    },
+    "bar": {
+      "cornerRadiusEnd": 2
+    },
+    "text": {
+      "font": "Calibri, 'Segoe UI', Arial, sans-serif"
+    }
+  },
   "transform": [
     {
       "filter": "datum.kpi == 'new_acquisition'"
@@ -17,15 +53,17 @@
         "type": "text",
         "align": "left",
         "baseline": "top",
-        "fontSize": 12,
+        "fontSize": 11,
         "fontWeight": "bold",
         "color": "#666",
-        "x": 4,
+        "x": 6,
         "y": 4
       },
       "encoding": {
         "text": {
-          "field": "title"
+          "value": {
+            "expr": "upper(datum.title)"
+          }
         }
       }
     },
@@ -34,11 +72,11 @@
         "type": "text",
         "align": "left",
         "baseline": "top",
-        "fontSize": 32,
+        "fontSize": 30,
         "fontWeight": "bold",
         "color": "#000000",
-        "x": 4,
-        "y": 26
+        "x": 6,
+        "y": 24
       },
       "encoding": {
         "text": {
@@ -52,12 +90,13 @@
       "mark": {
         "type": "text",
         "align": "left",
-        "fontSize": 12,
+        "baseline": "top",
+        "fontSize": 11.5,
         "fontWeight": "bold",
         "x": {
-          "expr": "width * 0.02"
+          "expr": "6"
         },
-        "y": 80
+        "y": 70
       },
       "encoding": {
         "text": {
@@ -83,13 +122,14 @@
     {
       "mark": {
         "type": "text",
-        "align": "left",
-        "fontSize": 12,
+        "align": "right",
+        "baseline": "top",
+        "fontSize": 11.5,
         "fontWeight": "bold",
         "x": {
-          "expr": "width * 0.35"
+          "expr": "width - 6"
         },
-        "y": 80
+        "y": 70
       },
       "encoding": {
         "text": {
@@ -116,42 +156,11 @@
       "mark": {
         "type": "text",
         "align": "left",
-        "fontSize": 12,
-        "fontWeight": "bold",
-        "x": {
-          "expr": "width * 0.68"
-        },
-        "y": 80
-      },
-      "encoding": {
-        "text": {
-          "value": {
-            "expr": "isValid(datum.cmp3_label) && datum.cmp3_label != '' ? (isValid(datum.cmp3) ? ((datum.cmp3) > 0 ? '▲ ' : (datum.cmp3) < 0 ? '▼ ' : '▪ ') + format(abs(datum.cmp3), datum.cmp_fmt) + datum.cmp_unit : 'N/A') + ' ' + datum.cmp3_label : ''"
-          }
-        },
-        "color": {
-          "condition": [
-            {
-              "test": "isValid(datum.cmp3) && datum.cmp3 > 0",
-              "value": "#16a34a"
-            },
-            {
-              "test": "isValid(datum.cmp3) && datum.cmp3 < 0",
-              "value": "#dc2626"
-            }
-          ],
-          "value": "#9e9e9e"
-        }
-      }
-    },
-    {
-      "mark": {
-        "type": "text",
-        "align": "left",
+        "baseline": "top",
         "fontSize": 10,
         "color": "#888",
-        "x": 4,
-        "y": 104
+        "x": 6,
+        "y": 94
       },
       "encoding": {
         "text": {
@@ -163,10 +172,11 @@
       "mark": {
         "type": "text",
         "align": "left",
+        "baseline": "top",
         "fontSize": 10,
         "color": "#888",
-        "x": 4,
-        "y": 120
+        "x": 6,
+        "y": 109
       },
       "encoding": {
         "text": {
@@ -174,10 +184,5 @@
         }
       }
     }
-  ],
-  "config": {
-    "view": {
-      "stroke": null
-    }
-  }
+  ]
 }
